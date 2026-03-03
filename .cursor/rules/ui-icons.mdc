@@ -1,0 +1,12 @@
+---
+description: Use lucide-react for all icons in UI components
+globs: "**/*.tsx"
+alwaysApply: false
+---
+
+# Icons
+
+- Use `lucide-react` for all icon usage.
+- Import named icons: `import { IconName } from "lucide-react"`.
+- Render as `<IconName className="..." size={...} />` as needed.
+- Do not use other icon libraries or inline SVGs for icons.

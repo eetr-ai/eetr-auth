@@ -13,7 +13,9 @@
 		"cf-typegen": "wrangler types --env-interface CloudflareEnv ./cloudflare-env.d.ts"
 	},
 	"dependencies": {
+		"@eetr/react-reducer-utils": "^0.1.1",
 		"@opennextjs/cloudflare": "^1.17.1",
+		"lucide-react": "^0.576.0",
 		"next": "16.1.5",
 		"react": "19.1.5",
 		"react-dom": "19.1.5"
