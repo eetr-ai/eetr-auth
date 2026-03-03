@@ -41,7 +41,7 @@
 			"database_name": "progression-ai-auth",
 			"database_id": "3a52b26a-b6e6-4368-99d3-5d2a3a7b5c5f"
 		}
-	]
+	],
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
@@ -60,6 +60,6 @@
 	 * https://developers.cloudflare.com/workers/configuration/secrets/
 	 */
 	"vars": {
-		"AUTH_URL": "https://auth.progression-ai.com"
+		"AUTH_URL": "https://auth.progression-ai.com/api/auth/session"
 	}
 }

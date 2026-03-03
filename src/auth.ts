@@ -15,17 +15,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 			async authorize(credentials) {
 				const username = credentials?.username as string | undefined;
 				const password = credentials?.password as string | undefined;
-				if (!username || !password) return null;
+				console.log("[auth] authorize: attempt", { username: username ?? "(missing)" });
+				if (!username || !password) {
+					console.log("[auth] authorize: missing username or password");
+					return null;
+				}
 
 				const { env } = await getCloudflareContext({ async: true });
 				const db = getDb(env);
 				const repo = new AdminRepositoryD1(db);
 				const admin = await repo.findByUsername(username);
-				if (!admin) return null;
+				if (!admin) {
+					console.log("[auth] authorize: no admin found for username", username);
+					return null;
+				}
 
 				const passwordHash = md5(password);
-				if (passwordHash !== admin.passwordHash) return null;
+				if (passwordHash !== admin.passwordHash) {
+					console.log("[auth] authorize: password mismatch for username", username);
+					return null;
+				}
 
+				console.log("[auth] authorize: success", { id: admin.id, username: admin.username });
 				return { id: admin.id, name: admin.username };
 			},
 		}),
@@ -36,6 +47,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 			if (user) {
 				token.id = user.id;
 				token.name = user.name;
+				console.log("[auth] jwt: user added to token", { id: user.id, name: user.name });
 			}
 			return token;
 		},
@@ -50,7 +62,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 			const isLoggedIn = !!auth?.user;
 			const path = request.nextUrl.pathname;
 			const isProtected = path.startsWith("/dashboard") || path.startsWith("/admin");
-			if (isProtected) return isLoggedIn;
+			if (isProtected) {
+				console.log("[auth] authorized:", path, "protected, isLoggedIn:", isLoggedIn);
+				return isLoggedIn;
+			}
 			return true;
 		},
 	},
