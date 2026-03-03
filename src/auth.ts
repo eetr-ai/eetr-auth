@@ -29,10 +29,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 					console.log("[auth] authorize: no user found for username", username);
 					return null;
 				}
-				if (!user.isAdmin) {
-					console.log("[auth] authorize: user is not admin", username);
-					return null;
-				}
 
 				const passwordHash = md5(password);
 				const headTail = (s: string) =>
@@ -46,7 +42,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 					return null;
 				}
 
-				console.log("[auth] authorize: success", { id: user.id, username: user.username });
+				console.log("[auth] authorize: success", {
+					id: user.id,
+					username: user.username,
+					isAdmin: user.isAdmin,
+				});
 				return { id: user.id, name: user.username, isAdmin: user.isAdmin };
 			},
 		}),
