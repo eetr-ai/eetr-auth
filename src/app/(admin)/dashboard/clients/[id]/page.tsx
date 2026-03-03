@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { ReducerAction, bootstrapProvider } from "@eetr/react-reducer-utils";
+import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -44,34 +45,140 @@ interface TokenActivityItem {
 	rotatedFromTokenId: string | null;
 }
 
+enum ClientDetailActionType {
+	SET_CLIENT = "SET_CLIENT",
+	SET_ENVIRONMENTS = "SET_ENVIRONMENTS",
+	SET_SCOPES = "SET_SCOPES",
+	SET_TOKENS = "SET_TOKENS",
+	SET_LOADING = "SET_LOADING",
+	SET_REDIRECT_URIS = "SET_REDIRECT_URIS",
+	SET_SCOPE_IDS = "SET_SCOPE_IDS",
+	SET_SAVING_URIS = "SET_SAVING_URIS",
+	SET_SAVING_SCOPES = "SET_SAVING_SCOPES",
+	SET_ROTATING = "SET_ROTATING",
+	SET_ROTATED_SECRET = "SET_ROTATED_SECRET",
+	SET_COPIED = "SET_COPIED",
+	SET_ERROR = "SET_ERROR",
+	SET_TOKEN_ACTION_KEY = "SET_TOKEN_ACTION_KEY",
+}
+
+interface ClientDetailState {
+	client: ClientWithDetails | null;
+	environments: Environment[];
+	scopes: Scope[];
+	tokens: TokenActivityItem[];
+	loading: boolean;
+	redirectUris: string[];
+	scopeIds: string[];
+	savingUris: boolean;
+	savingScopes: boolean;
+	rotating: boolean;
+	rotatedSecret: string | null;
+	copied: boolean;
+	error: string | null;
+	tokenActionKey: string | null;
+}
+
+const initialState: ClientDetailState = {
+	client: null,
+	environments: [],
+	scopes: [],
+	tokens: [],
+	loading: true,
+	redirectUris: [],
+	scopeIds: [],
+	savingUris: false,
+	savingScopes: false,
+	rotating: false,
+	rotatedSecret: null,
+	copied: false,
+	error: null,
+	tokenActionKey: null,
+};
+
+function reducer(
+	state: ClientDetailState = initialState,
+	action: ReducerAction<ClientDetailActionType>
+): ClientDetailState {
+	switch (action.type) {
+		case ClientDetailActionType.SET_CLIENT:
+			return { ...state, client: (action.data as ClientWithDetails | null) ?? null };
+		case ClientDetailActionType.SET_ENVIRONMENTS:
+			return { ...state, environments: (action.data as Environment[]) ?? [] };
+		case ClientDetailActionType.SET_SCOPES:
+			return { ...state, scopes: (action.data as Scope[]) ?? [] };
+		case ClientDetailActionType.SET_TOKENS:
+			return { ...state, tokens: (action.data as TokenActivityItem[]) ?? [] };
+		case ClientDetailActionType.SET_LOADING:
+			return { ...state, loading: (action.data as boolean | undefined) ?? false };
+		case ClientDetailActionType.SET_REDIRECT_URIS:
+			return { ...state, redirectUris: (action.data as string[]) ?? [] };
+		case ClientDetailActionType.SET_SCOPE_IDS:
+			return { ...state, scopeIds: (action.data as string[]) ?? [] };
+		case ClientDetailActionType.SET_SAVING_URIS:
+			return { ...state, savingUris: (action.data as boolean | undefined) ?? false };
+		case ClientDetailActionType.SET_SAVING_SCOPES:
+			return { ...state, savingScopes: (action.data as boolean | undefined) ?? false };
+		case ClientDetailActionType.SET_ROTATING:
+			return { ...state, rotating: (action.data as boolean | undefined) ?? false };
+		case ClientDetailActionType.SET_ROTATED_SECRET:
+			return { ...state, rotatedSecret: (action.data as string | null) ?? null };
+		case ClientDetailActionType.SET_COPIED:
+			return { ...state, copied: (action.data as boolean | undefined) ?? false };
+		case ClientDetailActionType.SET_ERROR:
+			return { ...state, error: (action.data as string | null) ?? null };
+		case ClientDetailActionType.SET_TOKEN_ACTION_KEY:
+			return { ...state, tokenActionKey: (action.data as string | null) ?? null };
+		default:
+			return state;
+	}
+}
+
+const { Provider: ClientDetailStateProvider, useContextAccessors: useClientDetailState } =
+	bootstrapProvider<ClientDetailState, ReducerAction<ClientDetailActionType>>(
+		reducer,
+		initialState
+	);
+
 function maskToken(token: string): string {
 	if (token.length <= 12) return token;
 	return `${token.slice(0, 8)}...${token.slice(-4)}`;
 }
 
 export default function ClientDetailPage() {
+	return (
+		<ClientDetailStateProvider>
+			<ClientDetailPageContent />
+		</ClientDetailStateProvider>
+	);
+}
+
+function ClientDetailPageContent() {
 	const params = useParams();
 	const router = useRouter();
 	const id = params.id as string;
-	const [client, setClient] = useState<ClientWithDetails | null>(null);
-	const [environments, setEnvironments] = useState<Environment[]>([]);
-	const [scopes, setScopes] = useState<Scope[]>([]);
-	const [tokens, setTokens] = useState<TokenActivityItem[]>([]);
-	const [loading, setLoading] = useState(true);
-	const [redirectUris, setRedirectUris] = useState<string[]>([]);
-	const [scopeIds, setScopeIds] = useState<string[]>([]);
-	const [savingUris, setSavingUris] = useState(false);
-	const [savingScopes, setSavingScopes] = useState(false);
-	const [rotating, setRotating] = useState(false);
-	const [rotatedSecret, setRotatedSecret] = useState<string | null>(null);
-	const [copied, setCopied] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-	const [tokenActionKey, setTokenActionKey] = useState<string | null>(null);
+	const { state, dispatch } = useClientDetailState();
+	const {
+		client,
+		environments,
+		scopes,
+		tokens,
+		loading,
+		redirectUris,
+		scopeIds,
+		savingUris,
+		savingScopes,
+		rotating,
+		rotatedSecret,
+		copied,
+		error,
+		tokenActionKey,
+	} = state;
 
 	useEffect(() => {
 		async function load() {
-			setLoading(true);
-			setError(null);
+			dispatch({ type: ClientDetailActionType.SET_LOADING, data: true });
+			dispatch({ type: ClientDetailActionType.SET_ERROR, data: null });
 			try {
 				const [details, envs, scopesList, tokenItems] = await Promise.all([
 					getClientWithDetails(id),
@@ -80,80 +187,102 @@ export default function ClientDetailPage() {
 					listTokenActivityByClient(id),
 				]);
 				if (details) {
-					setClient(details);
-					setRedirectUris(
-						details.redirectUris.length > 0 ? details.redirectUris : [""]
-					);
-					setScopeIds(details.scopeIds);
+					dispatch({ type: ClientDetailActionType.SET_CLIENT, data: details });
+					dispatch({
+						type: ClientDetailActionType.SET_REDIRECT_URIS,
+						data: details.redirectUris.length > 0 ? details.redirectUris : [""],
+					});
+					dispatch({ type: ClientDetailActionType.SET_SCOPE_IDS, data: details.scopeIds });
 				} else {
-					setClient(null);
+					dispatch({ type: ClientDetailActionType.SET_CLIENT, data: null });
 				}
-				setEnvironments(envs);
-				setScopes(scopesList);
-				setTokens(tokenItems);
+				dispatch({ type: ClientDetailActionType.SET_ENVIRONMENTS, data: envs });
+				dispatch({ type: ClientDetailActionType.SET_SCOPES, data: scopesList });
+				dispatch({ type: ClientDetailActionType.SET_TOKENS, data: tokenItems });
 			} catch (err) {
-				setError(err instanceof Error ? err.message : "Failed to load client");
+				dispatch({
+					type: ClientDetailActionType.SET_ERROR,
+					data: err instanceof Error ? err.message : "Failed to load client",
+				});
 			} finally {
-				setLoading(false);
+				dispatch({ type: ClientDetailActionType.SET_LOADING, data: false });
 			}
 		}
 		load();
-	}, [id]);
+	}, [dispatch, id]);
 
 	const envById = Object.fromEntries(environments.map((e) => [e.id, e]));
 
 	const handleSaveUris = async (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!client) return;
-		setSavingUris(true);
-		setError(null);
+		dispatch({ type: ClientDetailActionType.SET_SAVING_URIS, data: true });
+		dispatch({ type: ClientDetailActionType.SET_ERROR, data: null });
 		try {
 			const uris = redirectUris.filter((u) => u?.trim());
 			const updated = await updateClientRedirectUris(id, uris);
 			if (updated) {
-				setClient(updated);
-				setRedirectUris(uris.length > 0 ? uris : [""]);
+				dispatch({ type: ClientDetailActionType.SET_CLIENT, data: updated });
+				dispatch({
+					type: ClientDetailActionType.SET_REDIRECT_URIS,
+					data: uris.length > 0 ? uris : [""],
+				});
 			}
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to update redirect URIs");
+			dispatch({
+				type: ClientDetailActionType.SET_ERROR,
+				data: err instanceof Error ? err.message : "Failed to update redirect URIs",
+			});
 		} finally {
-			setSavingUris(false);
+			dispatch({ type: ClientDetailActionType.SET_SAVING_URIS, data: false });
 		}
 	};
 
 	const handleSaveScopes = async (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!client) return;
-		setSavingScopes(true);
-		setError(null);
+		dispatch({ type: ClientDetailActionType.SET_SAVING_SCOPES, data: true });
+		dispatch({ type: ClientDetailActionType.SET_ERROR, data: null });
 		try {
 			const updated = await updateClientScopes(id, scopeIds);
 			if (updated) {
-				setClient(updated);
+				dispatch({ type: ClientDetailActionType.SET_CLIENT, data: updated });
 			}
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to update scopes");
+			dispatch({
+				type: ClientDetailActionType.SET_ERROR,
+				data: err instanceof Error ? err.message : "Failed to update scopes",
+			});
 		} finally {
-			setSavingScopes(false);
+			dispatch({ type: ClientDetailActionType.SET_SAVING_SCOPES, data: false });
 		}
 	};
 
 	const handleRotateSecret = async () => {
 		if (!confirm("Generate a new client secret? The current secret will stop working. The new secret will be shown only once."))
 			return;
-		setRotating(true);
-		setError(null);
-		setRotatedSecret(null);
+		dispatch({ type: ClientDetailActionType.SET_ROTATING, data: true });
+		dispatch({ type: ClientDetailActionType.SET_ERROR, data: null });
+		dispatch({ type: ClientDetailActionType.SET_ROTATED_SECRET, data: null });
 		try {
 			const result = await rotateClientSecret(id);
 			if (result) {
-				setRotatedSecret(result.clientSecret);
-				setClient((prev) => (prev ? { ...prev, clientSecret: result.clientSecret } : null));
+				dispatch({
+					type: ClientDetailActionType.SET_ROTATED_SECRET,
+					data: result.clientSecret,
+				});
+				dispatch({
+					type: ClientDetailActionType.SET_CLIENT,
+					data: client ? { ...client, clientSecret: result.clientSecret } : null,
+				});
 			}
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to rotate secret");
+			dispatch({
+				type: ClientDetailActionType.SET_ERROR,
+				data: err instanceof Error ? err.message : "Failed to rotate secret",
+			});
 		} finally {
-			setRotating(false);
+			dispatch({ type: ClientDetailActionType.SET_ROTATING, data: false });
 		}
 	};
 
@@ -163,67 +292,88 @@ export default function ClientDetailPage() {
 			await deleteClient(id);
 			router.push("/dashboard/clients");
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to delete client");
+			dispatch({
+				type: ClientDetailActionType.SET_ERROR,
+				data: err instanceof Error ? err.message : "Failed to delete client",
+			});
 		}
 	};
 
-	const addUri = () => setRedirectUris((prev) => [...prev, ""]);
-	const setUriAt = (i: number, v: string) => {
-		setRedirectUris((prev) => {
-			const next = [...prev];
-			next[i] = v;
-			return next;
+	const addUri = () => {
+		dispatch({
+			type: ClientDetailActionType.SET_REDIRECT_URIS,
+			data: [...redirectUris, ""],
 		});
 	};
+	const setUriAt = (i: number, v: string) => {
+		const next = [...redirectUris];
+		next[i] = v;
+		dispatch({ type: ClientDetailActionType.SET_REDIRECT_URIS, data: next });
+	};
 	const removeUri = (i: number) => {
-		setRedirectUris((prev) => prev.filter((_, j) => j !== i));
+		dispatch({
+			type: ClientDetailActionType.SET_REDIRECT_URIS,
+			data: redirectUris.filter((_, j) => j !== i),
+		});
 	};
 
 	const toggleScope = (scopeId: string) => {
-		setScopeIds((prev) =>
-			prev.includes(scopeId) ? prev.filter((s) => s !== scopeId) : [...prev, scopeId]
-		);
+		dispatch({
+			type: ClientDetailActionType.SET_SCOPE_IDS,
+			data: scopeIds.includes(scopeId)
+				? scopeIds.filter((s) => s !== scopeId)
+				: [...scopeIds, scopeId],
+		});
 	};
 
 	const copySecret = async () => {
 		if (!rotatedSecret) return;
 		await navigator.clipboard.writeText(rotatedSecret);
-		setCopied(true);
-		setTimeout(() => setCopied(false), 2000);
+		dispatch({ type: ClientDetailActionType.SET_COPIED, data: true });
+		setTimeout(
+			() => dispatch({ type: ClientDetailActionType.SET_COPIED, data: false }),
+			2000
+		);
 	};
 
 	const reloadClientTokens = async () => {
 		const tokenItems = await listTokenActivityByClient(id);
-		setTokens(tokenItems);
+		dispatch({ type: ClientDetailActionType.SET_TOKENS, data: tokenItems });
 	};
 
 	const handleRevokeToken = async (token: TokenActivityItem) => {
 		if (!confirm(`Revoke this ${token.tokenType} token?`)) return;
 		const actionKey = `${token.tokenType}:${token.tokenId}:revoke`;
-		setTokenActionKey(actionKey);
-		setError(null);
+		dispatch({ type: ClientDetailActionType.SET_TOKEN_ACTION_KEY, data: actionKey });
+		dispatch({ type: ClientDetailActionType.SET_ERROR, data: null });
 		try {
 			await revokeTokenByValue(token.tokenId);
 			await reloadClientTokens();
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to revoke token");
+			dispatch({
+				type: ClientDetailActionType.SET_ERROR,
+				data: err instanceof Error ? err.message : "Failed to revoke token",
+			});
 		} finally {
-			setTokenActionKey(null);
+			dispatch({ type: ClientDetailActionType.SET_TOKEN_ACTION_KEY, data: null });
 		}
 	};
 
 	const handleDeleteToken = async (token: TokenActivityItem) => {
 		if (!confirm(`Delete this ${token.tokenType} token? This cannot be undone.`)) return;
 		const actionKey = `${token.tokenType}:${token.tokenId}:delete`;
-		setTokenActionKey(actionKey);
-		setError(null);
+		dispatch({ type: ClientDetailActionType.SET_TOKEN_ACTION_KEY, data: actionKey });
+		dispatch({ type: ClientDetailActionType.SET_ERROR, data: null });
 		try {
 			await deleteTokenByValue(token.tokenId);
 			await reloadClientTokens();
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to delete token");
+			dispatch({
+				type: ClientDetailActionType.SET_ERROR,
+				data: err instanceof Error ? err.message : "Failed to delete token",
+			});
 		} finally {
-			setTokenActionKey(null);
+			dispatch({ type: ClientDetailActionType.SET_TOKEN_ACTION_KEY, data: null });
 		}
 	};
 
@@ -296,7 +446,9 @@ export default function ClientDetailPage() {
 					</div>
 					<button
 						type="button"
-						onClick={() => setRotatedSecret(null)}
+						onClick={() =>
+							dispatch({ type: ClientDetailActionType.SET_ROTATED_SECRET, data: null })
+						}
 						className="mt-2 text-sm text-muted-foreground underline hover:text-foreground"
 					>
 						Dismiss

@@ -9,6 +9,6 @@ alwaysApply: true
 - **API route handlers**: No business logic. Use `withApiContext` and delegate to services. See `src/app/api/health/route.ts`.
 - **Services**: All business logic lives in `src/lib/services/`. Services depend on `RequestContext` and repositories; they do not call `getCloudflareContext()` or use raw D1.
 - **Persistence**: Only in `src/lib/repositories/` (D1). Repositories receive the DB (from context) in the constructor; no Cloudflare env in repository methods.
-- **Frontend shared state**: Use `@eetr/react-reducer-utils` (action types, state, reducer, `bootstrapProvider`, Provider + hook). No ad-hoc global state outside this pattern. See `src/context/admin-state.ts`.
+- **Frontend state management**: Default to reducer-driven state with `@eetr/react-reducer-utils` (action types, state, reducer, `bootstrapProvider`, Provider + hook) across pages and complex components. Use `useState` only for simple local state in simple components. No ad-hoc global state outside this pattern. See `src/context/admin-state.ts`.
 - **Icons**: Use `lucide-react` only; import named icons (e.g. `import { IconName } from "lucide-react"`); do not add other icon libraries.
 - **Where to add code**: New features add services/repos; entry points (actions, API routes) only wire context and call services; new client state domains add reducer modules under `src/context/` or `src/store/`.
