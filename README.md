@@ -101,25 +101,17 @@ This project now exposes OAuth authorization server endpoints for:
   - `200` when fully valid
   - `401` for every non-valid case (invalid token, expired token, scope mismatch, environment mismatch, or missing `environmentName`)
 
-### Token cleanup endpoint
+### Token cleanup schedule
 
-- `POST` `/api/token/cleanup`
-- Public endpoint (no auth currently required)
-- Accepts optional JSON body:
-  - `dry_run` (boolean, optional)
-  - `dryRun` (boolean, optional alias)
+- Cleanup runs as a Cloudflare Worker Cron Trigger (`scheduled` handler), not an HTTP endpoint.
+- Schedule: daily at `00:00 UTC` via Wrangler `triggers.crons` (`0 0 * * *`).
 - Cleanup targets:
   - expired access tokens
   - expired refresh tokens
   - revoked refresh tokens
   - used or expired authorization codes
-- Response fields:
-  - `dry_run`
-  - `access_tokens_deleted`
-  - `refresh_tokens_expired_deleted`
-  - `refresh_tokens_revoked_deleted`
-  - `authorization_codes_deleted`
-  - `total_deleted`
+- Observability:
+  - emits structured logs with run metadata, per-table deleted counts, total deleted, status (`success` or `error`), and error details when failures occur
 
 ### Token persistence and admin visibility
 
