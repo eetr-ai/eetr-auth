@@ -24,6 +24,7 @@ export interface ClientWithDetails extends Client {
 export interface ClientRepository {
 	list(environmentId?: string): Promise<Client[]>;
 	getById(id: string): Promise<Client | null>;
+	getByClientIdentifier(clientId: string): Promise<Client | null>;
 	create(row: ClientRow): Promise<void>;
 	delete(id: string): Promise<void>;
 	getRedirectUris(clientId: string): Promise<string[]>;

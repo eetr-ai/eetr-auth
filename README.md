@@ -45,3 +45,56 @@ To learn more about Next.js, take a look at the following resources:
 - [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## OAuth 2.1 Endpoints
+
+This project now exposes OAuth authorization server endpoints for:
+
+- `authorization_code` with PKCE (`S256` only)
+- `client_credentials`
+- `refresh_token`
+
+### Authorization endpoint
+
+- `GET` or `POST` `/api/authorize`
+- Required params: `response_type=code`, `client_id`, `redirect_uri`, `code_challenge`, `code_challenge_method=S256`
+- Optional params: `scope`, `state`
+- Behavior:
+  - validates client and redirect URI ownership
+  - validates requested scopes against client grants
+  - issues short-lived authorization codes
+  - redirects to `redirect_uri` with `code` and `state`
+
+### Token endpoint
+
+- `POST` `/api/token`
+- Client authentication:
+  - `client_secret_basic` via `Authorization: Basic ...`
+  - fallback `client_id` + `client_secret` in request body
+- Supported grants:
+  - `grant_type=client_credentials` (optional `scope`)
+  - `grant_type=authorization_code` (requires `code`, `redirect_uri`, `code_verifier`)
+  - `grant_type=refresh_token` (requires `refresh_token`, optional narrowed `scope`)
+- Response headers include:
+  - `Cache-Control: no-store`
+  - `Pragma: no-cache`
+
+### Token validation endpoint
+
+- `POST` `/api/token/validate`
+- Accepts JSON or form body with:
+  - `token` (required): opaque access token from `/api/token`
+  - `scopes` (optional): array of required scopes, or whitespace-separated scope string
+- Returns:
+  - `valid`: token exists, is active (not expired), and includes all required scopes
+  - `active`: token exists and is not expired
+  - `missingScopes`: required scopes that are not present in token grants
+
+### Token persistence and admin visibility
+
+- Access tokens are stored in `tokens` + `token_scopes`
+- Authorization codes are stored in `authorization_codes` + `authorization_code_scopes`
+- Refresh tokens are stored in `refresh_tokens` + `refresh_token_scopes` with rotation lineage
+- Admin UI:
+  - `/dashboard/tokens` for global token activity
+  - `/dashboard/clients/[id]` for per-client token activity

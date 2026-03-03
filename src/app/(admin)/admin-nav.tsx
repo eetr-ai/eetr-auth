@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Settings, KeyRound, LogOut } from "lucide-react";
+import { LayoutDashboard, Settings, KeyRound, Fingerprint, LogOut } from "lucide-react";
 import { logout } from "@/app/actions/user-actions";
 
 const navItems = [
 	{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
 	{ href: "/dashboard/setup", label: "Setup", icon: Settings },
 	{ href: "/dashboard/clients", label: "Clients", icon: KeyRound },
+	{ href: "/dashboard/tokens", label: "Tokens", icon: Fingerprint },
 ];
 
 export function AdminNav() {

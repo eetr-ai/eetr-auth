@@ -62,6 +62,23 @@ export class ClientRepositoryD1 implements ClientRepository {
 		return row ? rowToClient(row) : null;
 	}
 
+	async getByClientIdentifier(clientId: string): Promise<Client | null> {
+		const row = await this.db
+			.prepare(
+				"SELECT id, client_id, client_secret, environment_id, created_by, expires_at FROM clients WHERE client_id = ?"
+			)
+			.bind(clientId)
+			.first<{
+				id: string;
+				client_id: string;
+				client_secret: string;
+				environment_id: string;
+				created_by: string;
+				expires_at: string | null;
+			}>();
+		return row ? rowToClient(row) : null;
+	}
+
 	async create(row: ClientRow): Promise<void> {
 		await this.db
 			.prepare(

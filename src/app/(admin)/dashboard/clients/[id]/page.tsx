@@ -20,11 +20,29 @@ import {
 	deleteClient,
 	rotateClientSecret,
 } from "@/app/actions/client-actions";
+import { listTokenActivityByClient } from "@/app/actions/token-actions";
 import { listEnvironments } from "@/app/actions/environment-actions";
 import { listScopes } from "@/app/actions/scope-actions";
 import type { ClientWithDetails } from "@/lib/repositories/client.repository";
 import type { Environment } from "@/lib/repositories/environment.repository";
 import type { Scope } from "@/lib/repositories/scope.repository";
+
+interface TokenActivityItem {
+	tokenType: "access" | "refresh";
+	tokenId: string;
+	clientId: string;
+	environmentId: string;
+	expiresAt: string;
+	status: "active" | "expired" | "revoked";
+	scopeNames: string[];
+	createdAt: string | null;
+	rotatedFromTokenId: string | null;
+}
+
+function maskToken(token: string): string {
+	if (token.length <= 12) return token;
+	return `${token.slice(0, 8)}...${token.slice(-4)}`;
+}
 
 export default function ClientDetailPage() {
 	const params = useParams();
@@ -33,6 +51,7 @@ export default function ClientDetailPage() {
 	const [client, setClient] = useState<ClientWithDetails | null>(null);
 	const [environments, setEnvironments] = useState<Environment[]>([]);
 	const [scopes, setScopes] = useState<Scope[]>([]);
+	const [tokens, setTokens] = useState<TokenActivityItem[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [redirectUris, setRedirectUris] = useState<string[]>([]);
 	const [scopeIds, setScopeIds] = useState<string[]>([]);
@@ -48,10 +67,11 @@ export default function ClientDetailPage() {
 			setLoading(true);
 			setError(null);
 			try {
-				const [details, envs, scopesList] = await Promise.all([
+				const [details, envs, scopesList, tokenItems] = await Promise.all([
 					getClientWithDetails(id),
 					listEnvironments(),
 					listScopes(),
+					listTokenActivityByClient(id),
 				]);
 				if (details) {
 					setClient(details);
@@ -64,6 +84,7 @@ export default function ClientDetailPage() {
 				}
 				setEnvironments(envs);
 				setScopes(scopesList);
+				setTokens(tokenItems);
 			} catch (err) {
 				setError(err instanceof Error ? err.message : "Failed to load client");
 			} finally {
@@ -74,7 +95,6 @@ export default function ClientDetailPage() {
 	}, [id]);
 
 	const envById = Object.fromEntries(environments.map((e) => [e.id, e]));
-	const scopeById = Object.fromEntries(scopes.map((s) => [s.id, s]));
 
 	const handleSaveUris = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -347,6 +367,54 @@ export default function ClientDetailPage() {
 							{savingScopes ? "Saving…" : "Save scopes"}
 						</button>
 					</form>
+				</section>
+
+				<section className="rounded-xl border border-brand-muted p-6">
+					<h2 className="mb-3 text-lg font-medium">Issued Tokens</h2>
+					<div className="overflow-x-auto rounded-xl border border-brand-muted">
+						<table className="w-full min-w-[760px] text-left text-sm">
+							<thead>
+								<tr className="border-b border-brand-muted bg-brand-muted/20">
+									<th className="px-4 py-3 font-medium">Type</th>
+									<th className="px-4 py-3 font-medium">Token</th>
+									<th className="px-4 py-3 font-medium">Scopes</th>
+									<th className="px-4 py-3 font-medium">Status</th>
+									<th className="px-4 py-3 font-medium">Created</th>
+									<th className="px-4 py-3 font-medium">Expires</th>
+								</tr>
+							</thead>
+							<tbody>
+								{tokens.map((token) => (
+									<tr
+										key={`${token.tokenType}-${token.tokenId}`}
+										className="border-b border-brand-muted/50"
+									>
+										<td className="px-4 py-3 uppercase">{token.tokenType}</td>
+										<td className="px-4 py-3 font-mono text-xs">
+											{maskToken(token.tokenId)}
+										</td>
+										<td className="px-4 py-3">
+											{token.scopeNames.length > 0
+												? token.scopeNames.join(" ")
+												: <span className="text-muted-foreground">none</span>}
+										</td>
+										<td className="px-4 py-3">{token.status}</td>
+										<td className="px-4 py-3">
+											{token.createdAt ? new Date(token.createdAt).toLocaleString() : "n/a"}
+										</td>
+										<td className="px-4 py-3">
+											{new Date(token.expiresAt).toLocaleString()}
+										</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+					</div>
+					{tokens.length === 0 && (
+						<p className="mt-3 text-sm text-muted-foreground">
+							No tokens have been issued for this client yet.
+						</p>
+					)}
 				</section>
 			</div>
 		</main>

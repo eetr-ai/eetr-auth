@@ -3,12 +3,16 @@ import { UserService } from "./user.service";
 import { EnvironmentService } from "./environment.service";
 import { ScopeService } from "./scope.service";
 import { ClientService } from "./client.service";
+import { OauthAuthorizationService } from "./oauth-authorization.service";
+import { OauthTokenService } from "./oauth-token.service";
 
 export interface Services {
 	userService: UserService;
 	environmentService: EnvironmentService;
 	scopeService: ScopeService;
 	clientService: ClientService;
+	oauthAuthorizationService: OauthAuthorizationService;
+	oauthTokenService: OauthTokenService;
 }
 
 /**
@@ -20,5 +24,7 @@ export function getServices(ctx: RequestContext): Services {
 		environmentService: new EnvironmentService(ctx),
 		scopeService: new ScopeService(ctx),
 		clientService: new ClientService(ctx),
+		oauthAuthorizationService: new OauthAuthorizationService(ctx),
+		oauthTokenService: new OauthTokenService(ctx),
 	};
 }
