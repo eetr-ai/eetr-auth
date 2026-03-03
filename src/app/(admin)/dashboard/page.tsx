@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LayoutDashboard, User as UserIcon, LogOut } from "lucide-react";
+import { LayoutDashboard, User as UserIcon } from "lucide-react";
 import { useAdminState, AdminActionType } from "@/context/admin-state";
-import { getCurrentUser, logout } from "@/app/actions/user-actions";
+import { getCurrentUser } from "@/app/actions/user-actions";
 import type { Session } from "next-auth";
 
 export default function AdminDashboardPage() {
@@ -19,27 +19,11 @@ export default function AdminDashboardPage() {
 
 	return (
 		<main className="min-h-screen p-6 bg-background text-foreground">
-			<div className="flex items-center justify-between">
-				<div className="flex items-center gap-2 text-xl font-semibold">
-					<LayoutDashboard className="h-6 w-6" />
-					Admin Dashboard
-				</div>
-				{user && (
-					<form action={logout}>
-						<button
-							type="submit"
-							className="flex items-center gap-2 rounded-full border border-brand-muted px-3 py-2 text-sm font-medium text-foreground hover:bg-brand-muted/30"
-						>
-							<LogOut className="h-4 w-4" />
-							Sign out
-						</button>
-					</form>
-				)}
+			<div className="flex items-center gap-2 text-xl font-semibold">
+				<LayoutDashboard className="h-6 w-6" />
+				Admin Dashboard
 			</div>
 			<div className="mt-6 flex flex-col gap-4">
-				<p className="text-muted-foreground">
-					Sidebar open: {state.sidebarOpen ? "Yes" : "No"}
-				</p>
 				{state.loading ? (
 					<p>Loading...</p>
 				) : user ? (
