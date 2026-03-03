@@ -10,7 +10,10 @@
 		"deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
 		"upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
 		"preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-		"cf-typegen": "wrangler types --env-interface CloudflareEnv ./cloudflare-env.d.ts"
+		"cf-typegen": "wrangler types --env-interface CloudflareEnv ./cloudflare-env.d.ts",
+		"db:migrate": "wrangler d1 execute progression-ai-auth --local --file=./db/schema.sql",
+		"db:migrate:remote": "wrangler d1 execute progression-ai-auth --remote --file=./db/schema.sql",
+		"db:bootstrap": "npm run db:migrate && npm run db:migrate:remote"
 	},
 	"dependencies": {
 		"@eetr/react-reducer-utils": "^0.1.1",
