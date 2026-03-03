@@ -13,7 +13,10 @@
 		"cf-typegen": "wrangler types --env-interface CloudflareEnv ./cloudflare-env.d.ts",
 		"db:migrate": "wrangler d1 execute progression-ai-auth --local --file=./db/schema.sql",
 		"db:migrate:remote": "wrangler d1 execute progression-ai-auth --remote --file=./db/schema.sql",
-		"db:bootstrap": "npm run db:migrate && npm run db:migrate:remote"
+		"db:bootstrap": "npm run db:migrate && npm run db:migrate:remote",
+		"db:create-admin": "node scripts/create-admin.mjs",
+		"db:create-admin:local": "node scripts/create-admin.mjs --local-only",
+		"db:create-admin:remote": "node scripts/create-admin.mjs --remote-only"
 	},
 	"dependencies": {
 		"@eetr/react-reducer-utils": "^0.1.1",

@@ -9,7 +9,7 @@ export async function getCurrentUser() {
 }
 
 export async function logout() {
-	await signOut({ redirectTo: "/login" });
+	await signOut({ redirectTo: "/" });
 }
 
 export async function getUserById(id: string) {

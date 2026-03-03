@@ -28,7 +28,7 @@ export default function AdminDashboardPage() {
 					<form action={logout}>
 						<button
 							type="submit"
-							className="flex items-center gap-2 rounded-md border border-brand-muted px-3 py-2 text-sm font-medium text-foreground hover:bg-brand-muted/30"
+							className="flex items-center gap-2 rounded-full border border-brand-muted px-3 py-2 text-sm font-medium text-foreground hover:bg-brand-muted/30"
 						>
 							<LogOut className="h-4 w-4" />
 							Sign out

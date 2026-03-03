@@ -26,6 +26,11 @@ description: Architecture and patterns for progression-ai-auth (Next.js, D1, Aut
 - **Logo / images**: Use `next/image` for app assets (e.g. `public/logo.png`). No remote config needed for local public files.
 - **Theme**: Default is dark (black background + ProgressionAI blue). Palette and CSS variables in `src/app/globals.css`; expose via `@theme` for Tailwind (e.g. `--color-brand`, `--color-brand-muted`, `bg-brand`, `border-brand-muted`).
 
+## UI conventions
+
+- **Buttons**: Use `rounded-full` (pill shape) for all buttons.
+- **Containers**: Use `rounded-xl` for cards, panels, and container wrappers (e.g. login card, content blocks).
+
 ## Adding features
 
 - New domain: add service + repository; expose via server action or API route using the wrappers.
