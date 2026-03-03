@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { ReducerAction, bootstrapProvider } from "@eetr/react-reducer-utils";
+import { useEffect } from "react";
 import { Loader2, Fingerprint, Ban, Trash2 } from "lucide-react";
 import {
 	listTokenActivity,
@@ -22,71 +23,140 @@ interface TokenActivityItem {
 	rotatedFromTokenId: string | null;
 }
 
+enum TokensPageActionType {
+	SET_TOKENS = "SET_TOKENS",
+	SET_ENVIRONMENTS = "SET_ENVIRONMENTS",
+	SET_LOADING = "SET_LOADING",
+	SET_ENVIRONMENT_FILTER = "SET_ENVIRONMENT_FILTER",
+	SET_ERROR = "SET_ERROR",
+	SET_TOKEN_ACTION_KEY = "SET_TOKEN_ACTION_KEY",
+}
+
+interface TokensPageState {
+	tokens: TokenActivityItem[];
+	environments: Environment[];
+	loading: boolean;
+	environmentFilter: string;
+	error: string | null;
+	tokenActionKey: string | null;
+}
+
+const initialState: TokensPageState = {
+	tokens: [],
+	environments: [],
+	loading: true,
+	environmentFilter: "",
+	error: null,
+	tokenActionKey: null,
+};
+
+function reducer(
+	state: TokensPageState = initialState,
+	action: ReducerAction<TokensPageActionType>
+): TokensPageState {
+	switch (action.type) {
+		case TokensPageActionType.SET_TOKENS:
+			return { ...state, tokens: (action.data as TokenActivityItem[]) ?? [] };
+		case TokensPageActionType.SET_ENVIRONMENTS:
+			return { ...state, environments: (action.data as Environment[]) ?? [] };
+		case TokensPageActionType.SET_LOADING:
+			return { ...state, loading: (action.data as boolean | undefined) ?? false };
+		case TokensPageActionType.SET_ENVIRONMENT_FILTER:
+			return { ...state, environmentFilter: (action.data as string) ?? "" };
+		case TokensPageActionType.SET_ERROR:
+			return { ...state, error: (action.data as string | null) ?? null };
+		case TokensPageActionType.SET_TOKEN_ACTION_KEY:
+			return { ...state, tokenActionKey: (action.data as string | null) ?? null };
+		default:
+			return state;
+	}
+}
+
+const { Provider: TokensPageStateProvider, useContextAccessors: useTokensPageState } =
+	bootstrapProvider<TokensPageState, ReducerAction<TokensPageActionType>>(
+		reducer,
+		initialState
+	);
+
 function maskToken(token: string): string {
 	if (token.length <= 12) return token;
 	return `${token.slice(0, 8)}...${token.slice(-4)}`;
 }
 
 export default function TokensPage() {
-	const [tokens, setTokens] = useState<TokenActivityItem[]>([]);
-	const [environments, setEnvironments] = useState<Environment[]>([]);
-	const [loading, setLoading] = useState(true);
-	const [environmentFilter, setEnvironmentFilter] = useState("");
-	const [error, setError] = useState<string | null>(null);
-	const [tokenActionKey, setTokenActionKey] = useState<string | null>(null);
+	return (
+		<TokensPageStateProvider>
+			<TokensPageContent />
+		</TokensPageStateProvider>
+	);
+}
+
+function TokensPageContent() {
+	const { state, dispatch } = useTokensPageState();
+	const { tokens, environments, loading, environmentFilter, error, tokenActionKey } =
+		state;
 
 	useEffect(() => {
 		async function load() {
-			setLoading(true);
-			setError(null);
+			dispatch({ type: TokensPageActionType.SET_LOADING, data: true });
+			dispatch({ type: TokensPageActionType.SET_ERROR, data: null });
 			try {
 				const [tokenItems, envs] = await Promise.all([
 					listTokenActivity(),
 					listEnvironments(),
 				]);
-				setTokens(tokenItems);
-				setEnvironments(envs);
+				dispatch({ type: TokensPageActionType.SET_TOKENS, data: tokenItems });
+				dispatch({ type: TokensPageActionType.SET_ENVIRONMENTS, data: envs });
 			} catch (err) {
-				setError(err instanceof Error ? err.message : "Failed to load tokens");
+				dispatch({
+					type: TokensPageActionType.SET_ERROR,
+					data: err instanceof Error ? err.message : "Failed to load tokens",
+				});
 			} finally {
-				setLoading(false);
+				dispatch({ type: TokensPageActionType.SET_LOADING, data: false });
 			}
 		}
 		load();
-	}, []);
+	}, [dispatch]);
 
 	const reloadTokens = async () => {
 		const tokenItems = await listTokenActivity();
-		setTokens(tokenItems);
+		dispatch({ type: TokensPageActionType.SET_TOKENS, data: tokenItems });
 	};
 
 	const handleRevoke = async (token: TokenActivityItem) => {
 		if (!confirm(`Revoke this ${token.tokenType} token?`)) return;
 		const actionKey = `${token.tokenType}:${token.tokenId}:revoke`;
-		setTokenActionKey(actionKey);
-		setError(null);
+		dispatch({ type: TokensPageActionType.SET_TOKEN_ACTION_KEY, data: actionKey });
+		dispatch({ type: TokensPageActionType.SET_ERROR, data: null });
 		try {
 			await revokeTokenByValue(token.tokenId);
 			await reloadTokens();
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to revoke token");
+			dispatch({
+				type: TokensPageActionType.SET_ERROR,
+				data: err instanceof Error ? err.message : "Failed to revoke token",
+			});
 		} finally {
-			setTokenActionKey(null);
+			dispatch({ type: TokensPageActionType.SET_TOKEN_ACTION_KEY, data: null });
 		}
 	};
 
 	const handleDelete = async (token: TokenActivityItem) => {
 		if (!confirm(`Delete this ${token.tokenType} token? This cannot be undone.`)) return;
 		const actionKey = `${token.tokenType}:${token.tokenId}:delete`;
-		setTokenActionKey(actionKey);
-		setError(null);
+		dispatch({ type: TokensPageActionType.SET_TOKEN_ACTION_KEY, data: actionKey });
+		dispatch({ type: TokensPageActionType.SET_ERROR, data: null });
 		try {
 			await deleteTokenByValue(token.tokenId);
 			await reloadTokens();
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to delete token");
+			dispatch({
+				type: TokensPageActionType.SET_ERROR,
+				data: err instanceof Error ? err.message : "Failed to delete token",
+			});
 		} finally {
-			setTokenActionKey(null);
+			dispatch({ type: TokensPageActionType.SET_TOKEN_ACTION_KEY, data: null });
 		}
 	};
 
@@ -119,7 +189,12 @@ export default function TokensPage() {
 				<label className="text-sm font-medium">Filter by environment</label>
 				<select
 					value={environmentFilter}
-					onChange={(event) => setEnvironmentFilter(event.target.value)}
+					onChange={(event) =>
+						dispatch({
+							type: TokensPageActionType.SET_ENVIRONMENT_FILTER,
+							data: event.target.value,
+						})
+					}
 					className="rounded-xl border border-brand-muted bg-background px-3 py-1.5 text-sm focus:border-brand focus:outline-none"
 				>
 					<option value="">All</option>
