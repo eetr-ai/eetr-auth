@@ -38,4 +38,7 @@ export interface TokenRepository {
 	getClientScopeGrantsByNames(clientId: string, scopeNames: string[]): Promise<ClientScopeGrant[]>;
 	getAccessTokenByTokenId(tokenId: string): Promise<AccessTokenRecord | null>;
 	listAccessTokenActivity(clientId?: string): Promise<AccessTokenActivity[]>;
+	revokeAccessTokenByTokenId(tokenId: string, expiresAt: string): Promise<boolean>;
+	deleteAccessTokenByTokenId(tokenId: string): Promise<boolean>;
+	deleteExpiredAccessTokens(nowIso: string): Promise<number>;
 }

@@ -12,6 +12,7 @@ import {
 	Copy,
 	Check,
 	Plus,
+	Ban,
 } from "lucide-react";
 import {
 	getClientWithDetails,
@@ -20,7 +21,11 @@ import {
 	deleteClient,
 	rotateClientSecret,
 } from "@/app/actions/client-actions";
-import { listTokenActivityByClient } from "@/app/actions/token-actions";
+import {
+	listTokenActivityByClient,
+	revokeTokenByValue,
+	deleteTokenByValue,
+} from "@/app/actions/token-actions";
 import { listEnvironments } from "@/app/actions/environment-actions";
 import { listScopes } from "@/app/actions/scope-actions";
 import type { ClientWithDetails } from "@/lib/repositories/client.repository";
@@ -61,6 +66,7 @@ export default function ClientDetailPage() {
 	const [rotatedSecret, setRotatedSecret] = useState<string | null>(null);
 	const [copied, setCopied] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [tokenActionKey, setTokenActionKey] = useState<string | null>(null);
 
 	useEffect(() => {
 		async function load() {
@@ -184,6 +190,41 @@ export default function ClientDetailPage() {
 		await navigator.clipboard.writeText(rotatedSecret);
 		setCopied(true);
 		setTimeout(() => setCopied(false), 2000);
+	};
+
+	const reloadClientTokens = async () => {
+		const tokenItems = await listTokenActivityByClient(id);
+		setTokens(tokenItems);
+	};
+
+	const handleRevokeToken = async (token: TokenActivityItem) => {
+		if (!confirm(`Revoke this ${token.tokenType} token?`)) return;
+		const actionKey = `${token.tokenType}:${token.tokenId}:revoke`;
+		setTokenActionKey(actionKey);
+		setError(null);
+		try {
+			await revokeTokenByValue(token.tokenId);
+			await reloadClientTokens();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Failed to revoke token");
+		} finally {
+			setTokenActionKey(null);
+		}
+	};
+
+	const handleDeleteToken = async (token: TokenActivityItem) => {
+		if (!confirm(`Delete this ${token.tokenType} token? This cannot be undone.`)) return;
+		const actionKey = `${token.tokenType}:${token.tokenId}:delete`;
+		setTokenActionKey(actionKey);
+		setError(null);
+		try {
+			await deleteTokenByValue(token.tokenId);
+			await reloadClientTokens();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Failed to delete token");
+		} finally {
+			setTokenActionKey(null);
+		}
 	};
 
 	if (loading) {
@@ -381,6 +422,7 @@ export default function ClientDetailPage() {
 									<th className="px-4 py-3 font-medium">Status</th>
 									<th className="px-4 py-3 font-medium">Created</th>
 									<th className="px-4 py-3 font-medium">Expires</th>
+									<th className="px-4 py-3 font-medium">Actions</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -404,6 +446,28 @@ export default function ClientDetailPage() {
 										</td>
 										<td className="px-4 py-3">
 											{new Date(token.expiresAt).toLocaleString()}
+										</td>
+										<td className="px-4 py-3">
+											<div className="flex items-center gap-2">
+												<button
+													type="button"
+													onClick={() => handleRevokeToken(token)}
+													disabled={tokenActionKey != null}
+													className="inline-flex items-center gap-1 rounded-full border border-amber-700 px-2 py-1 text-xs text-amber-200 hover:bg-amber-950/50 disabled:opacity-50"
+												>
+													<Ban className="h-3.5 w-3.5" />
+													Revoke
+												</button>
+												<button
+													type="button"
+													onClick={() => handleDeleteToken(token)}
+													disabled={tokenActionKey != null}
+													className="inline-flex items-center gap-1 rounded-full border border-red-800 px-2 py-1 text-xs text-red-200 hover:bg-red-950/50 disabled:opacity-50"
+												>
+													<Trash2 className="h-3.5 w-3.5" />
+													Delete
+												</button>
+											</div>
 										</td>
 									</tr>
 								))}

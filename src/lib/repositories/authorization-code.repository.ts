@@ -32,4 +32,5 @@ export interface AuthorizationCodeRepository {
 	create(row: AuthorizationCodeRow, clientScopeIds: string[]): Promise<void>;
 	getByCodeId(codeId: string): Promise<AuthorizationCodeWithScopeIds | null>;
 	markUsed(id: string, usedAt: string): Promise<void>;
+	deleteUsedOrExpired(nowIso: string): Promise<number>;
 }

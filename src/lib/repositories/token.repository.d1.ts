@@ -163,4 +163,31 @@ export class TokenRepositoryD1 implements TokenRepository {
 			scopeNames: row.scopeNamesCsv ? row.scopeNamesCsv.split(",").filter(Boolean) : [],
 		}));
 	}
+
+	async revokeAccessTokenByTokenId(tokenId: string, expiresAt: string): Promise<boolean> {
+		const result = await this.db
+			.prepare(
+				[
+					"UPDATE tokens",
+					"SET expires_at = CASE WHEN expires_at > ? THEN ? ELSE expires_at END",
+					"WHERE token_id = ?",
+				].join(" ")
+			)
+			.bind(expiresAt, expiresAt, tokenId)
+			.run();
+		return Number(result.meta.changes ?? 0) > 0;
+	}
+
+	async deleteAccessTokenByTokenId(tokenId: string): Promise<boolean> {
+		const result = await this.db.prepare("DELETE FROM tokens WHERE token_id = ?").bind(tokenId).run();
+		return Number(result.meta.changes ?? 0) > 0;
+	}
+
+	async deleteExpiredAccessTokens(nowIso: string): Promise<number> {
+		const result = await this.db
+			.prepare("DELETE FROM tokens WHERE expires_at <= ?")
+			.bind(nowIso)
+			.run();
+		return Number(result.meta.changes ?? 0);
+	}
 }

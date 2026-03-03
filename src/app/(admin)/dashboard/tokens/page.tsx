@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Fingerprint } from "lucide-react";
-import { listTokenActivity } from "@/app/actions/token-actions";
+import { Loader2, Fingerprint, Ban, Trash2 } from "lucide-react";
+import {
+	listTokenActivity,
+	revokeTokenByValue,
+	deleteTokenByValue,
+} from "@/app/actions/token-actions";
 import { listEnvironments } from "@/app/actions/environment-actions";
 import type { Environment } from "@/lib/repositories/environment.repository";
 
@@ -29,6 +33,7 @@ export default function TokensPage() {
 	const [loading, setLoading] = useState(true);
 	const [environmentFilter, setEnvironmentFilter] = useState("");
 	const [error, setError] = useState<string | null>(null);
+	const [tokenActionKey, setTokenActionKey] = useState<string | null>(null);
 
 	useEffect(() => {
 		async function load() {
@@ -49,6 +54,41 @@ export default function TokensPage() {
 		}
 		load();
 	}, []);
+
+	const reloadTokens = async () => {
+		const tokenItems = await listTokenActivity();
+		setTokens(tokenItems);
+	};
+
+	const handleRevoke = async (token: TokenActivityItem) => {
+		if (!confirm(`Revoke this ${token.tokenType} token?`)) return;
+		const actionKey = `${token.tokenType}:${token.tokenId}:revoke`;
+		setTokenActionKey(actionKey);
+		setError(null);
+		try {
+			await revokeTokenByValue(token.tokenId);
+			await reloadTokens();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Failed to revoke token");
+		} finally {
+			setTokenActionKey(null);
+		}
+	};
+
+	const handleDelete = async (token: TokenActivityItem) => {
+		if (!confirm(`Delete this ${token.tokenType} token? This cannot be undone.`)) return;
+		const actionKey = `${token.tokenType}:${token.tokenId}:delete`;
+		setTokenActionKey(actionKey);
+		setError(null);
+		try {
+			await deleteTokenByValue(token.tokenId);
+			await reloadTokens();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Failed to delete token");
+		} finally {
+			setTokenActionKey(null);
+		}
+	};
 
 	const envById = Object.fromEntries(environments.map((environment) => [environment.id, environment]));
 	const filteredTokens =
@@ -104,6 +144,7 @@ export default function TokensPage() {
 							<th className="px-4 py-3 font-medium">Created</th>
 							<th className="px-4 py-3 font-medium">Expires</th>
 							<th className="px-4 py-3 font-medium">Rotated From</th>
+							<th className="px-4 py-3 font-medium">Actions</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -127,6 +168,28 @@ export default function TokensPage() {
 								<td className="px-4 py-3">{new Date(token.expiresAt).toLocaleString()}</td>
 								<td className="px-4 py-3 font-mono text-xs">
 									{token.rotatedFromTokenId ? maskToken(token.rotatedFromTokenId) : "n/a"}
+								</td>
+								<td className="px-4 py-3">
+									<div className="flex items-center gap-2">
+										<button
+											type="button"
+											onClick={() => handleRevoke(token)}
+											disabled={tokenActionKey != null}
+											className="inline-flex items-center gap-1 rounded-full border border-amber-700 px-2 py-1 text-xs text-amber-200 hover:bg-amber-950/50 disabled:opacity-50"
+										>
+											<Ban className="h-3.5 w-3.5" />
+											Revoke
+										</button>
+										<button
+											type="button"
+											onClick={() => handleDelete(token)}
+											disabled={tokenActionKey != null}
+											className="inline-flex items-center gap-1 rounded-full border border-red-800 px-2 py-1 text-xs text-red-200 hover:bg-red-950/50 disabled:opacity-50"
+										>
+											<Trash2 className="h-3.5 w-3.5" />
+											Delete
+										</button>
+									</div>
 								</td>
 							</tr>
 						))}

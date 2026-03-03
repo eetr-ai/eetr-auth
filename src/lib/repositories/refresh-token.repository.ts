@@ -42,4 +42,7 @@ export interface RefreshTokenRepository {
 	getByTokenId(refreshTokenId: string): Promise<RefreshTokenRecord | null>;
 	revoke(id: string, revokedAt: string): Promise<void>;
 	listRefreshTokenActivity(clientId?: string): Promise<RefreshTokenActivity[]>;
+	deleteByTokenId(refreshTokenId: string): Promise<boolean>;
+	deleteExpired(nowIso: string): Promise<number>;
+	deleteRevoked(): Promise<number>;
 }

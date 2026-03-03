@@ -87,6 +87,26 @@ export interface ValidateTokenResult {
 	missingScopes: string[];
 }
 
+export interface TokenMutationResult {
+	tokenType: "access" | "refresh" | null;
+}
+
+export interface RevokeTokenResult extends TokenMutationResult {
+	revoked: boolean;
+}
+
+export interface DeleteTokenResult extends TokenMutationResult {
+	deleted: boolean;
+}
+
+export interface CleanupTokenArtifactsResult {
+	accessTokensDeleted: number;
+	refreshTokensExpiredDeleted: number;
+	refreshTokensRevokedDeleted: number;
+	authorizationCodesDeleted: number;
+	totalDeleted: number;
+}
+
 export class OauthTokenService {
 	private readonly clientRepo: ClientRepositoryD1;
 	private readonly authorizationCodeRepo: AuthorizationCodeRepositoryD1;
@@ -360,6 +380,85 @@ export class OauthTokenService {
 			scopeNames: token.scopeNames,
 			createdAt: token.createdAt,
 			rotatedFromTokenId: token.rotatedFromTokenId,
+		};
+	}
+
+	async revokeTokenByValue(token: string | null): Promise<RevokeTokenResult> {
+		const normalized = token?.trim() ?? "";
+		if (!normalized) {
+			return { revoked: false, tokenType: null };
+		}
+
+		const nowIso = new Date().toISOString();
+		const refreshToken = await this.refreshTokenRepo.getByTokenId(normalized);
+		if (refreshToken) {
+			if (!refreshToken.revokedAt) {
+				await this.refreshTokenRepo.revoke(refreshToken.id, nowIso);
+			}
+			return { revoked: true, tokenType: "refresh" };
+		}
+
+		const revoked = await this.tokenRepo.revokeAccessTokenByTokenId(normalized, nowIso);
+		if (revoked) {
+			return { revoked: true, tokenType: "access" };
+		}
+
+		return { revoked: false, tokenType: null };
+	}
+
+	async deleteTokenByValue(token: string | null): Promise<DeleteTokenResult> {
+		const normalized = token?.trim() ?? "";
+		if (!normalized) {
+			return { deleted: false, tokenType: null };
+		}
+
+		const refreshDeleted = await this.refreshTokenRepo.deleteByTokenId(normalized);
+		if (refreshDeleted) {
+			return { deleted: true, tokenType: "refresh" };
+		}
+
+		const accessDeleted = await this.tokenRepo.deleteAccessTokenByTokenId(normalized);
+		if (accessDeleted) {
+			return { deleted: true, tokenType: "access" };
+		}
+
+		return { deleted: false, tokenType: null };
+	}
+
+	async cleanupTokenArtifacts(dryRun = false): Promise<CleanupTokenArtifactsResult> {
+		const nowIso = new Date().toISOString();
+		if (dryRun) {
+			return {
+				accessTokensDeleted: 0,
+				refreshTokensExpiredDeleted: 0,
+				refreshTokensRevokedDeleted: 0,
+				authorizationCodesDeleted: 0,
+				totalDeleted: 0,
+			};
+		}
+
+		const [
+			accessTokensDeleted,
+			refreshTokensExpiredDeleted,
+			refreshTokensRevokedDeleted,
+			authorizationCodesDeleted,
+		] = await Promise.all([
+			this.tokenRepo.deleteExpiredAccessTokens(nowIso),
+			this.refreshTokenRepo.deleteExpired(nowIso),
+			this.refreshTokenRepo.deleteRevoked(),
+			this.authorizationCodeRepo.deleteUsedOrExpired(nowIso),
+		]);
+
+		return {
+			accessTokensDeleted,
+			refreshTokensExpiredDeleted,
+			refreshTokensRevokedDeleted,
+			authorizationCodesDeleted,
+			totalDeleted:
+				accessTokensDeleted +
+				refreshTokensExpiredDeleted +
+				refreshTokensRevokedDeleted +
+				authorizationCodesDeleted,
 		};
 	}
 

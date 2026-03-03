@@ -174,4 +174,27 @@ export class RefreshTokenRepositoryD1 implements RefreshTokenRepository {
 			scopeNames: row.scopeNamesCsv ? row.scopeNamesCsv.split(",").filter(Boolean) : [],
 		}));
 	}
+
+	async deleteByTokenId(refreshTokenId: string): Promise<boolean> {
+		const result = await this.db
+			.prepare("DELETE FROM refresh_tokens WHERE refresh_token_id = ?")
+			.bind(refreshTokenId)
+			.run();
+		return Number(result.meta.changes ?? 0) > 0;
+	}
+
+	async deleteExpired(nowIso: string): Promise<number> {
+		const result = await this.db
+			.prepare("DELETE FROM refresh_tokens WHERE expires_at <= ?")
+			.bind(nowIso)
+			.run();
+		return Number(result.meta.changes ?? 0);
+	}
+
+	async deleteRevoked(): Promise<number> {
+		const result = await this.db
+			.prepare("DELETE FROM refresh_tokens WHERE revoked_at IS NOT NULL")
+			.run();
+		return Number(result.meta.changes ?? 0);
+	}
 }

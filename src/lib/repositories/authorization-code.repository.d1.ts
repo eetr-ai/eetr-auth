@@ -115,4 +115,17 @@ export class AuthorizationCodeRepositoryD1 implements AuthorizationCodeRepositor
 			.bind(usedAt, id)
 			.run();
 	}
+
+	async deleteUsedOrExpired(nowIso: string): Promise<number> {
+		const result = await this.db
+			.prepare(
+				[
+					"DELETE FROM authorization_codes",
+					"WHERE used_at IS NOT NULL OR expires_at <= ?",
+				].join(" ")
+			)
+			.bind(nowIso)
+			.run();
+		return Number(result.meta.changes ?? 0);
+	}
 }

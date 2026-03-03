@@ -101,6 +101,26 @@ This project now exposes OAuth authorization server endpoints for:
   - `200` when fully valid
   - `401` for every non-valid case (invalid token, expired token, scope mismatch, environment mismatch, or missing `environmentName`)
 
+### Token cleanup endpoint
+
+- `POST` `/api/token/cleanup`
+- Public endpoint (no auth currently required)
+- Accepts optional JSON body:
+  - `dry_run` (boolean, optional)
+  - `dryRun` (boolean, optional alias)
+- Cleanup targets:
+  - expired access tokens
+  - expired refresh tokens
+  - revoked refresh tokens
+  - used or expired authorization codes
+- Response fields:
+  - `dry_run`
+  - `access_tokens_deleted`
+  - `refresh_tokens_expired_deleted`
+  - `refresh_tokens_revoked_deleted`
+  - `authorization_codes_deleted`
+  - `total_deleted`
+
 ### Token persistence and admin visibility
 
 - Access tokens are stored in `tokens` + `token_scopes`
@@ -109,3 +129,4 @@ This project now exposes OAuth authorization server endpoints for:
 - Admin UI:
   - `/dashboard/tokens` for global token activity
   - `/dashboard/clients/[id]` for per-client token activity
+  - revoke and delete actions for access/refresh tokens are available from the dashboard UI only
