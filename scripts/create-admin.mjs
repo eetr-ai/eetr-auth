@@ -3,6 +3,7 @@
  * Create an admin user in local and/or remote D1.
  * Usage: node scripts/create-admin.mjs <username> <password>
  *    or: ADMIN_USERNAME=x ADMIN_PASSWORD=y node scripts/create-admin.mjs
+ *    or: USER_USERNAME=x USER_PASSWORD=y node scripts/create-admin.mjs
  * Options: --local-only | --remote-only (default: both)
  */
 import { randomUUID } from "node:crypto";
@@ -16,13 +17,14 @@ const localOnly = args.includes("--local-only");
 const remoteOnly = args.includes("--remote-only");
 const filteredArgs = args.filter((a) => a !== "--local-only" && a !== "--remote-only");
 
-const username = filteredArgs[0] ?? process.env.ADMIN_USERNAME;
-const password = filteredArgs[1] ?? process.env.ADMIN_PASSWORD;
+const username = filteredArgs[0] ?? process.env.ADMIN_USERNAME ?? process.env.USER_USERNAME;
+const password = filteredArgs[1] ?? process.env.ADMIN_PASSWORD ?? process.env.USER_PASSWORD;
 
 if (!username || !password) {
 	console.error(
 		"Usage: node scripts/create-admin.mjs <username> <password>\n" +
 			"   or: ADMIN_USERNAME=x ADMIN_PASSWORD=y node scripts/create-admin.mjs\n" +
+			"   or: USER_USERNAME=x USER_PASSWORD=y node scripts/create-admin.mjs\n" +
 			"Options: --local-only or --remote-only (default: run both)"
 	);
 	process.exit(1);
@@ -37,7 +39,7 @@ const passwordHash = md5(password);
 const escapedUsername = escapeSql(username);
 const escapedHash = escapeSql(passwordHash);
 
-const sql = `INSERT INTO admins (id, username, password_hash) VALUES ('${id}', '${escapedUsername}', '${escapedHash}');`;
+const sql = `INSERT INTO users (id, username, password_hash, is_admin) VALUES ('${id}', '${escapedUsername}', '${escapedHash}', 1);`;
 
 const tmpDir = join(process.cwd(), ".tmp");
 const sqlPath = join(tmpDir, `create-admin-${Date.now()}.sql`);

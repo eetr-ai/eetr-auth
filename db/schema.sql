@@ -10,14 +10,15 @@ CREATE TABLE IF NOT EXISTS environments (
   name TEXT NOT NULL
 );
 
--- Admins (can create clients)
-CREATE TABLE IF NOT EXISTS admins (
+-- Users (only is_admin users can access dashboard)
+CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   username TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL
+  password_hash TEXT NOT NULL,
+  is_admin INTEGER NOT NULL DEFAULT 0
 );
 
--- Clients (OAuth clients per environment, created by an admin)
+-- Clients (OAuth clients per environment, created by a user/admin)
 CREATE TABLE IF NOT EXISTS clients (
   id TEXT PRIMARY KEY,
   client_id TEXT NOT NULL UNIQUE,
@@ -26,7 +27,7 @@ CREATE TABLE IF NOT EXISTS clients (
   created_by TEXT NOT NULL,
   expires_at TEXT,
   FOREIGN KEY (environment_id) REFERENCES environments(id),
-  FOREIGN KEY (created_by) REFERENCES admins(id)
+  FOREIGN KEY (created_by) REFERENCES users(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_clients_environment_id ON clients(environment_id);

@@ -16,7 +16,10 @@
 		"db:bootstrap": "npm run db:migrate && npm run db:migrate:remote",
 		"db:create-admin": "node scripts/create-admin.mjs",
 		"db:create-admin:local": "node scripts/create-admin.mjs --local-only",
-		"db:create-admin:remote": "node scripts/create-admin.mjs --remote-only"
+		"db:create-admin:remote": "node scripts/create-admin.mjs --remote-only",
+		"db:create-user": "npm run db:create-admin",
+		"db:create-user:local": "npm run db:create-admin:local",
+		"db:create-user:remote": "npm run db:create-admin:remote"
 	},
 	"dependencies": {
 		"@eetr/react-reducer-utils": "^0.1.1",

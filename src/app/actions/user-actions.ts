@@ -19,9 +19,44 @@ export async function getUserById(id: string) {
 	});
 }
 
-export async function createUser(username: string, password: string) {
+export async function listUsers() {
 	return onServerAction(async (_ctx, getServices) => {
 		const { userService } = getServices();
-		return userService.createUser(username, password);
+		return userService.listUsers();
+	});
+}
+
+export async function createUser(username: string, password: string, isAdmin = true) {
+	return onServerAction(async (_ctx, getServices) => {
+		const { userService } = getServices();
+		return userService.createUser(username, password, isAdmin);
+	});
+}
+
+export async function updateUser(
+	id: string,
+	updates: { username?: string; password?: string; isAdmin?: boolean }
+) {
+	const session = await auth();
+	if (!session?.user?.id) {
+		throw new Error("Unauthorized");
+	}
+
+	return onServerAction(async (_ctx, getServices) => {
+		const { userService } = getServices();
+		return userService.updateUser(id, updates, session.user.id);
+	});
+}
+
+export async function deleteUser(id: string) {
+	const session = await auth();
+	if (!session?.user?.id) {
+		throw new Error("Unauthorized");
+	}
+
+	return onServerAction(async (_ctx, getServices) => {
+		const { userService } = getServices();
+		await userService.deleteUser(id, session.user.id);
+		return { ok: true };
 	});
 }

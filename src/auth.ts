@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { getDb } from "@/lib/db";
-import { AdminRepositoryD1 } from "@/lib/repositories/admin.repository.d1";
+import { UserRepositoryD1 } from "@/lib/repositories/admin.repository.d1";
 import { md5 } from "@/lib/auth/md5";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -23,10 +23,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
 				const { env } = await getCloudflareContext({ async: true });
 				const db = getDb(env);
-				const repo = new AdminRepositoryD1(db);
-				const admin = await repo.findByUsername(username);
-				if (!admin) {
-					console.log("[auth] authorize: no admin found for username", username);
+				const repo = new UserRepositoryD1(db);
+				const user = await repo.findByUsername(username);
+				if (!user) {
+					console.log("[auth] authorize: no user found for username", username);
+					return null;
+				}
+				if (!user.isAdmin) {
+					console.log("[auth] authorize: user is not admin", username);
 					return null;
 				}
 
@@ -35,15 +39,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 					s.length >= 8 ? `${s.slice(0, 4)}...${s.slice(-4)}` : "(short)";
 				console.log("[auth] authorize: MD5 verification", {
 					computed: headTail(passwordHash),
-					fromDb: headTail(admin.passwordHash),
+					fromDb: headTail(user.passwordHash),
 				});
-				if (passwordHash !== admin.passwordHash) {
+				if (passwordHash !== user.passwordHash) {
 					console.log("[auth] authorize: password mismatch for username", username);
 					return null;
 				}
 
-				console.log("[auth] authorize: success", { id: admin.id, username: admin.username });
-				return { id: admin.id, name: admin.username };
+				console.log("[auth] authorize: success", { id: user.id, username: user.username });
+				return { id: user.id, name: user.username, isAdmin: user.isAdmin };
 			},
 		}),
 	],
@@ -53,6 +57,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 			if (user) {
 				token.id = user.id;
 				token.name = user.name;
+				token.isAdmin = Boolean((user as { isAdmin?: boolean }).isAdmin);
 				console.log("[auth] jwt: user added to token", { id: user.id, name: user.name });
 			}
 			return token;
@@ -61,16 +66,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 			if (session.user) {
 				session.user.id = token.id as string;
 				session.user.name = (token.name as string) ?? session.user.name;
+				session.user.isAdmin = Boolean(token.isAdmin);
 			}
 			return session;
 		},
 		authorized({ auth, request }) {
 			const isLoggedIn = !!auth?.user;
+			const isAdmin = Boolean(auth?.user && (auth.user as { isAdmin?: boolean }).isAdmin);
 			const path = request.nextUrl.pathname;
 			const isProtected = path.startsWith("/dashboard") || path.startsWith("/admin");
 			if (isProtected) {
-				console.log("[auth] authorized:", path, "protected, isLoggedIn:", isLoggedIn);
-				return isLoggedIn;
+				console.log("[auth] authorized:", path, "protected, isLoggedIn:", isLoggedIn, "isAdmin:", isAdmin);
+				return isLoggedIn && isAdmin;
 			}
 			return true;
 		},

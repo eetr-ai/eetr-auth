@@ -122,3 +122,17 @@ This project now exposes OAuth authorization server endpoints for:
   - `/dashboard/tokens` for global token activity
   - `/dashboard/clients/[id]` for per-client token activity
   - revoke and delete actions for access/refresh tokens are available from the dashboard UI only
+
+### User model and admin access
+
+- Dashboard authentication uses the `users` table with:
+  - `id`, `username`, `password_hash`, `is_admin`
+- Only users with `is_admin = 1` can sign in and access `/dashboard`.
+- User management (create, update, delete) is available at `/dashboard/users`.
+- For existing deployments with `admins`, run the one-time migration:
+  - `wrangler d1 execute progression-ai-auth --local --file=./db/migration-20260303-rename-admins-to-users.sql`
+  - `wrangler d1 execute progression-ai-auth --remote --file=./db/migration-20260303-rename-admins-to-users.sql`
+- Bootstrap admin user commands:
+  - `npm run db:create-user -- <username> <password>`
+  - `npm run db:create-user:local -- <username> <password>`
+  - `npm run db:create-user:remote -- <username> <password>`
