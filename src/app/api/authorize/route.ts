@@ -9,6 +9,13 @@ function asString(value: FormDataEntryValue | string | null): string | null {
 	return typeof value === "string" ? value : null;
 }
 
+function scheduleActivityLog(
+	ctx: { waitUntil?: (p: Promise<unknown>) => void } | undefined,
+	logPromise: Promise<void>
+) {
+	ctx?.waitUntil?.(logPromise.catch((err) => console.error("[token_activity_log]", err)));
+}
+
 function withOAuthRedirectError(
 	redirectUri: string,
 	error: string,
@@ -24,7 +31,17 @@ function withOAuthRedirectError(
 	return NextResponse.redirect(url);
 }
 
-async function handleAuthorize(req: NextRequest, services: Services) {
+interface AuthorizeLogContext {
+	ctx: { waitUntil?: (p: Promise<unknown>) => void } | undefined;
+	startMs: number;
+	ip: string | null;
+}
+
+async function handleAuthorize(
+	req: NextRequest,
+	services: Services,
+	logContext: AuthorizeLogContext
+) {
 	const session = await auth();
 	if (!session?.user?.id) {
 		const loginUrl = new URL("/", req.url);
@@ -34,11 +51,12 @@ async function handleAuthorize(req: NextRequest, services: Services) {
 
 	const source: URLSearchParams | FormData =
 		req.method === "GET" ? req.nextUrl.searchParams : await req.formData();
+	const clientId = asString(source.get("client_id"));
 
 	try {
 		const result = await services.oauthAuthorizationService.authorize({
 			responseType: asString(source.get("response_type")),
-			clientId: asString(source.get("client_id")),
+			clientId,
 			redirectUri: asString(source.get("redirect_uri")),
 			scope: asString(source.get("scope")),
 			state: asString(source.get("state")),
@@ -47,8 +65,24 @@ async function handleAuthorize(req: NextRequest, services: Services) {
 			subject: session.user.id,
 		});
 
+		const durationMs = Date.now() - logContext.startMs;
+		scheduleActivityLog(logContext.ctx, services.tokenActivityLogService.logActivity({
+			ip: logContext.ip,
+			requestType: "authorize",
+			succeeded: true,
+			clientId,
+			durationMs,
+		}));
 		return NextResponse.redirect(result.redirectTo);
 	} catch (error) {
+		const durationMs = Date.now() - logContext.startMs;
+		scheduleActivityLog(logContext.ctx, services.tokenActivityLogService.logActivity({
+			ip: logContext.ip,
+			requestType: "authorize",
+			succeeded: false,
+			clientId,
+			durationMs,
+		}));
 		if (isOAuthServiceError(error)) {
 			if (error.redirectUri) {
 				return withOAuthRedirectError(
@@ -76,10 +110,14 @@ async function handleAuthorize(req: NextRequest, services: Services) {
 	}
 }
 
-export const GET = withApiContext(async (req, _ctx, getServices) =>
-	handleAuthorize(req, getServices())
-);
+export const GET = withApiContext(async (req, ctx, getServices) => {
+	const startMs = Date.now();
+	const ip = req.headers.get("CF-Connecting-IP") ?? null;
+	return handleAuthorize(req, getServices(), { ctx: ctx.ctx, startMs, ip });
+});
 
-export const POST = withApiContext(async (req, _ctx, getServices) =>
-	handleAuthorize(req, getServices())
-);
+export const POST = withApiContext(async (req, ctx, getServices) => {
+	const startMs = Date.now();
+	const ip = req.headers.get("CF-Connecting-IP") ?? null;
+	return handleAuthorize(req, getServices(), { ctx: ctx.ctx, startMs, ip });
+});

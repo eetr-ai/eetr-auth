@@ -36,7 +36,18 @@ function buildValidationResponse(payload: {
 	};
 }
 
-export const POST = withApiContext(async (req, _ctx, getServices) => {
+function scheduleActivityLog(
+	ctx: { waitUntil?: (p: Promise<unknown>) => void } | undefined,
+	logPromise: Promise<void>
+) {
+	ctx?.waitUntil?.(logPromise.catch((err) => console.error("[token_activity_log]", err)));
+}
+
+export const POST = withApiContext(async (req, ctx, getServices) => {
+	const startMs = Date.now();
+	const ip = req.headers.get("CF-Connecting-IP") ?? null;
+	const { oauthTokenService, tokenActivityLogService } = getServices();
+
 	let token: string | null = parseBearerToken(req.headers.get("authorization"));
 	let scopes: string[] = [];
 	let environmentName: string | null = null;
@@ -69,8 +80,15 @@ export const POST = withApiContext(async (req, _ctx, getServices) => {
 			typeof environmentEntry === "string" ? environmentEntry.trim() : null;
 	}
 
-	const { oauthTokenService } = getServices();
 	if (!environmentName || environmentName.length === 0) {
+		const durationMs = Date.now() - startMs;
+		scheduleActivityLog(ctx.ctx, tokenActivityLogService.logActivity({
+			ip,
+			requestType: "validate",
+			succeeded: false,
+			environmentName: null,
+			durationMs,
+		}));
 		return NextResponse.json(
 			buildValidationResponse({
 				valid: false,
@@ -94,6 +112,14 @@ export const POST = withApiContext(async (req, _ctx, getServices) => {
 	);
 
 	if (!validation.valid) {
+		const durationMs = Date.now() - startMs;
+		scheduleActivityLog(ctx.ctx, tokenActivityLogService.logActivity({
+			ip,
+			requestType: "validate",
+			succeeded: false,
+			environmentName,
+			durationMs,
+		}));
 		return NextResponse.json(
 			buildValidationResponse({
 				valid: false,
@@ -111,6 +137,14 @@ export const POST = withApiContext(async (req, _ctx, getServices) => {
 		);
 	}
 
+	const durationMs = Date.now() - startMs;
+	scheduleActivityLog(ctx.ctx, tokenActivityLogService.logActivity({
+		ip,
+		requestType: "validate",
+		succeeded: true,
+		environmentName,
+		durationMs,
+	}));
 	return NextResponse.json(
 		buildValidationResponse({
 			valid: true,
@@ -119,11 +153,11 @@ export const POST = withApiContext(async (req, _ctx, getServices) => {
 			expiresAt: validation.expiresAt,
 		}),
 		{
-		status: 200,
-		headers: {
-			"Cache-Control": "no-store",
-			Pragma: "no-cache",
-		},
+			status: 200,
+			headers: {
+				"Cache-Control": "no-store",
+				Pragma: "no-cache",
+			},
 		}
 	);
 });

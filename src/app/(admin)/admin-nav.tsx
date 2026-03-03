@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Settings, KeyRound, Fingerprint, Users, LogOut } from "lucide-react";
+import { LayoutDashboard, Settings, KeyRound, Fingerprint, Users, LogOut, ListTodo } from "lucide-react";
 import { logout } from "@/app/actions/user-actions";
 
 const navItems = [
@@ -11,6 +11,7 @@ const navItems = [
 	{ href: "/dashboard/users", label: "Users", icon: Users },
 	{ href: "/dashboard/clients", label: "Clients", icon: KeyRound },
 	{ href: "/dashboard/tokens", label: "Tokens", icon: Fingerprint },
+	{ href: "/dashboard/logs", label: "Logs", icon: ListTodo },
 ];
 
 export function AdminNav() {

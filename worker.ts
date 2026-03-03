@@ -1,6 +1,8 @@
-// @ts-expect-error -- OpenNext generates this module during bundling
+// @ts-expect-error -- OpenNext generates this module during bundling; missing until build
 import openNextWorker from "./.open-next/worker.js";
 import { OauthTokenService } from "./src/lib/services/oauth-token.service";
+import { getDb } from "./src/lib/db";
+import { TokenActivityLogRepositoryD1 } from "./src/lib/repositories/token-activity-log.repository.d1";
 
 type CronMetadata = {
 	cron: string | null;
@@ -55,6 +57,12 @@ const worker = {
 				requestId,
 			});
 			const result = await oauthTokenService.cleanupTokenArtifacts(false);
+
+			const retentionDays = 7;
+			const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+			const activityLogRepo = new TokenActivityLogRepositoryD1(getDb(env));
+			const tokenActivityLogDeleted = await activityLogRepo.deleteOlderThan(cutoff);
+
 			const endedAtMs = Date.now();
 
 			console.info(
@@ -72,6 +80,7 @@ const worker = {
 					refreshTokensRevokedDeleted: result.refreshTokensRevokedDeleted,
 					authorizationCodesDeleted: result.authorizationCodesDeleted,
 					totalDeleted: result.totalDeleted,
+					tokenActivityLogDeleted,
 				})
 			);
 		} catch (error) {

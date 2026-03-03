@@ -5,6 +5,7 @@ import { ScopeService } from "./scope.service";
 import { ClientService } from "./client.service";
 import { OauthAuthorizationService } from "./oauth-authorization.service";
 import { OauthTokenService } from "./oauth-token.service";
+import { TokenActivityLogService } from "./token-activity-log.service";
 
 export interface Services {
 	userService: UserService;
@@ -13,6 +14,7 @@ export interface Services {
 	clientService: ClientService;
 	oauthAuthorizationService: OauthAuthorizationService;
 	oauthTokenService: OauthTokenService;
+	tokenActivityLogService: TokenActivityLogService;
 }
 
 /**
@@ -26,5 +28,6 @@ export function getServices(ctx: RequestContext): Services {
 		clientService: new ClientService(ctx),
 		oauthAuthorizationService: new OauthAuthorizationService(ctx),
 		oauthTokenService: new OauthTokenService(ctx),
+		tokenActivityLogService: new TokenActivityLogService(ctx),
 	};
 }

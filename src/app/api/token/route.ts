@@ -28,14 +28,24 @@ function parseBasicClientAuth(req: NextRequest): { clientId: string | null; clie
 	}
 }
 
-export const POST = withApiContext(async (req, _ctx, getServices) => {
+function scheduleActivityLog(
+	ctx: { waitUntil?: (p: Promise<unknown>) => void } | undefined,
+	logPromise: Promise<void>
+) {
+	ctx?.waitUntil?.(logPromise.catch((err) => console.error("[token_activity_log]", err)));
+}
+
+export const POST = withApiContext(async (req, ctx, getServices) => {
+	const startMs = Date.now();
+	const ip = req.headers.get("CF-Connecting-IP") ?? null;
 	const body = await req.formData();
 	const basic = parseBasicClientAuth(req);
 	const bodyClientId = asString(body.get("client_id"));
 	const bodyClientSecret = asString(body.get("client_secret"));
+	const clientId = basic.clientId ?? bodyClientId;
 
 	try {
-		const { oauthTokenService } = getServices();
+		const { oauthTokenService, tokenActivityLogService } = getServices();
 		const token = await oauthTokenService.exchange({
 			grantType: asString(body.get("grant_type")),
 			clientId: basic.clientId ?? bodyClientId,
@@ -46,6 +56,14 @@ export const POST = withApiContext(async (req, _ctx, getServices) => {
 			codeVerifier: asString(body.get("code_verifier")),
 			refreshToken: asString(body.get("refresh_token")),
 		});
+		const durationMs = Date.now() - startMs;
+		scheduleActivityLog(ctx.ctx, tokenActivityLogService.logActivity({
+			ip,
+			requestType: "token",
+			succeeded: true,
+			clientId,
+			durationMs,
+		}));
 		return NextResponse.json(token, {
 			status: 200,
 			headers: {
@@ -54,6 +72,15 @@ export const POST = withApiContext(async (req, _ctx, getServices) => {
 			},
 		});
 	} catch (error) {
+		const durationMs = Date.now() - startMs;
+		const { tokenActivityLogService } = getServices();
+		scheduleActivityLog(ctx.ctx, tokenActivityLogService.logActivity({
+			ip,
+			requestType: "token",
+			succeeded: false,
+			clientId,
+			durationMs,
+		}));
 		if (isOAuthServiceError(error)) {
 			return NextResponse.json(
 				{
