@@ -59,5 +59,7 @@
 	 * Note: Use secrets to store sensitive data.
 	 * https://developers.cloudflare.com/workers/configuration/secrets/
 	 */
-	// "vars": {  "MY_VARIABLE": "production_value" }
+	"vars": {
+		"AUTH_URL": "https://auth.progression-ai.com"
+	}
 }
