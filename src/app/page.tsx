@@ -6,12 +6,12 @@ import { signIn, auth } from "@/auth";
 export default async function HomePage({
 	searchParams,
 }: {
-	searchParams: Promise<{ error?: string }>;
+	searchParams: Promise<{ error?: string; callbackUrl?: string }>;
 }) {
 	const session = await auth();
 	if (session?.user) redirect("/dashboard");
 
-	const { error } = await searchParams;
+	const { error, callbackUrl } = await searchParams;
 	return (
 		<div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-4">
 			<div className="w-full max-w-sm space-y-8 rounded-xl border border-brand-muted bg-background p-8">
@@ -43,7 +43,10 @@ export default async function HomePage({
 							await signIn("credentials", {
 								username: formData.get("username") as string,
 								password: formData.get("password") as string,
-								redirectTo: "/dashboard",
+								redirectTo:
+									(typeof formData.get("callbackUrl") === "string"
+										? (formData.get("callbackUrl") as string)
+										: null) ?? "/dashboard",
 							});
 						} catch (err) {
 							if (err instanceof CredentialsSignin) {
@@ -57,6 +60,11 @@ export default async function HomePage({
 					}}
 					className="space-y-6"
 				>
+					<input
+						type="hidden"
+						name="callbackUrl"
+						value={callbackUrl && callbackUrl.trim().length > 0 ? callbackUrl : "/dashboard"}
+					/>
 					<div className="space-y-2">
 						<label htmlFor="username" className="block text-sm font-medium text-foreground">
 							Username

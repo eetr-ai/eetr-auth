@@ -69,15 +69,17 @@ export class TokenRepositoryD1 implements TokenRepository {
 					"t.token_id AS tokenId,",
 					"c.client_id AS clientId,",
 					"c.environment_id AS environmentId,",
+					"e.name AS environmentName,",
 					"t.expires_at AS expiresAt,",
 					"GROUP_CONCAT(DISTINCT s.scope_name) AS scopeNamesCsv",
 					"FROM tokens t",
 					"INNER JOIN clients c ON c.id = t.client_id",
+					"INNER JOIN environments e ON e.id = c.environment_id",
 					"LEFT JOIN token_scopes ts ON ts.token_id = t.id",
 					"LEFT JOIN client_scopes cs ON cs.id = ts.client_scope_id",
 					"LEFT JOIN scopes s ON s.id = cs.scope_id",
 					"WHERE t.token_id = ?",
-					"GROUP BY t.id, t.token_id, c.client_id, c.environment_id, t.expires_at",
+					"GROUP BY t.id, t.token_id, c.client_id, c.environment_id, e.name, t.expires_at",
 				].join(" ")
 			)
 			.bind(tokenId)
@@ -86,6 +88,7 @@ export class TokenRepositoryD1 implements TokenRepository {
 				tokenId: string;
 				clientId: string;
 				environmentId: string;
+				environmentName: string;
 				expiresAt: string;
 				scopeNamesCsv: string | null;
 			}>();
@@ -96,6 +99,7 @@ export class TokenRepositoryD1 implements TokenRepository {
 			tokenId: row.tokenId,
 			clientId: row.clientId,
 			environmentId: row.environmentId,
+			environmentName: row.environmentName,
 			expiresAt: row.expiresAt,
 			scopeNames: row.scopeNamesCsv ? row.scopeNamesCsv.split(",").filter(Boolean) : [],
 		};

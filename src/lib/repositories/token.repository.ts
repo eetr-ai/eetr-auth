@@ -27,6 +27,7 @@ export interface AccessTokenRecord {
 	tokenId: string;
 	clientId: string;
 	environmentId: string;
+	environmentName: string;
 	expiresAt: string;
 	scopeNames: string[];
 }

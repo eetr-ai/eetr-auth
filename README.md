@@ -82,13 +82,24 @@ This project now exposes OAuth authorization server endpoints for:
 ### Token validation endpoint
 
 - `POST` `/api/token/validate`
+- Token input can be provided as:
+  - `Authorization: Bearer <token>` header (preferred)
+  - or `token` field in request body
 - Accepts JSON or form body with:
-  - `token` (required): opaque access token from `/api/token`
+  - `token` (optional when using Bearer header): opaque access token from `/api/token`
+  - `environmentName` (required): environment name the token must belong to
   - `scopes` (optional): array of required scopes, or whitespace-separated scope string
 - Returns:
-  - `valid`: token exists, is active (not expired), and includes all required scopes
-  - `active`: token exists and is not expired
-  - `missingScopes`: required scopes that are not present in token grants
+  - always returns only these fields:
+    - `valid` (boolean)
+    - `active` (boolean)
+    - `client_id` (string or `null`)
+    - `expires_at` (ISO string or `null`)
+- Response shape policy:
+  - on invalid responses, `client_id` and `expires_at` are `null`
+- Status codes:
+  - `200` when fully valid
+  - `401` for every non-valid case (invalid token, expired token, scope mismatch, environment mismatch, or missing `environmentName`)
 
 ### Token persistence and admin visibility
 

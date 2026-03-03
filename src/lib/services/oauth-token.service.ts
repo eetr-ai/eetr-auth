@@ -78,6 +78,9 @@ export interface ValidateTokenResult {
 	active: boolean;
 	clientId: string | null;
 	environmentId: string | null;
+	environmentMatch: boolean;
+	expectedEnvironmentName: string | null;
+	tokenEnvironmentName: string | null;
 	expiresAt: string | null;
 	tokenScopes: string[];
 	requiredScopes: string[];
@@ -360,13 +363,38 @@ export class OauthTokenService {
 		};
 	}
 
-	async validateAccessToken(token: string | null, requiredScopes: string[]): Promise<ValidateTokenResult> {
+	async validateAccessToken(
+		token: string | null,
+		requiredScopes: string[],
+		environmentName: string | null
+	): Promise<ValidateTokenResult> {
+		const normalizedEnvironmentName = environmentName?.trim() ?? "";
+		const expectedEnvironmentName =
+			normalizedEnvironmentName.length > 0 ? normalizedEnvironmentName : null;
+		if (!expectedEnvironmentName) {
+			return {
+				valid: false,
+				active: false,
+				clientId: null,
+				environmentId: null,
+				environmentMatch: false,
+				expectedEnvironmentName: null,
+				tokenEnvironmentName: null,
+				expiresAt: null,
+				tokenScopes: [],
+				requiredScopes,
+				missingScopes: requiredScopes,
+			};
+		}
 		if (!token?.trim()) {
 			return {
 				valid: false,
 				active: false,
 				clientId: null,
 				environmentId: null,
+				environmentMatch: false,
+				expectedEnvironmentName,
+				tokenEnvironmentName: null,
 				expiresAt: null,
 				tokenScopes: [],
 				requiredScopes,
@@ -381,6 +409,9 @@ export class OauthTokenService {
 				active: false,
 				clientId: null,
 				environmentId: null,
+				environmentMatch: false,
+				expectedEnvironmentName,
+				tokenEnvironmentName: null,
 				expiresAt: null,
 				tokenScopes: [],
 				requiredScopes,
@@ -392,13 +423,20 @@ export class OauthTokenService {
 		const active = tokenRecord.expiresAt > nowIso;
 		const tokenScopeSet = new Set(tokenRecord.scopeNames);
 		const missingScopes = requiredScopes.filter((scope) => !tokenScopeSet.has(scope));
-		const valid = active && missingScopes.length === 0;
+		const environmentMatch =
+			expectedEnvironmentName != null &&
+			tokenRecord.environmentName.toLocaleLowerCase() ===
+				expectedEnvironmentName.toLocaleLowerCase();
+		const valid = active && missingScopes.length === 0 && environmentMatch;
 
 		return {
 			valid,
 			active,
 			clientId: tokenRecord.clientId,
 			environmentId: tokenRecord.environmentId,
+			environmentMatch,
+			expectedEnvironmentName,
+			tokenEnvironmentName: tokenRecord.environmentName,
 			expiresAt: tokenRecord.expiresAt,
 			tokenScopes: tokenRecord.scopeNames,
 			requiredScopes,

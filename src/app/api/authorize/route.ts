@@ -27,13 +27,9 @@ function withOAuthRedirectError(
 async function handleAuthorize(req: NextRequest, services: Services) {
 	const session = await auth();
 	if (!session?.user?.id) {
-		return NextResponse.json(
-			{
-				error: "access_denied",
-				error_description: "User must be authenticated.",
-			},
-			{ status: 401 }
-		);
+		const loginUrl = new URL("/", req.url);
+		loginUrl.searchParams.set("callbackUrl", req.url);
+		return NextResponse.redirect(loginUrl);
 	}
 
 	const source: URLSearchParams | FormData =
