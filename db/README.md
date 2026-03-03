@@ -14,3 +14,5 @@ From the project root:
   `npm run db:bootstrap`
 
 Requires the D1 database `progression-ai-auth` to exist. For a new remote DB, create it in the Cloudflare dashboard and set `database_id` in `wrangler.jsonc`.
+
+For login (Auth.js), set `AUTH_SECRET` in `.env.local` (dev) or via `wrangler secret put AUTH_SECRET` (production). See `.env.example`.

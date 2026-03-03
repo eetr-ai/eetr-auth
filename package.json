@@ -19,7 +19,9 @@
 		"@eetr/react-reducer-utils": "^0.1.1",
 		"@opennextjs/cloudflare": "^1.17.1",
 		"lucide-react": "^0.576.0",
+		"md5": "^2.3.0",
 		"next": "16.1.5",
+		"next-auth": "^5.0.0-beta.30",
 		"react": "19.1.5",
 		"react-dom": "19.1.5"
 	},

@@ -1,22 +1,25 @@
 import { getDb } from "@/lib/db";
 import type { RequestContext } from "@/lib/context/types";
-import { UserRepositoryD1 } from "@/lib/repositories/user.repository.d1";
-import type { User } from "@/lib/repositories/user.repository";
+import { AdminRepositoryD1 } from "@/lib/repositories/admin.repository.d1";
+import type { Admin } from "@/lib/repositories/admin.repository";
+import { md5 } from "@/lib/auth/md5";
 
 export class UserService {
-	private readonly userRepository: UserRepositoryD1;
+	private readonly adminRepository: AdminRepositoryD1;
 
 	constructor(ctx: RequestContext) {
 		const db = getDb(ctx.env);
-		this.userRepository = new UserRepositoryD1(db);
+		this.adminRepository = new AdminRepositoryD1(db);
 	}
 
-	async getById(id: string): Promise<User | null> {
-		return this.userRepository.getById(id);
+	async getById(id: string): Promise<Admin | null> {
+		return this.adminRepository.getById(id);
 	}
 
-	async getCurrentUser(_ctx: RequestContext): Promise<User | null> {
-		// TODO: resolve userId from session/auth and return getById(userId)
-		return null;
+	async createUser(username: string, password: string): Promise<Admin> {
+		const id = crypto.randomUUID();
+		const passwordHash = md5(password);
+		await this.adminRepository.create(id, username, passwordHash);
+		return { id, username };
 	}
 }
