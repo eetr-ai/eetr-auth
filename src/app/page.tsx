@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
+import { AuthError, CredentialsSignin } from "next-auth";
 import { signIn, auth } from "@/auth";
 
 export default async function HomePage({
@@ -30,14 +31,29 @@ export default async function HomePage({
 						Invalid username or password.
 					</p>
 				)}
+				{error === "AuthError" && (
+					<p className="rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">
+						Something went wrong. Please try again.
+					</p>
+				)}
 				<form
 					action={async (formData: FormData) => {
 						"use server";
-						await signIn("credentials", {
-							username: formData.get("username") as string,
-							password: formData.get("password") as string,
-							redirectTo: "/dashboard",
-						});
+						try {
+							await signIn("credentials", {
+								username: formData.get("username") as string,
+								password: formData.get("password") as string,
+								redirectTo: "/dashboard",
+							});
+						} catch (err) {
+							if (err instanceof CredentialsSignin) {
+								redirect("/?error=CredentialsSignin");
+							}
+							if (err instanceof AuthError) {
+								redirect("/?error=AuthError");
+							}
+							throw err;
+						}
 					}}
 					className="space-y-6"
 				>

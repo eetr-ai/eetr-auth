@@ -31,6 +31,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 				}
 
 				const passwordHash = md5(password);
+				const headTail = (s: string) =>
+					s.length >= 8 ? `${s.slice(0, 4)}...${s.slice(-4)}` : "(short)";
+				console.log("[auth] authorize: MD5 verification", {
+					computed: headTail(passwordHash),
+					fromDb: headTail(admin.passwordHash),
+				});
 				if (passwordHash !== admin.passwordHash) {
 					console.log("[auth] authorize: password mismatch for username", username);
 					return null;
