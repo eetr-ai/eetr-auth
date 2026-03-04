@@ -64,6 +64,17 @@ const worker = {
 			const tokenActivityLogDeleted = await activityLogRepo.deleteOlderThan(cutoff);
 
 			const endedAtMs = Date.now();
+			const durationMs = endedAtMs - startedAtMs;
+
+			await activityLogRepo.insert({
+				id: crypto.randomUUID(),
+				ip_address: null,
+				request_type: "cleanup",
+				succeeded: 1,
+				environment_name: "scheduled",
+				duration_ms: durationMs,
+				created_at: new Date(endedAtMs).toISOString(),
+			});
 
 			console.info(
 				JSON.stringify({
@@ -72,7 +83,7 @@ const worker = {
 					requestId,
 					startedAt,
 					endedAt: new Date(endedAtMs).toISOString(),
-					durationMs: endedAtMs - startedAtMs,
+					durationMs,
 					cron: cronMetadata.cron,
 					scheduledTime: cronMetadata.scheduledTime,
 					accessTokensDeleted: result.accessTokensDeleted,

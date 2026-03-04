@@ -2,11 +2,12 @@
 
 import { ReducerAction, bootstrapProvider } from "@eetr/react-reducer-utils";
 import { useEffect } from "react";
-import { Loader2, Fingerprint, Ban, Trash2, Info } from "lucide-react";
+import { Loader2, Fingerprint, Ban, Trash2, Info, Eraser } from "lucide-react";
 import {
 	listTokenActivity,
 	revokeTokenByValue,
 	deleteTokenByValue,
+	runCleanupTokenArtifacts,
 } from "@/app/actions/token-actions";
 import { listEnvironments } from "@/app/actions/environment-actions";
 import type { Environment } from "@/lib/repositories/environment.repository";
@@ -31,6 +32,8 @@ enum TokensPageActionType {
 	SET_ENVIRONMENT_FILTER = "SET_ENVIRONMENT_FILTER",
 	SET_ERROR = "SET_ERROR",
 	SET_TOKEN_ACTION_KEY = "SET_TOKEN_ACTION_KEY",
+	SET_CLEANUP_RUNNING = "SET_CLEANUP_RUNNING",
+	SET_CLEANUP_MESSAGE = "SET_CLEANUP_MESSAGE",
 }
 
 interface TokensPageState {
@@ -40,6 +43,8 @@ interface TokensPageState {
 	environmentFilter: string;
 	error: string | null;
 	tokenActionKey: string | null;
+	cleanupRunning: boolean;
+	cleanupMessage: string | null;
 }
 
 const initialState: TokensPageState = {
@@ -49,6 +54,8 @@ const initialState: TokensPageState = {
 	environmentFilter: "",
 	error: null,
 	tokenActionKey: null,
+	cleanupRunning: false,
+	cleanupMessage: null,
 };
 
 function reducer(
@@ -68,6 +75,10 @@ function reducer(
 			return { ...state, error: (action.data as string | null) ?? null };
 		case TokensPageActionType.SET_TOKEN_ACTION_KEY:
 			return { ...state, tokenActionKey: (action.data as string | null) ?? null };
+		case TokensPageActionType.SET_CLEANUP_RUNNING:
+			return { ...state, cleanupRunning: (action.data as boolean | undefined) ?? false };
+		case TokensPageActionType.SET_CLEANUP_MESSAGE:
+			return { ...state, cleanupMessage: (action.data as string | null) ?? null };
 		default:
 			return state;
 	}
@@ -94,7 +105,7 @@ export default function TokensPage() {
 
 function TokensPageContent() {
 	const { state, dispatch } = useTokensPageState();
-	const { tokens, environments, loading, environmentFilter, error, tokenActionKey } =
+	const { tokens, environments, loading, environmentFilter, error, tokenActionKey, cleanupRunning, cleanupMessage } =
 		state;
 
 	useEffect(() => {
@@ -161,6 +172,36 @@ function TokensPageContent() {
 		}
 	};
 
+	const handleRunCleanup = async () => {
+		if (!confirm("Run token cleanup now? This will delete expired access tokens, expired/revoked refresh tokens, and used/expired authorization codes.")) return;
+		dispatch({ type: TokensPageActionType.SET_CLEANUP_RUNNING, data: true });
+		dispatch({ type: TokensPageActionType.SET_CLEANUP_MESSAGE, data: null });
+		try {
+			const result = await runCleanupTokenArtifacts();
+			if (result.ok) {
+				dispatch({
+					type: TokensPageActionType.SET_CLEANUP_MESSAGE,
+					data: result.totalDeleted !== undefined
+						? `Cleanup completed. ${result.totalDeleted} artifact(s) deleted.`
+						: "Cleanup completed.",
+				});
+				await reloadTokens();
+			} else {
+				dispatch({
+					type: TokensPageActionType.SET_CLEANUP_MESSAGE,
+					data: result.error ? `Cleanup failed: ${result.error}` : "Cleanup failed.",
+				});
+			}
+		} catch (err) {
+			dispatch({
+				type: TokensPageActionType.SET_CLEANUP_MESSAGE,
+				data: err instanceof Error ? err.message : "Cleanup failed",
+			});
+		} finally {
+			dispatch({ type: TokensPageActionType.SET_CLEANUP_RUNNING, data: false });
+		}
+	};
+
 	const envById = Object.fromEntries(environments.map((environment) => [environment.id, environment]));
 	const filteredTokens =
 		environmentFilter.trim().length > 0
@@ -186,25 +227,43 @@ function TokensPageContent() {
 				<p className="mb-4 shrink-0 rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">{error}</p>
 			)}
 
-			<div className="mb-4 flex shrink-0 items-center gap-2">
-				<label className="text-sm font-medium">Filter by environment</label>
-				<select
-					value={environmentFilter}
-					onChange={(event) =>
-						dispatch({
-							type: TokensPageActionType.SET_ENVIRONMENT_FILTER,
-							data: event.target.value,
-						})
-					}
-					className="rounded-xl border border-brand-muted bg-background px-3 py-1.5 text-sm focus:border-brand focus:outline-none"
+			<div className="mb-4 flex shrink-0 flex-wrap items-center gap-4">
+				<div className="flex items-center gap-2">
+					<label className="text-sm font-medium">Filter by environment</label>
+					<select
+						value={environmentFilter}
+						onChange={(event) =>
+							dispatch({
+								type: TokensPageActionType.SET_ENVIRONMENT_FILTER,
+								data: event.target.value,
+							})
+						}
+						className="rounded-xl border border-brand-muted bg-background px-3 py-1.5 text-sm focus:border-brand focus:outline-none"
+					>
+						<option value="">All</option>
+						{environments.map((environment) => (
+							<option key={environment.id} value={environment.id}>
+								{environment.name}
+							</option>
+						))}
+					</select>
+				</div>
+				<button
+					type="button"
+					onClick={handleRunCleanup}
+					disabled={cleanupRunning}
+					className="flex items-center gap-2 rounded-xl border border-brand-muted bg-background px-3 py-1.5 text-sm font-medium hover:bg-brand-muted/30 disabled:opacity-50"
 				>
-					<option value="">All</option>
-					{environments.map((environment) => (
-						<option key={environment.id} value={environment.id}>
-							{environment.name}
-						</option>
-					))}
-				</select>
+					{cleanupRunning ? (
+						<Loader2 className="h-4 w-4 animate-spin" />
+					) : (
+						<Eraser className="h-4 w-4" />
+					)}
+					{cleanupRunning ? "Cleaning up…" : "Run cleanup"}
+				</button>
+				{cleanupMessage && (
+					<span className="text-sm text-muted-foreground">{cleanupMessage}</span>
+				)}
 			</div>
 
 			<div className="min-h-0 flex-1 overflow-auto rounded-xl border border-brand-muted">

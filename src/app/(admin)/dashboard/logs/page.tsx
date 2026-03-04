@@ -17,6 +17,7 @@ const REQUEST_TYPES: { value: TokenActivityRequestType; label: string }[] = [
 	{ value: "authorize", label: "Authorize" },
 	{ value: "token", label: "Token" },
 	{ value: "validate", label: "Validate" },
+	{ value: "cleanup", label: "Cleanup" },
 ];
 
 function formatMs(ms: number | null): string {

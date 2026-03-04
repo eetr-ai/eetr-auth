@@ -81,7 +81,9 @@ export class TokenActivityLogRepositoryD1 implements TokenActivityLogRepository 
 			validate: null,
 		};
 		for (const row of avgByType.results ?? []) {
-			avgDurationMsByType[row.request_type] = row.avg_ms;
+			if (row.request_type in avgDurationMsByType) {
+				avgDurationMsByType[row.request_type as keyof typeof avgDurationMsByType] = row.avg_ms;
+			}
 		}
 
 		const byEnvironment: TokenActivityMetrics["byEnvironment"] = {};
@@ -102,6 +104,7 @@ export class TokenActivityLogRepositoryD1 implements TokenActivityLogRepository 
 			if (row.request_type === "authorize") rec.totalAuth += row.cnt;
 			else if (row.request_type === "token") rec.totalToken += row.cnt;
 			else if (row.request_type === "validate") rec.totalValidate += row.cnt;
+			// "cleanup" is logged but not counted in auth/token/validate breakdown
 		}
 
 		const dayMap = new Map<string, Record<string, { authorize: number; token: number; validate: number }>>();
@@ -115,7 +118,9 @@ export class TokenActivityLogRepositoryD1 implements TokenActivityLogRepository 
 			if (!dayRec[env]) {
 				dayRec[env] = { authorize: 0, token: 0, validate: 0 };
 			}
-			dayRec[env][row.request_type] = row.cnt;
+			if (row.request_type === "authorize" || row.request_type === "token" || row.request_type === "validate") {
+				dayRec[env][row.request_type] = row.cnt;
+			}
 		}
 		const byDay = Array.from(dayMap.entries())
 			.sort(([a], [b]) => a.localeCompare(b))
