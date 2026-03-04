@@ -1,3 +1,4 @@
+import { SignJWT, importPKCS8, jwtVerify, createLocalJWKSet, decodeJwt } from "jose";
 import { getDb } from "@/lib/db";
 import type { RequestContext } from "@/lib/context/types";
 import { ClientRepositoryD1 } from "@/lib/repositories/client.repository.d1";
@@ -10,6 +11,13 @@ import type {
 } from "@/lib/repositories/refresh-token.repository";
 import type { AccessTokenActivity } from "@/lib/repositories/token.repository";
 import { OAuthServiceError } from "./oauth.types";
+
+const JWKS_R2_KEY_DEFAULT = "jwks.json";
+
+function isJwtFormat(token: string): boolean {
+	const parts = token.trim().split(".");
+	return parts.length === 3 && parts.every((p) => /^[A-Za-z0-9_-]+$/.test(p));
+}
 
 const ACCESS_TOKEN_TTL_SECONDS = 3600;
 const REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
@@ -115,12 +123,14 @@ export interface CleanupTokenArtifactsResult {
 }
 
 export class OauthTokenService {
+	private readonly ctx: RequestContext;
 	private readonly clientRepo: ClientRepositoryD1;
 	private readonly authorizationCodeRepo: AuthorizationCodeRepositoryD1;
 	private readonly tokenRepo: TokenRepositoryD1;
 	private readonly refreshTokenRepo: RefreshTokenRepositoryD1;
 
 	constructor(ctx: RequestContext) {
+		this.ctx = ctx;
 		const db = getDb(ctx.env);
 		this.clientRepo = new ClientRepositoryD1(db);
 		this.authorizationCodeRepo = new AuthorizationCodeRepositoryD1(db);
@@ -172,7 +182,26 @@ export class OauthTokenService {
 		scopeNames: string[];
 		subject: string | null;
 		rotatedFromRefreshTokenId?: string | null;
+		clientIdentifier?: string;
 	}): Promise<OAuthTokenResponse> {
+		const env = this.ctx.env as unknown as Record<string, unknown>;
+		const privateKeyPem = typeof env.JWT_PRIVATE_KEY === "string" ? env.JWT_PRIVATE_KEY : null;
+		const blogImages = env.BLOG_IMAGES as { get(key: string): Promise<{ body: ReadableStream } | null> } | undefined;
+		const issuer = (typeof env.ISSUER_BASE_URL === "string" ? env.ISSUER_BASE_URL : null) ?? "https://auth.progression-ai.com";
+		const jwksR2Key = (typeof env.JWKS_R2_KEY === "string" ? env.JWKS_R2_KEY : null) ?? JWKS_R2_KEY_DEFAULT;
+
+		const clientIdentifier = params.clientIdentifier;
+		if (privateKeyPem && blogImages && clientIdentifier) {
+			return this.issueTokenPairJwt({
+				...params,
+				clientIdentifier,
+				issuer,
+				privateKeyPem,
+				blogImages,
+				jwksR2Key,
+			});
+		}
+
 		const t0 = Date.now();
 		const now = new Date();
 		const accessToken = generateOpaqueSecret("at");
@@ -219,6 +248,86 @@ export class OauthTokenService {
 		};
 	}
 
+	private async issueTokenPairJwt(params: {
+		clientId: string;
+		clientScopeIds: string[];
+		scopeNames: string[];
+		subject: string | null;
+		rotatedFromRefreshTokenId?: string | null;
+		clientIdentifier: string;
+		issuer: string;
+		privateKeyPem: string;
+		blogImages: { get(key: string): Promise<{ body: ReadableStream } | null> };
+		jwksR2Key: string;
+	}): Promise<OAuthTokenResponse> {
+		const t0 = Date.now();
+		const now = new Date();
+		const jti = crypto.randomUUID();
+		const accessTokenRowId = crypto.randomUUID();
+		const refreshToken = generateOpaqueSecret("rt");
+		const refreshTokenId = crypto.randomUUID();
+		const accessExpiresAt = new Date(now.getTime() + ACCESS_TOKEN_TTL_SECONDS * 1000);
+		const refreshExpiresAt = new Date(now.getTime() + REFRESH_TOKEN_TTL_SECONDS * 1000);
+
+		const r2Obj = await params.blogImages.get(params.jwksR2Key);
+		if (!r2Obj) {
+			throw new OAuthServiceError("server_error", "JWKS not available.", 500);
+		}
+		const jwks = (await new Response(r2Obj.body).json()) as { keys: Array<{ kid?: string }> };
+		const kid = jwks?.keys?.[0]?.kid ?? "default";
+
+		const privateKey = await importPKCS8(params.privateKeyPem, "RS256");
+		const scopeStr = params.scopeNames.join(" ");
+		const accessTokenJwt = await new SignJWT({
+			scope: scopeStr || undefined,
+			client_id: params.clientId,
+		})
+			.setProtectedHeader({ alg: "RS256", kid })
+			.setIssuer(params.issuer)
+			.setSubject(params.subject ?? "")
+			.setAudience(params.clientIdentifier)
+			.setJti(jti)
+			.setIssuedAt(Math.floor(now.getTime() / 1000))
+			.setExpirationTime(Math.floor(accessExpiresAt.getTime() / 1000))
+			.sign(privateKey);
+
+		await this.tokenRepo.createAccessToken(
+			{
+				id: accessTokenRowId,
+				token_id: jti,
+				client_id: params.clientId,
+				expires_at: accessExpiresAt.toISOString(),
+			},
+			params.clientScopeIds
+		);
+		logTokenStep("issue_create_access_token", t0);
+
+		await this.refreshTokenRepo.createRefreshToken(
+			{
+				id: refreshTokenId,
+				refresh_token_id: refreshToken,
+				client_id: params.clientId,
+				subject: params.subject,
+				access_token_id: accessTokenRowId,
+				expires_at: refreshExpiresAt.toISOString(),
+				revoked_at: null,
+				rotated_from_id: params.rotatedFromRefreshTokenId ?? null,
+				created_at: now.toISOString(),
+			},
+			params.clientScopeIds
+		);
+		logTokenStep("issue_create_refresh_token", t0);
+		logTokenStep("issue_token_pair_total", t0);
+
+		return {
+			token_type: "Bearer",
+			access_token: accessTokenJwt,
+			expires_in: ACCESS_TOKEN_TTL_SECONDS,
+			refresh_token: refreshToken,
+			scope: scopesToString(params.scopeNames),
+		};
+	}
+
 	private async exchangeClientCredentials(params: TokenRequestParams): Promise<OAuthTokenResponse> {
 		const t0 = Date.now();
 		logTokenStep("client_credentials_start", t0);
@@ -238,6 +347,7 @@ export class OauthTokenService {
 			clientScopeIds: selected.map((grant) => grant.clientScopeId),
 			scopeNames: selected.map((grant) => grant.scopeName),
 			subject: null,
+			clientIdentifier: client.clientId,
 		});
 		logTokenStep("client_credentials_total", t0);
 		return result;
@@ -311,6 +421,7 @@ export class OauthTokenService {
 			clientScopeIds: selected.map((grant) => grant.clientScopeId),
 			scopeNames: selected.map((grant) => grant.scopeName),
 			subject: authorizationCode.subject,
+			clientIdentifier: client.clientId,
 		});
 		logTokenStep("authorization_code_total", t0);
 		return result;
@@ -365,6 +476,7 @@ export class OauthTokenService {
 			scopeNames: selected.map((grant) => grant.scopeName),
 			subject: token.subject,
 			rotatedFromRefreshTokenId: token.id,
+			clientIdentifier: client.clientId,
 		});
 		logTokenStep("refresh_token_total", t0);
 		return result;
@@ -447,7 +559,18 @@ export class OauthTokenService {
 			return { revoked: true, tokenType: "refresh" };
 		}
 
-		const revoked = await this.tokenRepo.revokeAccessTokenByTokenId(normalized, nowIso);
+		const accessTokenId = isJwtFormat(normalized)
+			? (() => {
+					try {
+						const { jti } = decodeJwt(normalized);
+						return typeof jti === "string" ? jti : null;
+					} catch {
+						return null;
+					}
+				})()
+			: normalized;
+
+		const revoked = await this.tokenRepo.revokeAccessTokenByTokenId(accessTokenId ?? normalized, nowIso);
 		if (revoked) {
 			return { revoked: true, tokenType: "access" };
 		}
@@ -466,7 +589,18 @@ export class OauthTokenService {
 			return { deleted: true, tokenType: "refresh" };
 		}
 
-		const accessDeleted = await this.tokenRepo.deleteAccessTokenByTokenId(normalized);
+		const accessTokenId = isJwtFormat(normalized)
+			? (() => {
+					try {
+						const { jti } = decodeJwt(normalized);
+						return typeof jti === "string" ? jti : null;
+					} catch {
+						return null;
+					}
+				})()
+			: normalized;
+
+		const accessDeleted = await this.tokenRepo.deleteAccessTokenByTokenId(accessTokenId ?? normalized);
 		if (accessDeleted) {
 			return { deleted: true, tokenType: "access" };
 		}
@@ -550,7 +684,13 @@ export class OauthTokenService {
 			};
 		}
 
-		const tokenRecord = await this.tokenRepo.getAccessTokenByTokenId(token.trim());
+		const trimmed = token.trim();
+
+		if (isJwtFormat(trimmed)) {
+			return this.validateAccessTokenJwt(trimmed, requiredScopes, expectedEnvironmentName);
+		}
+
+		const tokenRecord = await this.tokenRepo.getAccessTokenByTokenId(trimmed);
 		if (!tokenRecord) {
 			return {
 				valid: false,
@@ -590,5 +730,141 @@ export class OauthTokenService {
 			requiredScopes,
 			missingScopes,
 		};
+	}
+
+	private async validateAccessTokenJwt(
+		token: string,
+		requiredScopes: string[],
+		expectedEnvironmentName: string | null
+	): Promise<ValidateTokenResult> {
+		const env = this.ctx.env as unknown as Record<string, unknown>;
+		const blogImages = env.BLOG_IMAGES as { get(key: string): Promise<{ body: ReadableStream } | null> } | undefined;
+		const jwksR2Key = (typeof env.JWKS_R2_KEY === "string" ? env.JWKS_R2_KEY : null) ?? JWKS_R2_KEY_DEFAULT;
+
+		if (!blogImages) {
+			return {
+				valid: false,
+				active: false,
+				clientId: null,
+				environmentId: null,
+				environmentMatch: false,
+				expectedEnvironmentName,
+				tokenEnvironmentName: null,
+				expiresAt: null,
+				tokenScopes: [],
+				requiredScopes,
+				missingScopes: requiredScopes,
+			};
+		}
+
+		const r2Obj = await blogImages.get(jwksR2Key);
+		if (!r2Obj) {
+			return {
+				valid: false,
+				active: false,
+				clientId: null,
+				environmentId: null,
+				environmentMatch: false,
+				expectedEnvironmentName,
+				tokenEnvironmentName: null,
+				expiresAt: null,
+				tokenScopes: [],
+				requiredScopes,
+				missingScopes: requiredScopes,
+			};
+		}
+
+		const jwks = (await new Response(r2Obj.body).json()) as { keys: unknown[] };
+		if (!jwks?.keys?.length) {
+			return {
+				valid: false,
+				active: false,
+				clientId: null,
+				environmentId: null,
+				environmentMatch: false,
+				expectedEnvironmentName,
+				tokenEnvironmentName: null,
+				expiresAt: null,
+				tokenScopes: [],
+				requiredScopes,
+				missingScopes: requiredScopes,
+			};
+		}
+
+		try {
+			const JWKS = createLocalJWKSet(jwks as Parameters<typeof createLocalJWKSet>[0]);
+			const { payload } = await jwtVerify(token, JWKS);
+			const jti = payload.jti as string | undefined;
+			if (!jti) {
+				return {
+					valid: false,
+					active: false,
+					clientId: null,
+					environmentId: null,
+					environmentMatch: false,
+					expectedEnvironmentName,
+					tokenEnvironmentName: null,
+					expiresAt: null,
+					tokenScopes: [],
+					requiredScopes,
+					missingScopes: requiredScopes,
+				};
+			}
+
+			const tokenRecord = await this.tokenRepo.getAccessTokenByTokenId(jti);
+			if (!tokenRecord) {
+				return {
+					valid: false,
+					active: false,
+					clientId: null,
+					environmentId: null,
+					environmentMatch: false,
+					expectedEnvironmentName,
+					tokenEnvironmentName: null,
+					expiresAt: null,
+					tokenScopes: [],
+					requiredScopes,
+					missingScopes: requiredScopes,
+				};
+			}
+
+			const nowIso = new Date().toISOString();
+			const active = tokenRecord.expiresAt > nowIso;
+			const tokenScopeSet = new Set(tokenRecord.scopeNames);
+			const missingScopes = requiredScopes.filter((scope) => !tokenScopeSet.has(scope));
+			const environmentMatch =
+				expectedEnvironmentName != null &&
+				tokenRecord.environmentName.toLocaleLowerCase() ===
+					expectedEnvironmentName.toLocaleLowerCase();
+			const valid = active && missingScopes.length === 0 && environmentMatch;
+
+			return {
+				valid,
+				active,
+				clientId: tokenRecord.clientId,
+				environmentId: tokenRecord.environmentId,
+				environmentMatch,
+				expectedEnvironmentName,
+				tokenEnvironmentName: tokenRecord.environmentName,
+				expiresAt: tokenRecord.expiresAt,
+				tokenScopes: tokenRecord.scopeNames,
+				requiredScopes,
+				missingScopes,
+			};
+		} catch {
+			return {
+				valid: false,
+				active: false,
+				clientId: null,
+				environmentId: null,
+				environmentMatch: false,
+				expectedEnvironmentName,
+				tokenEnvironmentName: null,
+				expiresAt: null,
+				tokenScopes: [],
+				requiredScopes,
+				missingScopes: requiredScopes,
+			};
+		}
 	}
 }

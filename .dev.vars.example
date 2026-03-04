@@ -1,0 +1,2 @@
+# Wrangler local dev secrets (copy to .dev.vars and fill in).
+# JWT for local testing is set in .env.local via npm run jwt:generate-local-cert.
