@@ -110,6 +110,7 @@ export class RefreshTokenRepositoryD1 implements RefreshTokenRepository {
 					"rt.id AS id,",
 					"rt.refresh_token_id AS tokenId,",
 					"c.client_id AS clientId,",
+					"c.name AS clientName,",
 					"c.environment_id AS environmentId,",
 					"rt.expires_at AS expiresAt,",
 					"rt.created_at AS createdAt,",
@@ -123,7 +124,7 @@ export class RefreshTokenRepositoryD1 implements RefreshTokenRepository {
 					"LEFT JOIN client_scopes cs ON cs.id = rts.client_scope_id",
 					"LEFT JOIN scopes s ON s.id = cs.scope_id",
 					"WHERE c.id = ?",
-					"GROUP BY rt.id, rt.refresh_token_id, c.client_id, c.environment_id, rt.expires_at, rt.created_at, rt.revoked_at, parent.refresh_token_id",
+					"GROUP BY rt.id, rt.refresh_token_id, c.client_id, c.name, c.environment_id, rt.expires_at, rt.created_at, rt.revoked_at, parent.refresh_token_id",
 					"ORDER BY rt.created_at DESC",
 				].join(" ")
 			: [
@@ -131,6 +132,7 @@ export class RefreshTokenRepositoryD1 implements RefreshTokenRepository {
 					"rt.id AS id,",
 					"rt.refresh_token_id AS tokenId,",
 					"c.client_id AS clientId,",
+					"c.name AS clientName,",
 					"c.environment_id AS environmentId,",
 					"rt.expires_at AS expiresAt,",
 					"rt.created_at AS createdAt,",
@@ -143,7 +145,7 @@ export class RefreshTokenRepositoryD1 implements RefreshTokenRepository {
 					"LEFT JOIN refresh_token_scopes rts ON rts.refresh_token_id = rt.id",
 					"LEFT JOIN client_scopes cs ON cs.id = rts.client_scope_id",
 					"LEFT JOIN scopes s ON s.id = cs.scope_id",
-					"GROUP BY rt.id, rt.refresh_token_id, c.client_id, c.environment_id, rt.expires_at, rt.created_at, rt.revoked_at, parent.refresh_token_id",
+					"GROUP BY rt.id, rt.refresh_token_id, c.client_id, c.name, c.environment_id, rt.expires_at, rt.created_at, rt.revoked_at, parent.refresh_token_id",
 					"ORDER BY rt.created_at DESC",
 				].join(" ");
 
@@ -152,6 +154,7 @@ export class RefreshTokenRepositoryD1 implements RefreshTokenRepository {
 			id: string;
 			tokenId: string;
 			clientId: string;
+			clientName: string | null;
 			environmentId: string;
 			expiresAt: string;
 			createdAt: string;
@@ -165,6 +168,7 @@ export class RefreshTokenRepositoryD1 implements RefreshTokenRepository {
 			id: row.id,
 			tokenId: row.tokenId,
 			clientId: row.clientId,
+			clientName: row.clientName ?? null,
 			environmentId: row.environmentId,
 			expiresAt: row.expiresAt,
 			createdAt: row.createdAt,

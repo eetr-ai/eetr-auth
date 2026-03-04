@@ -38,6 +38,7 @@ interface TokenActivityItem {
 	tokenType: "access" | "refresh";
 	tokenId: string;
 	clientId: string;
+	clientName: string | null;
 	environmentId: string;
 	expiresAt: string;
 	status: "active" | "expired" | "revoked";

@@ -113,6 +113,7 @@ export class TokenRepositoryD1 implements TokenRepository {
 					"t.id AS id,",
 					"t.token_id AS tokenId,",
 					"c.client_id AS clientId,",
+					"c.name AS clientName,",
 					"c.environment_id AS environmentId,",
 					"t.expires_at AS expiresAt,",
 					"GROUP_CONCAT(DISTINCT s.scope_name) AS scopeNamesCsv",
@@ -122,7 +123,7 @@ export class TokenRepositoryD1 implements TokenRepository {
 					"LEFT JOIN client_scopes cs ON cs.id = ts.client_scope_id",
 					"LEFT JOIN scopes s ON s.id = cs.scope_id",
 					"WHERE c.id = ?",
-					"GROUP BY t.id, t.token_id, c.client_id, c.environment_id, t.expires_at",
+					"GROUP BY t.id, t.token_id, c.client_id, c.name, c.environment_id, t.expires_at",
 					"ORDER BY t.expires_at DESC",
 				].join(" ")
 			: [
@@ -130,6 +131,7 @@ export class TokenRepositoryD1 implements TokenRepository {
 					"t.id AS id,",
 					"t.token_id AS tokenId,",
 					"c.client_id AS clientId,",
+					"c.name AS clientName,",
 					"c.environment_id AS environmentId,",
 					"t.expires_at AS expiresAt,",
 					"GROUP_CONCAT(DISTINCT s.scope_name) AS scopeNamesCsv",
@@ -138,7 +140,7 @@ export class TokenRepositoryD1 implements TokenRepository {
 					"LEFT JOIN token_scopes ts ON ts.token_id = t.id",
 					"LEFT JOIN client_scopes cs ON cs.id = ts.client_scope_id",
 					"LEFT JOIN scopes s ON s.id = cs.scope_id",
-					"GROUP BY t.id, t.token_id, c.client_id, c.environment_id, t.expires_at",
+					"GROUP BY t.id, t.token_id, c.client_id, c.name, c.environment_id, t.expires_at",
 					"ORDER BY t.expires_at DESC",
 				].join(" ");
 
@@ -147,6 +149,7 @@ export class TokenRepositoryD1 implements TokenRepository {
 			id: string;
 			tokenId: string;
 			clientId: string;
+			clientName: string | null;
 			environmentId: string;
 			expiresAt: string;
 			scopeNamesCsv: string | null;
@@ -157,6 +160,7 @@ export class TokenRepositoryD1 implements TokenRepository {
 			id: row.id,
 			tokenId: row.tokenId,
 			clientId: row.clientId,
+			clientName: row.clientName ?? null,
 			environmentId: row.environmentId,
 			expiresAt: row.expiresAt,
 			status: row.expiresAt <= nowIso ? "expired" : "active",

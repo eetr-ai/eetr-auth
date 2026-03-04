@@ -2,7 +2,7 @@
 
 import { ReducerAction, bootstrapProvider } from "@eetr/react-reducer-utils";
 import { useEffect } from "react";
-import { Loader2, Fingerprint, Ban, Trash2 } from "lucide-react";
+import { Loader2, Fingerprint, Ban, Trash2, Info } from "lucide-react";
 import {
 	listTokenActivity,
 	revokeTokenByValue,
@@ -15,6 +15,7 @@ interface TokenActivityItem {
 	tokenType: "access" | "refresh";
 	tokenId: string;
 	clientId: string;
+	clientName: string | null;
 	environmentId: string;
 	expiresAt: string;
 	status: "active" | "expired" | "revoked";
@@ -175,17 +176,17 @@ function TokensPageContent() {
 	}
 
 	return (
-		<main className="min-h-screen bg-background p-6 text-foreground">
-			<div className="mb-6 flex items-center gap-2 text-xl font-semibold">
+		<main className="flex h-screen flex-col bg-background p-6 text-foreground">
+			<div className="mb-6 flex shrink-0 items-center gap-2 text-xl font-semibold">
 				<Fingerprint className="h-6 w-6" />
 				Tokens
 			</div>
 
 			{error && (
-				<p className="mb-4 rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">{error}</p>
+				<p className="mb-4 shrink-0 rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">{error}</p>
 			)}
 
-			<div className="mb-4 flex items-center gap-2">
+			<div className="mb-4 flex shrink-0 items-center gap-2">
 				<label className="text-sm font-medium">Filter by environment</label>
 				<select
 					value={environmentFilter}
@@ -206,7 +207,7 @@ function TokensPageContent() {
 				</select>
 			</div>
 
-			<div className="overflow-x-auto rounded-xl border border-brand-muted">
+			<div className="min-h-0 flex-1 overflow-auto rounded-xl border border-brand-muted">
 				<table className="w-full min-w-[900px] text-left text-sm">
 					<thead>
 						<tr className="border-b border-brand-muted bg-brand-muted/20">
@@ -227,7 +228,20 @@ function TokensPageContent() {
 							<tr key={`${token.tokenType}-${token.tokenId}`} className="border-b border-brand-muted/50">
 								<td className="px-4 py-3 uppercase">{token.tokenType}</td>
 								<td className="px-4 py-3 font-mono text-xs">{maskToken(token.tokenId)}</td>
-								<td className="px-4 py-3 font-mono text-xs">{token.clientId}</td>
+								<td className="px-4 py-3">
+									<div className="flex items-center gap-1.5">
+										<span>{token.clientName ?? token.clientId}</span>
+										<span className="relative group inline-flex">
+											<Info
+												className="h-3.5 w-3.5 text-muted-foreground shrink-0 cursor-help"
+												aria-label="Client ID"
+											/>
+											<span className="pointer-events-none absolute left-1/2 top-full z-10 mt-1 -translate-x-1/2 whitespace-nowrap rounded border border-brand-muted bg-background px-2 py-1.5 text-xs font-mono shadow-md opacity-0 transition-opacity group-hover:opacity-100">
+												{token.clientId}
+											</span>
+										</span>
+									</div>
+								</td>
 								<td className="px-4 py-3">
 									{envById[token.environmentId]?.name ?? token.environmentId}
 								</td>
@@ -273,7 +287,7 @@ function TokensPageContent() {
 			</div>
 
 			{filteredTokens.length === 0 && (
-				<p className="mt-4 text-center text-sm text-muted-foreground">
+				<p className="mt-4 shrink-0 text-center text-sm text-muted-foreground">
 					No tokens found for the selected filter.
 				</p>
 			)}

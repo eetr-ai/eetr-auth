@@ -376,6 +376,7 @@ export class OauthTokenService {
 			tokenType: "refresh",
 			tokenId: token.tokenId,
 			clientId: token.clientId,
+			clientName: token.clientName ?? null,
 			environmentId: token.environmentId,
 			expiresAt: token.expiresAt,
 			status: token.status,
