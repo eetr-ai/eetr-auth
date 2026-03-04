@@ -35,17 +35,33 @@ function scheduleActivityLog(
 	ctx?.waitUntil?.(logPromise.catch((err) => console.error("[token_activity_log]", err)));
 }
 
+function logStep(step: string, startMs: number, extra?: Record<string, string | number | null>) {
+	const durationMs = Date.now() - startMs;
+	const extraStr = extra ? ` ${Object.entries(extra).map(([k, v]) => `${k}=${v}`).join(" ")}` : "";
+	console.log(`[token_endpoint] step=${step} duration_ms=${durationMs}${extraStr}`);
+}
+
 export const POST = withApiContext(async (req, ctx, getServices) => {
-	const startMs = Date.now();
+	const routeStartMs = Date.now();
 	const ip = req.headers.get("CF-Connecting-IP") ?? null;
+
+	let stepStart = Date.now();
 	const body = await req.formData();
+	logStep("parse_body", stepStart);
+
+	stepStart = Date.now();
 	const basic = parseBasicClientAuth(req);
 	const bodyClientId = asString(body.get("client_id"));
 	const bodyClientSecret = asString(body.get("client_secret"));
 	const clientId = basic.clientId ?? bodyClientId;
+	logStep("parse_params", stepStart);
 
 	try {
+		stepStart = Date.now();
 		const { oauthTokenService, tokenActivityLogService } = getServices();
+		logStep("get_services", stepStart);
+
+		stepStart = Date.now();
 		const token = await oauthTokenService.exchange({
 			grantType: asString(body.get("grant_type")),
 			clientId: basic.clientId ?? bodyClientId,
@@ -56,7 +72,9 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 			codeVerifier: asString(body.get("code_verifier")),
 			refreshToken: asString(body.get("refresh_token")),
 		});
-		const durationMs = Date.now() - startMs;
+		logStep("exchange", stepStart, { grant_type: asString(body.get("grant_type")) ?? null });
+		const durationMs = Date.now() - routeStartMs;
+		logStep("route_total", routeStartMs);
 		scheduleActivityLog(ctx.ctx, tokenActivityLogService.logActivity({
 			ip,
 			requestType: "token",
@@ -72,7 +90,8 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 			},
 		});
 	} catch (error) {
-		const durationMs = Date.now() - startMs;
+		logStep("exchange_error", stepStart, { grant_type: asString(body.get("grant_type")) ?? null });
+		const durationMs = Date.now() - routeStartMs;
 		const { tokenActivityLogService } = getServices();
 		scheduleActivityLog(ctx.ctx, tokenActivityLogService.logActivity({
 			ip,

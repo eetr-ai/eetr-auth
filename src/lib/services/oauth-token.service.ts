@@ -14,6 +14,12 @@ import { OAuthServiceError } from "./oauth.types";
 const ACCESS_TOKEN_TTL_SECONDS = 3600;
 const REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
 
+function logTokenStep(step: string, startMs: number, extra?: Record<string, string | number | null>) {
+	const durationMs = Date.now() - startMs;
+	const extraStr = extra ? ` ${Object.entries(extra).map(([k, v]) => `${k}=${v}`).join(" ")}` : "";
+	console.log(`[oauth_token] step=${step} duration_ms=${durationMs}${extraStr}`);
+}
+
 function generateOpaqueSecret(prefix: string, byteLength = 32): string {
 	const bytes = new Uint8Array(byteLength);
 	crypto.getRandomValues(bytes);
@@ -123,10 +129,12 @@ export class OauthTokenService {
 	}
 
 	private async authenticateClient(clientId: string | null, clientSecret: string | null) {
+		const t0 = Date.now();
 		if (!clientId || !clientSecret) {
 			throw new OAuthServiceError("invalid_client", "Missing client credentials.", 401);
 		}
 		const client = await this.clientRepo.getByClientIdentifier(clientId);
+		logTokenStep("authenticate_client_lookup", t0);
 		if (!client || client.clientSecret !== clientSecret) {
 			throw new OAuthServiceError("invalid_client", "Invalid client credentials.", 401);
 		}
@@ -134,6 +142,7 @@ export class OauthTokenService {
 		if (client.expiresAt && client.expiresAt <= nowIso) {
 			throw new OAuthServiceError("invalid_client", "Client credentials have expired.", 401);
 		}
+		logTokenStep("authenticate_client_total", t0);
 		return client;
 	}
 
@@ -164,6 +173,7 @@ export class OauthTokenService {
 		subject: string | null;
 		rotatedFromRefreshTokenId?: string | null;
 	}): Promise<OAuthTokenResponse> {
+		const t0 = Date.now();
 		const now = new Date();
 		const accessToken = generateOpaqueSecret("at");
 		const refreshToken = generateOpaqueSecret("rt");
@@ -181,6 +191,7 @@ export class OauthTokenService {
 			},
 			params.clientScopeIds
 		);
+		logTokenStep("issue_create_access_token", t0);
 
 		await this.refreshTokenRepo.createRefreshToken(
 			{
@@ -196,6 +207,8 @@ export class OauthTokenService {
 			},
 			params.clientScopeIds
 		);
+		logTokenStep("issue_create_refresh_token", t0);
+		logTokenStep("issue_token_pair_total", t0);
 
 		return {
 			token_type: "Bearer",
@@ -207,23 +220,32 @@ export class OauthTokenService {
 	}
 
 	private async exchangeClientCredentials(params: TokenRequestParams): Promise<OAuthTokenResponse> {
+		const t0 = Date.now();
+		logTokenStep("client_credentials_start", t0);
 		const client = await this.authenticateClient(params.clientId, params.clientSecret);
 		const requestedScopes = parseScopeParam(params.scope);
+		let step = Date.now();
 		const allGrants = await this.tokenRepo.getClientScopeGrants(client.id);
+		logTokenStep("client_credentials_get_scope_grants", step);
 		const selected = this.selectScopeGrants(
 			allGrants,
 			requestedScopes,
 			"Requested scopes are not allowed for this client."
 		);
-		return this.issueTokenPair({
+		step = Date.now();
+		const result = await this.issueTokenPair({
 			clientId: client.id,
 			clientScopeIds: selected.map((grant) => grant.clientScopeId),
 			scopeNames: selected.map((grant) => grant.scopeName),
 			subject: null,
 		});
+		logTokenStep("client_credentials_total", t0);
+		return result;
 	}
 
 	private async exchangeAuthorizationCode(params: TokenRequestParams): Promise<OAuthTokenResponse> {
+		const t0 = Date.now();
+		logTokenStep("authorization_code_start", t0);
 		const client = await this.authenticateClient(params.clientId, params.clientSecret);
 		if (!params.code) {
 			throw new OAuthServiceError("invalid_request", "Missing code.", 400);
@@ -235,7 +257,9 @@ export class OauthTokenService {
 			throw new OAuthServiceError("invalid_request", "Missing code_verifier.", 400);
 		}
 
+		let step = Date.now();
 		const authorizationCode = await this.authorizationCodeRepo.getByCodeId(params.code);
+		logTokenStep("authorization_code_lookup", step);
 		if (!authorizationCode) {
 			throw new OAuthServiceError("invalid_grant", "Authorization code is invalid.", 400);
 		}
@@ -256,12 +280,16 @@ export class OauthTokenService {
 		if (authorizationCode.codeChallengeMethod !== "S256") {
 			throw new OAuthServiceError("invalid_grant", "Unsupported PKCE challenge method.", 400);
 		}
+		step = Date.now();
 		const computedChallenge = await toS256Challenge(params.codeVerifier);
+		logTokenStep("authorization_code_pkce_verify", step);
 		if (computedChallenge !== authorizationCode.codeChallenge) {
 			throw new OAuthServiceError("invalid_grant", "code_verifier does not match code_challenge.", 400);
 		}
 
+		step = Date.now();
 		const allClientGrants = await this.tokenRepo.getClientScopeGrants(client.id);
+		logTokenStep("authorization_code_get_scope_grants", step);
 		const grantsById = new Map(allClientGrants.map((grant) => [grant.clientScopeId, grant]));
 		const codeGrants = authorizationCode.clientScopeIds
 			.map((scopeId) => grantsById.get(scopeId))
@@ -274,22 +302,31 @@ export class OauthTokenService {
 			"Requested scopes exceed the authorization code grant."
 		);
 
+		step = Date.now();
 		await this.authorizationCodeRepo.markUsed(authorizationCode.id, nowIso);
-		return this.issueTokenPair({
+		logTokenStep("authorization_code_mark_used", step);
+		step = Date.now();
+		const result = await this.issueTokenPair({
 			clientId: client.id,
 			clientScopeIds: selected.map((grant) => grant.clientScopeId),
 			scopeNames: selected.map((grant) => grant.scopeName),
 			subject: authorizationCode.subject,
 		});
+		logTokenStep("authorization_code_total", t0);
+		return result;
 	}
 
 	private async exchangeRefreshToken(params: TokenRequestParams): Promise<OAuthTokenResponse> {
+		const t0 = Date.now();
+		logTokenStep("refresh_token_start", t0);
 		const client = await this.authenticateClient(params.clientId, params.clientSecret);
 		if (!params.refreshToken) {
 			throw new OAuthServiceError("invalid_request", "Missing refresh_token.", 400);
 		}
 
+		let step = Date.now();
 		const token = await this.refreshTokenRepo.getByTokenId(params.refreshToken);
+		logTokenStep("refresh_token_lookup", step);
 		if (!token) {
 			throw new OAuthServiceError("invalid_grant", "Refresh token is invalid.", 400);
 		}
@@ -304,7 +341,9 @@ export class OauthTokenService {
 			throw new OAuthServiceError("invalid_grant", "Refresh token has expired.", 400);
 		}
 
+		step = Date.now();
 		const allClientGrants = await this.tokenRepo.getClientScopeGrants(client.id);
+		logTokenStep("refresh_token_get_scope_grants", step);
 		const grantsById = new Map(allClientGrants.map((grant) => [grant.clientScopeId, grant]));
 		const refreshGrants = token.clientScopeIds
 			.map((scopeId) => grantsById.get(scopeId))
@@ -316,17 +355,24 @@ export class OauthTokenService {
 			"Requested scopes exceed the refresh token grant."
 		);
 
+		step = Date.now();
 		await this.refreshTokenRepo.revoke(token.id, nowIso);
-		return this.issueTokenPair({
+		logTokenStep("refresh_token_revoke_old", step);
+		step = Date.now();
+		const result = await this.issueTokenPair({
 			clientId: client.id,
 			clientScopeIds: selected.map((grant) => grant.clientScopeId),
 			scopeNames: selected.map((grant) => grant.scopeName),
 			subject: token.subject,
 			rotatedFromRefreshTokenId: token.id,
 		});
+		logTokenStep("refresh_token_total", t0);
+		return result;
 	}
 
 	async exchange(params: TokenRequestParams): Promise<OAuthTokenResponse> {
+		const t0 = Date.now();
+		logTokenStep("exchange_dispatch", t0, { grant_type: params.grantType ?? "null" });
 		switch (params.grantType) {
 			case "client_credentials":
 				return this.exchangeClientCredentials(params);
