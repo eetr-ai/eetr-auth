@@ -114,19 +114,19 @@ export default function LogsPage() {
 	const totalPages = Math.ceil(total / PAGE_SIZE);
 
 	return (
-		<main className="min-h-screen bg-background p-6 text-foreground">
-			<div className="mb-6 flex items-center gap-2 text-xl font-semibold">
+		<main className="flex h-screen flex-col bg-background p-6 text-foreground">
+			<div className="mb-6 flex shrink-0 items-center gap-2 text-xl font-semibold">
 				<ListTodo className="h-6 w-6" />
 				Token activity logs
 			</div>
 
 			{error && (
-				<p className="mb-4 rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">
+				<p className="mb-4 shrink-0 rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">
 					{error}
 				</p>
 			)}
 
-			<div className="mb-4 flex flex-wrap items-end gap-4 rounded-xl border border-brand-muted bg-brand-muted/10 p-4">
+			<div className="mb-4 flex shrink-0 flex-wrap items-end gap-4 rounded-xl border border-brand-muted bg-brand-muted/10 p-4">
 				<div>
 					<label className="mb-1 block text-xs text-muted-foreground">
 						Request type
@@ -235,7 +235,7 @@ export default function LogsPage() {
 				</button>
 			</div>
 
-			<div className="overflow-x-auto rounded-xl border border-brand-muted">
+			<div className="min-h-0 flex-1 overflow-auto rounded-xl border border-brand-muted">
 				<table className="w-full min-w-[800px] text-left text-sm">
 					<thead>
 						<tr className="border-b border-brand-muted bg-brand-muted/20">
@@ -351,7 +351,7 @@ export default function LogsPage() {
 			</div>
 
 			{total > PAGE_SIZE && (
-				<div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+				<div className="mt-4 flex shrink-0 items-center justify-between text-sm text-muted-foreground">
 					<span>
 						Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)}{" "}
 						of {total}
