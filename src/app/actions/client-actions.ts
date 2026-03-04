@@ -22,6 +22,7 @@ export async function createClient(params: {
 	redirectUris?: string[];
 	scopeIds?: string[];
 	expiresAt?: string | null;
+	name?: string | null;
 }) {
 	return onServerAction(async (_ctx, getServices) => {
 		const session = await auth();
@@ -62,5 +63,12 @@ export async function rotateClientSecret(id: string) {
 	return onServerAction(async (_ctx, getServices) => {
 		const { clientService } = getServices();
 		return clientService.rotateSecret(id);
+	});
+}
+
+export async function updateClientName(id: string, name: string | null) {
+	return onServerAction(async (_ctx, getServices) => {
+		const { clientService } = getServices();
+		return clientService.updateName(id, name);
 	});
 }

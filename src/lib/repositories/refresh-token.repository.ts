@@ -28,6 +28,7 @@ export interface RefreshTokenActivity {
 	id: string;
 	tokenId: string;
 	clientId: string;
+	clientName: string | null;
 	environmentId: string;
 	expiresAt: string;
 	createdAt: string;

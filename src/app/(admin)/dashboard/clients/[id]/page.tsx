@@ -19,6 +19,7 @@ import {
 	getClientWithDetails,
 	updateClientRedirectUris,
 	updateClientScopes,
+	updateClientName,
 	deleteClient,
 	rotateClientSecret,
 } from "@/app/actions/client-actions";
@@ -53,6 +54,8 @@ enum ClientDetailActionType {
 	SET_LOADING = "SET_LOADING",
 	SET_REDIRECT_URIS = "SET_REDIRECT_URIS",
 	SET_SCOPE_IDS = "SET_SCOPE_IDS",
+	SET_NAME = "SET_NAME",
+	SET_SAVING_NAME = "SET_SAVING_NAME",
 	SET_SAVING_URIS = "SET_SAVING_URIS",
 	SET_SAVING_SCOPES = "SET_SAVING_SCOPES",
 	SET_ROTATING = "SET_ROTATING",
@@ -70,6 +73,8 @@ interface ClientDetailState {
 	loading: boolean;
 	redirectUris: string[];
 	scopeIds: string[];
+	name: string;
+	savingName: boolean;
 	savingUris: boolean;
 	savingScopes: boolean;
 	rotating: boolean;
@@ -87,6 +92,8 @@ const initialState: ClientDetailState = {
 	loading: true,
 	redirectUris: [],
 	scopeIds: [],
+	name: "",
+	savingName: false,
 	savingUris: false,
 	savingScopes: false,
 	rotating: false,
@@ -115,6 +122,10 @@ function reducer(
 			return { ...state, redirectUris: (action.data as string[]) ?? [] };
 		case ClientDetailActionType.SET_SCOPE_IDS:
 			return { ...state, scopeIds: (action.data as string[]) ?? [] };
+		case ClientDetailActionType.SET_NAME:
+			return { ...state, name: (action.data as string) ?? "" };
+		case ClientDetailActionType.SET_SAVING_NAME:
+			return { ...state, savingName: (action.data as boolean | undefined) ?? false };
 		case ClientDetailActionType.SET_SAVING_URIS:
 			return { ...state, savingUris: (action.data as boolean | undefined) ?? false };
 		case ClientDetailActionType.SET_SAVING_SCOPES:
@@ -166,6 +177,8 @@ function ClientDetailPageContent() {
 		loading,
 		redirectUris,
 		scopeIds,
+		name,
+		savingName,
 		savingUris,
 		savingScopes,
 		rotating,
@@ -188,6 +201,7 @@ function ClientDetailPageContent() {
 				]);
 				if (details) {
 					dispatch({ type: ClientDetailActionType.SET_CLIENT, data: details });
+					dispatch({ type: ClientDetailActionType.SET_NAME, data: details.name ?? "" });
 					dispatch({
 						type: ClientDetailActionType.SET_REDIRECT_URIS,
 						data: details.redirectUris.length > 0 ? details.redirectUris : [""],
@@ -255,6 +269,28 @@ function ClientDetailPageContent() {
 			});
 		} finally {
 			dispatch({ type: ClientDetailActionType.SET_SAVING_SCOPES, data: false });
+		}
+	};
+
+	const handleSaveName = async (e: React.FormEvent) => {
+		e.preventDefault();
+		if (!client) return;
+		dispatch({ type: ClientDetailActionType.SET_SAVING_NAME, data: true });
+		dispatch({ type: ClientDetailActionType.SET_ERROR, data: null });
+		try {
+			const value = name.trim() || null;
+			const updated = await updateClientName(id, value);
+			if (updated) {
+				dispatch({ type: ClientDetailActionType.SET_CLIENT, data: updated });
+				dispatch({ type: ClientDetailActionType.SET_NAME, data: updated.name ?? "" });
+			}
+		} catch (err) {
+			dispatch({
+				type: ClientDetailActionType.SET_ERROR,
+				data: err instanceof Error ? err.message : "Failed to update name",
+			});
+		} finally {
+			dispatch({ type: ClientDetailActionType.SET_SAVING_NAME, data: false });
 		}
 	};
 
@@ -458,7 +494,31 @@ function ClientDetailPageContent() {
 
 			<div className="space-y-6">
 				<section className="rounded-xl border border-brand-muted p-6">
-					<h2 className="mb-3 text-lg font-medium">Client ID</h2>
+					<h2 className="mb-3 text-lg font-medium">
+						{client.name ? `${client.name}` : "Client details"}
+					</h2>
+					<div className="mb-3">
+						<label className="mb-1 block text-sm font-medium">Name</label>
+						<form onSubmit={handleSaveName} className="flex gap-2">
+							<input
+								type="text"
+								value={name}
+								onChange={(e) =>
+									dispatch({ type: ClientDetailActionType.SET_NAME, data: e.target.value })
+								}
+								placeholder="e.g. Production API"
+								className="flex-1 rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground placeholder:text-foreground/50 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+							/>
+							<button
+								type="submit"
+								disabled={savingName}
+								className="rounded-full bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-muted disabled:opacity-50"
+							>
+								{savingName ? "Saving…" : "Save name"}
+							</button>
+						</form>
+					</div>
+					<p className="mb-1 text-sm font-medium">Client ID</p>
 					<code className="block rounded border border-brand-muted bg-background px-3 py-2 font-mono text-sm">
 						{client.clientId}
 					</code>

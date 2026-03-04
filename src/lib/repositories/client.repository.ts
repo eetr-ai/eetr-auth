@@ -5,6 +5,7 @@ export interface Client {
 	environmentId: string;
 	createdBy: string;
 	expiresAt: string | null;
+	name: string | null;
 }
 
 export interface ClientRow {
@@ -14,6 +15,7 @@ export interface ClientRow {
 	environment_id: string;
 	created_by: string;
 	expires_at: string | null;
+	name: string | null;
 }
 
 export interface ClientWithDetails extends Client {
@@ -32,4 +34,5 @@ export interface ClientRepository {
 	getClientScopes(clientId: string): Promise<{ scopeId: string }[]>;
 	setClientScopes(clientId: string, scopeIds: string[]): Promise<void>;
 	updateSecret(id: string, clientSecret: string): Promise<void>;
+	updateName(id: string, name: string | null): Promise<void>;
 }

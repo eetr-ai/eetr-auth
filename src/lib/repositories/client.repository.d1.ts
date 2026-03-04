@@ -11,6 +11,7 @@ function rowToClient(row: {
 	environment_id: string;
 	created_by: string;
 	expires_at: string | null;
+	name: string | null;
 }): Client {
 	return {
 		id: row.id,
@@ -19,6 +20,7 @@ function rowToClient(row: {
 		environmentId: row.environment_id,
 		createdBy: row.created_by,
 		expiresAt: row.expires_at,
+		name: row.name,
 	};
 }
 
@@ -28,8 +30,8 @@ export class ClientRepositoryD1 implements ClientRepository {
 	async list(environmentId?: string): Promise<Client[]> {
 		const query =
 			environmentId != null
-				? "SELECT id, client_id, client_secret, environment_id, created_by, expires_at FROM clients WHERE environment_id = ? ORDER BY client_id"
-				: "SELECT id, client_id, client_secret, environment_id, created_by, expires_at FROM clients ORDER BY client_id";
+				? "SELECT id, client_id, client_secret, environment_id, created_by, expires_at, name FROM clients WHERE environment_id = ? ORDER BY client_id"
+				: "SELECT id, client_id, client_secret, environment_id, created_by, expires_at, name FROM clients ORDER BY client_id";
 		const stmt =
 			environmentId != null
 				? this.db.prepare(query).bind(environmentId)
@@ -41,6 +43,7 @@ export class ClientRepositoryD1 implements ClientRepository {
 			environment_id: string;
 			created_by: string;
 			expires_at: string | null;
+			name: string | null;
 		}>();
 		return (result.results ?? []).map(rowToClient);
 	}
@@ -48,7 +51,7 @@ export class ClientRepositoryD1 implements ClientRepository {
 	async getById(id: string): Promise<Client | null> {
 		const row = await this.db
 			.prepare(
-				"SELECT id, client_id, client_secret, environment_id, created_by, expires_at FROM clients WHERE id = ?"
+				"SELECT id, client_id, client_secret, environment_id, created_by, expires_at, name FROM clients WHERE id = ?"
 			)
 			.bind(id)
 			.first<{
@@ -58,6 +61,7 @@ export class ClientRepositoryD1 implements ClientRepository {
 				environment_id: string;
 				created_by: string;
 				expires_at: string | null;
+				name: string | null;
 			}>();
 		return row ? rowToClient(row) : null;
 	}
@@ -65,7 +69,7 @@ export class ClientRepositoryD1 implements ClientRepository {
 	async getByClientIdentifier(clientId: string): Promise<Client | null> {
 		const row = await this.db
 			.prepare(
-				"SELECT id, client_id, client_secret, environment_id, created_by, expires_at FROM clients WHERE client_id = ?"
+				"SELECT id, client_id, client_secret, environment_id, created_by, expires_at, name FROM clients WHERE client_id = ?"
 			)
 			.bind(clientId)
 			.first<{
@@ -75,6 +79,7 @@ export class ClientRepositoryD1 implements ClientRepository {
 				environment_id: string;
 				created_by: string;
 				expires_at: string | null;
+				name: string | null;
 			}>();
 		return row ? rowToClient(row) : null;
 	}
@@ -82,7 +87,7 @@ export class ClientRepositoryD1 implements ClientRepository {
 	async create(row: ClientRow): Promise<void> {
 		await this.db
 			.prepare(
-				"INSERT INTO clients (id, client_id, client_secret, environment_id, created_by, expires_at) VALUES (?, ?, ?, ?, ?, ?)"
+				"INSERT INTO clients (id, client_id, client_secret, environment_id, created_by, expires_at, name) VALUES (?, ?, ?, ?, ?, ?, ?)"
 			)
 			.bind(
 				row.id,
@@ -90,7 +95,8 @@ export class ClientRepositoryD1 implements ClientRepository {
 				row.client_secret,
 				row.environment_id,
 				row.created_by,
-				row.expires_at ?? null
+				row.expires_at ?? null,
+				row.name ?? null
 			)
 			.run();
 	}
@@ -151,6 +157,13 @@ export class ClientRepositoryD1 implements ClientRepository {
 		await this.db
 			.prepare("UPDATE clients SET client_secret = ? WHERE id = ?")
 			.bind(clientSecret, id)
+			.run();
+	}
+
+	async updateName(id: string, name: string | null): Promise<void> {
+		await this.db
+			.prepare("UPDATE clients SET name = ? WHERE id = ?")
+			.bind(name, id)
 			.run();
 	}
 }

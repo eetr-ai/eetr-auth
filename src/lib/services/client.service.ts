@@ -27,6 +27,7 @@ export interface CreateClientParams {
 	redirectUris?: string[];
 	scopeIds?: string[];
 	expiresAt?: string | null;
+	name?: string | null;
 }
 
 export interface CreateClientResult {
@@ -75,6 +76,7 @@ export class ClientService {
 			environment_id: params.environmentId,
 			created_by: params.createdBy,
 			expires_at: params.expiresAt ?? null,
+			name: params.name ?? null,
 		});
 		const uris = (params.redirectUris ?? []).filter((u) => u?.trim());
 		const scopeIds = (params.scopeIds ?? []).filter(Boolean);
@@ -98,6 +100,13 @@ export class ClientService {
 		const client = await this.clientRepo.getById(id);
 		if (!client) return null;
 		await this.clientRepo.setClientScopes(id, scopeIds.filter(Boolean));
+		return this.getClientWithDetails(id);
+	}
+
+	async updateName(id: string, name: string | null): Promise<ClientWithDetails | null> {
+		const client = await this.clientRepo.getById(id);
+		if (!client) return null;
+		await this.clientRepo.updateName(id, name);
 		return this.getClientWithDetails(id);
 	}
 

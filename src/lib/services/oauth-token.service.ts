@@ -54,6 +54,7 @@ export interface TokenActivityItem {
 	tokenType: "access" | "refresh";
 	tokenId: string;
 	clientId: string;
+	clientName: string | null;
 	environmentId: string;
 	expiresAt: string;
 	status: "active" | "expired" | "revoked";
@@ -360,6 +361,7 @@ export class OauthTokenService {
 			tokenType: "access",
 			tokenId: token.tokenId,
 			clientId: token.clientId,
+			clientName: token.clientName ?? null,
 			environmentId: token.environmentId,
 			expiresAt: token.expiresAt,
 			status: token.status,

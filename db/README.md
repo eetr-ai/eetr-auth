@@ -3,6 +3,7 @@
 - **`schema.sql`** – Full schema for the auth DB (environments, users, clients, redirect_uris, scopes, client_scopes, tokens, token_scopes, token_activity_log).
 - **`migration-20260303-rename-admins-to-users.sql`** – One-time migration for existing databases (`admins` -> `users`, add `is_admin`, and update `clients.created_by` FK).
 - **`migration-20260303-token-activity-log.sql`** – Adds `token_activity_log` table (optional if you already apply full `schema.sql`; use if your DB was created before this table was in schema).
+- **`migration-20260304-clients-name.sql`** – Adds optional `name` column to `clients` for human-readable labels (run on existing DBs that don’t have it; fresh schema already includes it).
 
 ## Apply schema
 

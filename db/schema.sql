@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS clients (
   environment_id TEXT NOT NULL,
   created_by TEXT NOT NULL,
   expires_at TEXT,
+  name TEXT,
   FOREIGN KEY (environment_id) REFERENCES environments(id),
   FOREIGN KEY (created_by) REFERENCES users(id)
 );

@@ -54,6 +54,7 @@ export default function ClientsPage() {
 	const [loading, setLoading] = useState(true);
 	const [envFilter, setEnvFilter] = useState<string>("");
 	const [showCreate, setShowCreate] = useState(false);
+	const [createName, setCreateName] = useState("");
 	const [createEnvId, setCreateEnvId] = useState("");
 	const [redirectUris, setRedirectUris] = useState<string[]>([""]);
 	const [selectedScopeIds, setSelectedScopeIds] = useState<string[]>([]);
@@ -99,6 +100,7 @@ export default function ClientsPage() {
 		try {
 			const result = await createClient({
 				environmentId: createEnvId,
+				name: createName.trim() || undefined,
 				redirectUris: redirectUris.filter((u) => u?.trim()),
 				scopeIds: selectedScopeIds.length > 0 ? selectedScopeIds : undefined,
 				expiresAt: expiresAt.trim() || undefined,
@@ -108,6 +110,7 @@ export default function ClientsPage() {
 				clientSecret: result.clientSecret,
 			});
 			setShowCreate(false);
+			setCreateName("");
 			setCreateEnvId("");
 			setRedirectUris([""]);
 			setSelectedScopeIds([]);
@@ -230,6 +233,16 @@ export default function ClientsPage() {
 					)}
 					<form onSubmit={handleCreate} className="space-y-4">
 						<div>
+							<label className="mb-1 block text-sm font-medium">Name (optional)</label>
+							<input
+								type="text"
+								value={createName}
+								onChange={(e) => setCreateName(e.target.value)}
+								placeholder="e.g. Production API"
+								className="w-full rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground placeholder:text-foreground/50 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+							/>
+						</div>
+						<div>
 							<label className="mb-1 block text-sm font-medium">Environment</label>
 							<select
 								value={createEnvId}
@@ -342,6 +355,7 @@ export default function ClientsPage() {
 					<table className="w-full min-w-[500px] text-left text-sm">
 						<thead>
 							<tr className="border-b border-brand-muted bg-brand-muted/20">
+								<th className="px-4 py-3 font-medium">Name</th>
 								<th className="px-4 py-3 font-medium">Client ID</th>
 								<th className="px-4 py-3 font-medium">Environment</th>
 								<th className="px-4 py-3 font-medium">Created by</th>
@@ -351,6 +365,7 @@ export default function ClientsPage() {
 						<tbody>
 							{clients.map((c) => (
 								<tr key={c.id} className="border-b border-brand-muted/50">
+									<td className="px-4 py-3">{c.name ?? "—"}</td>
 									<td className="px-4 py-3 font-mono text-xs">{c.clientId}</td>
 									<td className="px-4 py-3">{envById[c.environmentId]?.name ?? c.environmentId}</td>
 									<td className="px-4 py-3 text-muted-foreground">{c.createdBy}</td>
@@ -363,7 +378,7 @@ export default function ClientsPage() {
 												<Eye className="h-3 w-3" />
 												View
 											</Link>
-											<DeleteClientButton clientId={c.id} clientDisplayId={c.clientId} onDeleted={load} />
+											<DeleteClientButton clientId={c.id} clientDisplayId={c.name ?? c.clientId} onDeleted={load} />
 										</div>
 									</td>
 								</tr>

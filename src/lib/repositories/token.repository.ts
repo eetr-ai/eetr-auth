@@ -16,6 +16,7 @@ export interface AccessTokenActivity {
 	id: string;
 	tokenId: string;
 	clientId: string;
+	clientName: string | null;
 	environmentId: string;
 	expiresAt: string;
 	status: "active" | "expired";
