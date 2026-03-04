@@ -56,9 +56,9 @@ async function main() {
 	writeFileSync(jwksPath, JSON.stringify(jwks, null, 2), "utf8");
 
 	try {
-		console.log("Uploading JWKS to R2 (blog-images/jwks.json)...");
+		console.log("Uploading JWKS to R2 (blog-images/jwks.json, remote)...");
 		execSync(
-			`npx wrangler r2 object put blog-images/jwks.json --file=${jwksPath} ${envFlag}`.trim(),
+			`npx wrangler r2 object put blog-images/jwks.json --file=${jwksPath} --remote ${envFlag}`.trim(),
 			{ stdio: "inherit", cwd: process.cwd() }
 		);
 		console.log("Done. JWKS is available at https://cdn.progression-ai.com/jwks.json");
