@@ -185,19 +185,27 @@ export class OauthTokenService {
 		clientIdentifier?: string;
 	}): Promise<OAuthTokenResponse> {
 		const env = this.ctx.env as unknown as Record<string, unknown>;
-		const privateKeyPem = typeof env.JWT_PRIVATE_KEY === "string" ? env.JWT_PRIVATE_KEY : null;
+		// Prefer ctx.env; in next dev, .env.local is in process.env but may not be merged into ctx.env
+		const privateKeyPem =
+			(typeof env.JWT_PRIVATE_KEY === "string" ? env.JWT_PRIVATE_KEY : null) ??
+			(typeof process.env.JWT_PRIVATE_KEY === "string" ? process.env.JWT_PRIVATE_KEY : null);
 		const blogImages = env.BLOG_IMAGES as { get(key: string): Promise<{ body: ReadableStream } | null> } | undefined;
 		const issuer = (typeof env.ISSUER_BASE_URL === "string" ? env.ISSUER_BASE_URL : null) ?? "https://auth.progression-ai.com";
 		const jwksR2Key = (typeof env.JWKS_R2_KEY === "string" ? env.JWKS_R2_KEY : null) ?? JWKS_R2_KEY_DEFAULT;
 
 		const clientIdentifier = params.clientIdentifier;
-		if (privateKeyPem && blogImages && clientIdentifier) {
+		// Need kid from env (JWT_KID) or R2 when using .env.local only
+		const hasKidSource =
+			blogImages ||
+			(typeof env.JWT_KID === "string" && env.JWT_KID.length > 0) ||
+			(typeof process.env.JWT_KID === "string" && process.env.JWT_KID.length > 0);
+		if (privateKeyPem && clientIdentifier && hasKidSource) {
 			return this.issueTokenPairJwt({
 				...params,
 				clientIdentifier,
 				issuer,
 				privateKeyPem,
-				blogImages,
+				blogImages: blogImages ?? { get: async () => null },
 				jwksR2Key,
 			});
 		}
@@ -269,12 +277,39 @@ export class OauthTokenService {
 		const accessExpiresAt = new Date(now.getTime() + ACCESS_TOKEN_TTL_SECONDS * 1000);
 		const refreshExpiresAt = new Date(now.getTime() + REFRESH_TOKEN_TTL_SECONDS * 1000);
 
+		const env = this.ctx.env as unknown as Record<string, unknown>;
+		// Prefer ctx.env; in next dev, .env.local is in process.env but may not be merged into ctx.env
+		const envKid =
+			(typeof env.JWT_KID === "string" ? env.JWT_KID : null) ??
+			(typeof process.env.JWT_KID === "string" ? process.env.JWT_KID : null);
+
+		// Prefer env JWT_KID so token kid matches the key we sign with (env's private key); R2 may be a different store/key in dev
+		let kid: string;
 		const r2Obj = await params.blogImages.get(params.jwksR2Key);
-		if (!r2Obj) {
+		if (envKid) {
+			kid = envKid;
+			console.log("[oauth_token] JWT issuance: kid from env (JWT_KID)", {
+				source: "env",
+				kid,
+				hadR2: !!r2Obj,
+			});
+		} else if (r2Obj) {
+			const jwks = (await new Response(r2Obj.body).json()) as { keys: Array<{ kid?: string }> };
+			kid = jwks?.keys?.[0]?.kid ?? "default";
+			console.log("[oauth_token] JWT issuance: kid from R2 JWKS", {
+				source: "R2",
+				r2Key: params.jwksR2Key,
+				kid,
+				keyCount: jwks?.keys?.length ?? 0,
+			});
+		} else {
+			console.log("[oauth_token] JWT issuance: JWKS not available", {
+				r2Key: params.jwksR2Key,
+				hasR2Object: false,
+				hasJWT_KID: false,
+			});
 			throw new OAuthServiceError("server_error", "JWKS not available.", 500);
 		}
-		const jwks = (await new Response(r2Obj.body).json()) as { keys: Array<{ kid?: string }> };
-		const kid = jwks?.keys?.[0]?.kid ?? "default";
 
 		const privateKey = await importPKCS8(params.privateKeyPem, "RS256");
 		const scopeStr = params.scopeNames.join(" ");
@@ -740,94 +775,65 @@ export class OauthTokenService {
 		const env = this.ctx.env as unknown as Record<string, unknown>;
 		const blogImages = env.BLOG_IMAGES as { get(key: string): Promise<{ body: ReadableStream } | null> } | undefined;
 		const jwksR2Key = (typeof env.JWKS_R2_KEY === "string" ? env.JWKS_R2_KEY : null) ?? JWKS_R2_KEY_DEFAULT;
+		// Prefer ctx.env; in next dev, JWT_JWKS_JSON may only be in process.env (.env.local)
+		const jwksJsonRaw =
+			(typeof env.JWT_JWKS_JSON === "string" && env.JWT_JWKS_JSON.trim().length > 0
+				? env.JWT_JWKS_JSON
+				: typeof process.env.JWT_JWKS_JSON === "string" && process.env.JWT_JWKS_JSON.trim().length > 0
+					? process.env.JWT_JWKS_JSON
+					: null) as string | null;
+		const jwksFromEnv = jwksJsonRaw
+			? (() => {
+					try {
+						return JSON.parse(jwksJsonRaw) as { keys: unknown[] };
+					} catch {
+						return null;
+					}
+				})()
+			: null;
 
-		if (!blogImages) {
-			return {
-				valid: false,
-				active: false,
-				clientId: null,
-				environmentId: null,
-				environmentMatch: false,
-				expectedEnvironmentName,
-				tokenEnvironmentName: null,
-				expiresAt: null,
-				tokenScopes: [],
-				requiredScopes,
-				missingScopes: requiredScopes,
-			};
+		if (jwksFromEnv?.keys?.length) {
+			const kids = (jwksFromEnv.keys as { kid?: string }[]).map((k) => k.kid ?? "(no kid)");
+			const fromProcessEnv = !!(
+				typeof process.env.JWT_JWKS_JSON === "string" &&
+				process.env.JWT_JWKS_JSON.trim().length > 0 &&
+				!(typeof env.JWT_JWKS_JSON === "string" && env.JWT_JWKS_JSON.trim().length > 0)
+			);
+			console.log("[oauth_token] JWT verification: JWKS source=env (JWT_JWKS_JSON)", {
+				keyCount: jwksFromEnv.keys.length,
+				kids,
+				fromProcessEnv,
+			});
+		} else if (blogImages) {
+			console.log("[oauth_token] JWT verification: no JWKS from env, trying R2", {
+				binding: "BLOG_IMAGES",
+				r2Key: jwksR2Key,
+			});
+		} else {
+			console.log("[oauth_token] JWT verification: no JWKS from env, BLOG_IMAGES binding not available");
 		}
 
-		const r2Obj = await blogImages.get(jwksR2Key);
-		if (!r2Obj) {
-			return {
-				valid: false,
-				active: false,
-				clientId: null,
-				environmentId: null,
-				environmentMatch: false,
-				expectedEnvironmentName,
-				tokenEnvironmentName: null,
-				expiresAt: null,
-				tokenScopes: [],
-				requiredScopes,
-				missingScopes: requiredScopes,
-			};
-		}
+		const invalidResult = (): ValidateTokenResult => ({
+			valid: false,
+			active: false,
+			clientId: null,
+			environmentId: null,
+			environmentMatch: false,
+			expectedEnvironmentName,
+			tokenEnvironmentName: null,
+			expiresAt: null,
+			tokenScopes: [],
+			requiredScopes,
+			missingScopes: requiredScopes,
+		});
 
-		const jwks = (await new Response(r2Obj.body).json()) as { keys: unknown[] };
-		if (!jwks?.keys?.length) {
-			return {
-				valid: false,
-				active: false,
-				clientId: null,
-				environmentId: null,
-				environmentMatch: false,
-				expectedEnvironmentName,
-				tokenEnvironmentName: null,
-				expiresAt: null,
-				tokenScopes: [],
-				requiredScopes,
-				missingScopes: requiredScopes,
-			};
-		}
-
-		try {
-			const JWKS = createLocalJWKSet(jwks as Parameters<typeof createLocalJWKSet>[0]);
-			const { payload } = await jwtVerify(token, JWKS);
-			const jti = payload.jti as string | undefined;
-			if (!jti) {
-				return {
-					valid: false,
-					active: false,
-					clientId: null,
-					environmentId: null,
-					environmentMatch: false,
-					expectedEnvironmentName,
-					tokenEnvironmentName: null,
-					expiresAt: null,
-					tokenScopes: [],
-					requiredScopes,
-					missingScopes: requiredScopes,
-				};
-			}
-
-			const tokenRecord = await this.tokenRepo.getAccessTokenByTokenId(jti);
-			if (!tokenRecord) {
-				return {
-					valid: false,
-					active: false,
-					clientId: null,
-					environmentId: null,
-					environmentMatch: false,
-					expectedEnvironmentName,
-					tokenEnvironmentName: null,
-					expiresAt: null,
-					tokenScopes: [],
-					requiredScopes,
-					missingScopes: requiredScopes,
-				};
-			}
-
+		const validateFromRecord = (tokenRecord: {
+			clientId: string;
+			environmentId: string;
+			environmentName: string;
+			expiresAt: string;
+			scopeNames: string[];
+		}): ValidateTokenResult => {
 			const nowIso = new Date().toISOString();
 			const active = tokenRecord.expiresAt > nowIso;
 			const tokenScopeSet = new Set(tokenRecord.scopeNames);
@@ -837,7 +843,15 @@ export class OauthTokenService {
 				tokenRecord.environmentName.toLocaleLowerCase() ===
 					expectedEnvironmentName.toLocaleLowerCase();
 			const valid = active && missingScopes.length === 0 && environmentMatch;
-
+			if (!valid) {
+				console.warn("[oauth_token] JWT validation: token found but valid=false.", {
+					active,
+					environmentMatch,
+					expectedEnvironmentName,
+					tokenEnvironmentName: tokenRecord.environmentName,
+					missingScopes: missingScopes.length ? missingScopes : undefined,
+				});
+			}
 			return {
 				valid,
 				active,
@@ -851,20 +865,79 @@ export class OauthTokenService {
 				requiredScopes,
 				missingScopes,
 			};
-		} catch {
-			return {
-				valid: false,
-				active: false,
-				clientId: null,
-				environmentId: null,
-				environmentMatch: false,
-				expectedEnvironmentName,
-				tokenEnvironmentName: null,
-				expiresAt: null,
-				tokenScopes: [],
-				requiredScopes,
-				missingScopes: requiredScopes,
-			};
+		};
+
+		const fallbackToDbLookup = async (reason: string): Promise<ValidateTokenResult> => {
+			console.warn("[oauth_token] JWT validation: public key not available, falling back to DB lookup by jti.", {
+				reason,
+			});
+			let jti: string | undefined;
+			try {
+				const payload = decodeJwt(token);
+				jti = typeof payload.jti === "string" ? payload.jti : undefined;
+			} catch {
+				return invalidResult();
+			}
+			if (!jti) return invalidResult();
+			const tokenRecord = await this.tokenRepo.getAccessTokenByTokenId(jti);
+			if (!tokenRecord) return invalidResult();
+			return validateFromRecord(tokenRecord);
+		};
+
+		// Prefer JWKS from env (e.g. JWT_JWKS_JSON in .env.local) so next dev uses same key as signing
+		let jwks: { keys: unknown[] } | null = jwksFromEnv;
+
+		if (!jwks?.keys?.length && blogImages) {
+			const r2Obj = await blogImages.get(jwksR2Key);
+			if (r2Obj) {
+				jwks = (await new Response(r2Obj.body).json()) as { keys: unknown[] };
+				const kids = (jwks?.keys as { kid?: string }[] | undefined)?.map((k) => k.kid ?? "(no kid)") ?? [];
+				console.log("[oauth_token] JWT verification: JWKS source=R2", {
+					r2Key: jwksR2Key,
+					keyCount: jwks?.keys?.length ?? 0,
+					kids,
+				});
+			} else {
+				console.log("[oauth_token] JWT verification: R2 get returned null", { r2Key: jwksR2Key });
+			}
+		}
+
+		if (!jwks?.keys?.length) {
+			console.log("[oauth_token] JWT verification: no JWKS available, will fall back to DB lookup if possible");
+			return fallbackToDbLookup(
+				jwksFromEnv ? "JWT_JWKS_JSON invalid or empty" : "JWKS not in env and not available from R2"
+			);
+		}
+
+		const jwksSource = jwksFromEnv?.keys?.length ? "env (JWT_JWKS_JSON)" : "R2";
+
+		try {
+			const JWKS = createLocalJWKSet(jwks as Parameters<typeof createLocalJWKSet>[0]);
+			const { payload } = await jwtVerify(token, JWKS);
+			const jti = payload.jti as string | undefined;
+			if (!jti) return invalidResult();
+
+			const tokenRecord = await this.tokenRepo.getAccessTokenByTokenId(jti);
+			if (!tokenRecord) return invalidResult();
+			console.log("[oauth_token] JWT verification: signature verified", { jwksSource, jti });
+			return validateFromRecord(tokenRecord);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			const code = err && typeof err === "object" && "code" in err ? (err as { code: string }).code : undefined;
+			let decoded: Record<string, unknown> | null = null;
+			try {
+				const payload = decodeJwt(token);
+				decoded = { iss: payload.iss, aud: payload.aud, exp: payload.exp, iat: payload.iat, jti: payload.jti };
+			} catch {
+				// ignore decode errors
+			}
+			console.warn("[oauth_token] JWT verification failed.", {
+				code,
+				message,
+				name: err instanceof Error ? err.name : undefined,
+				decoded,
+			});
+			return invalidResult();
 		}
 	}
 }

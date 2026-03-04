@@ -1,22 +1,20 @@
 #!/usr/bin/env node
 /**
  * Generate a local RSA key pair for testing JWT access tokens.
- * Writes JWT_PRIVATE_KEY to .env.local and saves jwks.json to .tmp/jwks.json
- * so you can upload to local R2 or use for verification.
+ * Writes JWT_PRIVATE_KEY, JWT_KID, and JWT_JWKS_JSON to .env.local so that
+ * next dev uses the same key for signing and verification (R2 in next dev is
+ * a different store than wrangler --local). Also writes .tmp/jwks.json.
  *
  * Usage: node scripts/generate-local-jwt-cert.mjs
- *
- * For local R2: after running, upload the JWKS so the auth app can verify tokens:
- *   npx wrangler r2 object put blog-images/jwks.json --file=.tmp/jwks.json --local
  */
 import { generateKeyPairSync } from "node:crypto";
 import { writeFileSync, readFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { importSPKI, exportJWK, calculateJwkThumbprint } from "jose";
 
-const tmpDir = join(process.cwd(), ".tmp");
-const jwksPath = join(tmpDir, "jwks.json");
-const envLocalPath = join(process.cwd(), ".env.local");
+	const tmpDir = join(process.cwd(), ".tmp");
+	const jwksPath = join(tmpDir, "jwks.json");
+	const envLocalPath = join(process.cwd(), ".env.local");
 
 function escapeForEnv(pem) {
 	return pem.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/"/g, '\\"');
@@ -49,20 +47,32 @@ async function main() {
 	writeFileSync(jwksPath, JSON.stringify(jwks, null, 2), "utf8");
 	console.log("Wrote", jwksPath);
 
-	const line = `JWT_PRIVATE_KEY="${escapeForEnv(privatePem)}"`;
-	const existing = existsSync(envLocalPath) ? String(readFileSync(envLocalPath, "utf8")) : "";
-	let newContent;
-	if (existing.includes("JWT_PRIVATE_KEY=")) {
-		newContent = existing.replace(/^JWT_PRIVATE_KEY=.*$/m, line);
-	} else if (existing.trim()) {
-		newContent = existing.trimEnd() + "\n" + line + "\n";
-	} else {
-		newContent = line + "\n";
-	}
-	writeFileSync(envLocalPath, newContent, "utf8");
-	console.log("Updated", envLocalPath, "with JWT_PRIVATE_KEY");
+	const jwksJsonMinified = JSON.stringify(jwks);
+	const jwksJsonEscaped = jwksJsonMinified.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 
-	console.log("\nTo use JWKS for local token verification (e.g. with wrangler dev):");
+	const kidLine = `JWT_KID="${thumbprint}"`;
+	const keyLine = `JWT_PRIVATE_KEY="${escapeForEnv(privatePem)}"`;
+	const jwksJsonLine = `JWT_JWKS_JSON="${jwksJsonEscaped}"`;
+	const existing = existsSync(envLocalPath) ? String(readFileSync(envLocalPath, "utf8")) : "";
+	let content = existing;
+
+	const updateVar = (name, line) => {
+		const regex = new RegExp(`^${name}=.*$`, "m");
+		if (content.includes(name + "=")) {
+			content = content.replace(regex, line);
+		} else if (content.trim()) {
+			content = content.trimEnd() + "\n" + line + "\n";
+		} else {
+			content = line + "\n";
+		}
+	};
+	updateVar("JWT_KID", kidLine);
+	updateVar("JWT_PRIVATE_KEY", keyLine);
+	updateVar("JWT_JWKS_JSON", jwksJsonLine);
+	writeFileSync(envLocalPath, content.endsWith("\n") ? content : content + "\n", "utf8");
+	console.log("Updated", envLocalPath, "with JWT_KID, JWT_PRIVATE_KEY, and JWT_JWKS_JSON");
+
+	console.log("\nFor wrangler dev/preview (uses R2): upload JWKS to local R2:");
 	console.log("  npx wrangler r2 object put blog-images/jwks.json --file=.tmp/jwks.json --local");
 }
 
