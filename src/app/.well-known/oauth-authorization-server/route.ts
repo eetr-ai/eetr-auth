@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getCachedScopeNames } from "@/lib/cache/scope-discovery-cache";
 import { withApiContext } from "@/lib/context/with-api-context";
 
 const CORS_HEADERS = {
@@ -14,10 +15,13 @@ export const OPTIONS = () =>
  * RFC 8414 OAuth 2.0 Authorization Server Metadata.
  * jwks_uri points to the R2 CDN (https://cdn.progression-ai.com/jwks.json).
  */
-export const GET = withApiContext(async (_req, ctx) => {
+export const GET = withApiContext(async (_req, ctx, getServices) => {
 	const env = ctx.env as { ISSUER_BASE_URL?: string; JWKS_CDN_BASE_URL?: string };
 	const issuer = env.ISSUER_BASE_URL ?? "https://auth.progression-ai.com";
 	const jwksCdnBase = env.JWKS_CDN_BASE_URL ?? "https://cdn.progression-ai.com";
+
+	const { scopeService } = getServices();
+	const scopesSupported = await getCachedScopeNames(() => scopeService.list());
 
 	const metadata = {
 		issuer,
@@ -26,6 +30,8 @@ export const GET = withApiContext(async (_req, ctx) => {
 		jwks_uri: `${jwksCdnBase}/jwks.json`,
 		token_introspection_endpoint: `${issuer}/api/token/validate`,
 		response_types_supported: ["code"],
+		scopes_supported: scopesSupported,
+		grant_types_supported: ["authorization_code", "client_credentials"],
 		code_challenge_methods_supported: ["S256"],
 	};
 
