@@ -283,24 +283,23 @@ export class OauthTokenService {
 			(typeof env.JWT_KID === "string" ? env.JWT_KID : null) ??
 			(typeof process.env.JWT_KID === "string" ? process.env.JWT_KID : null);
 
-		// Prefer env JWT_KID so token kid matches the key we sign with (env's private key); R2 may be a different store/key in dev
+		// Prefer R2 for kid when available so token kid matches public JWKS; use env JWT_KID only when R2 is missing (e.g. local dev)
 		let kid: string;
 		const r2Obj = await params.blogImages.get(params.jwksR2Key);
-		if (envKid) {
-			kid = envKid;
-			console.log("[oauth_token] JWT issuance: kid from env (JWT_KID)", {
-				source: "env",
-				kid,
-				hadR2: !!r2Obj,
-			});
-		} else if (r2Obj) {
+		if (r2Obj) {
 			const jwks = (await new Response(r2Obj.body).json()) as { keys: Array<{ kid?: string }> };
-			kid = jwks?.keys?.[0]?.kid ?? "default";
+			kid = jwks?.keys?.[0]?.kid ?? envKid ?? "default";
 			console.log("[oauth_token] JWT issuance: kid from R2 JWKS", {
 				source: "R2",
 				r2Key: params.jwksR2Key,
 				kid,
 				keyCount: jwks?.keys?.length ?? 0,
+			});
+		} else if (envKid) {
+			kid = envKid;
+			console.log("[oauth_token] JWT issuance: kid from env (JWT_KID), R2 not available", {
+				source: "env",
+				kid,
 			});
 		} else {
 			console.log("[oauth_token] JWT issuance: JWKS not available", {
