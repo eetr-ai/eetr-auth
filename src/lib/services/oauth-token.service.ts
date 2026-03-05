@@ -5,6 +5,7 @@ import { ClientRepositoryD1 } from "@/lib/repositories/client.repository.d1";
 import { AuthorizationCodeRepositoryD1 } from "@/lib/repositories/authorization-code.repository.d1";
 import { TokenRepositoryD1 } from "@/lib/repositories/token.repository.d1";
 import { RefreshTokenRepositoryD1 } from "@/lib/repositories/refresh-token.repository.d1";
+import { EnvironmentRepositoryD1 } from "@/lib/repositories/environment.repository.d1";
 import type { ClientScopeGrant } from "@/lib/repositories/token.repository";
 import type {
 	RefreshTokenActivity,
@@ -128,6 +129,7 @@ export class OauthTokenService {
 	private readonly authorizationCodeRepo: AuthorizationCodeRepositoryD1;
 	private readonly tokenRepo: TokenRepositoryD1;
 	private readonly refreshTokenRepo: RefreshTokenRepositoryD1;
+	private readonly envRepo: EnvironmentRepositoryD1;
 
 	constructor(ctx: RequestContext) {
 		this.ctx = ctx;
@@ -136,6 +138,7 @@ export class OauthTokenService {
 		this.authorizationCodeRepo = new AuthorizationCodeRepositoryD1(db);
 		this.tokenRepo = new TokenRepositoryD1(db);
 		this.refreshTokenRepo = new RefreshTokenRepositoryD1(db);
+		this.envRepo = new EnvironmentRepositoryD1(db);
 	}
 
 	private async authenticateClient(clientId: string | null, clientSecret: string | null) {
@@ -200,9 +203,13 @@ export class OauthTokenService {
 			(typeof env.JWT_KID === "string" && env.JWT_KID.length > 0) ||
 			(typeof process.env.JWT_KID === "string" && process.env.JWT_KID.length > 0);
 		if (privateKeyPem && clientIdentifier && hasKidSource) {
+			const client = await this.clientRepo.getById(params.clientId);
+			const env = client ? await this.envRepo.getById(client.environmentId) : null;
+			const environmentName = env?.name ?? null;
 			return this.issueTokenPairJwt({
 				...params,
 				clientIdentifier,
+				environmentName,
 				issuer,
 				privateKeyPem,
 				blogImages: blogImages ?? { get: async () => null },
@@ -263,6 +270,7 @@ export class OauthTokenService {
 		subject: string | null;
 		rotatedFromRefreshTokenId?: string | null;
 		clientIdentifier: string;
+		environmentName: string | null;
 		issuer: string;
 		privateKeyPem: string;
 		blogImages: { get(key: string): Promise<{ body: ReadableStream } | null> };
@@ -312,10 +320,14 @@ export class OauthTokenService {
 
 		const privateKey = await importPKCS8(params.privateKeyPem, "RS256");
 		const scopeStr = params.scopeNames.join(" ");
-		const accessTokenJwt = await new SignJWT({
+		const payload: Record<string, string | undefined> = {
 			scope: scopeStr || undefined,
-			client_id: params.clientId,
-		})
+			client_id: params.clientIdentifier,
+		};
+		if (params.environmentName != null && params.environmentName !== "") {
+			payload.environment = params.environmentName;
+		}
+		const accessTokenJwt = await new SignJWT(payload)
 			.setProtectedHeader({ alg: "RS256", kid })
 			.setIssuer(params.issuer)
 			.setSubject(params.subject ?? "")
