@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 import { withApiContext } from "../../../lib/context/with-api-context";
 
+const CORS_HEADERS = {
+	"Access-Control-Allow-Origin": "*",
+	"Access-Control-Allow-Methods": "GET, OPTIONS",
+} as const;
+
+/** Respond to CORS preflight for /.well-known/openid-configuration */
+export const OPTIONS = () =>
+	new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+
 /**
  * OpenID Connect Discovery 1.0 (/.well-known/openid-configuration).
  * Same issuer and endpoints as OAuth metadata; jwks_uri points to the R2 CDN.
@@ -26,6 +35,7 @@ export const GET = withApiContext(async (_req, ctx) => {
 		headers: {
 			"Cache-Control": "public, max-age=300",
 			"Content-Type": "application/json",
+			...CORS_HEADERS,
 		},
 	});
 });

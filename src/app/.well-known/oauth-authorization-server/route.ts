@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 import { withApiContext } from "@/lib/context/with-api-context";
 
+const CORS_HEADERS = {
+	"Access-Control-Allow-Origin": "*",
+	"Access-Control-Allow-Methods": "GET, OPTIONS",
+} as const;
+
+/** Respond to CORS preflight for /.well-known/oauth-authorization-server */
+export const OPTIONS = () =>
+	new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+
 /**
  * RFC 8414 OAuth 2.0 Authorization Server Metadata.
  * jwks_uri points to the R2 CDN (https://cdn.progression-ai.com/jwks.json).
@@ -24,6 +33,7 @@ export const GET = withApiContext(async (_req, ctx) => {
 		headers: {
 			"Cache-Control": "public, max-age=300",
 			"Content-Type": "application/json",
+			...CORS_HEADERS,
 		},
 	});
 });
