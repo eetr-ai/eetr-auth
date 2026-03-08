@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS environments (
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   username TEXT NOT NULL UNIQUE,
+  name TEXT,
+  email TEXT,
+  avatar_key TEXT,
   password_hash TEXT NOT NULL,
   is_admin INTEGER NOT NULL DEFAULT 0
 );

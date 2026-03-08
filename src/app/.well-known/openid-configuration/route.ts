@@ -27,6 +27,7 @@ export const GET = withApiContext(async (_req, ctx, getServices) => {
 		issuer,
 		authorization_endpoint: `${issuer}/api/authorize`,
 		token_endpoint: `${issuer}/api/token`,
+		userinfo_endpoint: `${issuer}/api/userinfo`,
 		jwks_uri: `${jwksCdnBase}/jwks.json`,
 		response_types_supported: ["code"],
 		scopes_supported: scopesSupported,

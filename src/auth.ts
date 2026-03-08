@@ -4,6 +4,7 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { getDb } from "@/lib/db";
 import { UserRepositoryD1 } from "@/lib/repositories/admin.repository.d1";
 import { md5 } from "@/lib/auth/md5";
+import { getAvatarUrl } from "@/lib/users/profile";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
 	providers: [
@@ -47,7 +48,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 					username: user.username,
 					isAdmin: user.isAdmin,
 				});
-				return { id: user.id, name: user.username, isAdmin: user.isAdmin };
+				return {
+					id: user.id,
+					name: user.name ?? user.username,
+					email: user.email,
+					image: getAvatarUrl(user.avatarKey, env as unknown as Record<string, unknown>),
+					isAdmin: user.isAdmin,
+				};
 			},
 		}),
 	],
@@ -57,6 +64,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 			if (user) {
 				token.id = user.id;
 				token.name = user.name;
+				token.email = user.email;
+				token.picture = user.image;
 				token.isAdmin = Boolean((user as { isAdmin?: boolean }).isAdmin);
 				console.log("[auth] jwt: user added to token", { id: user.id, name: user.name });
 			}
@@ -66,6 +75,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 			if (session.user) {
 				session.user.id = token.id as string;
 				session.user.name = (token.name as string) ?? session.user.name;
+				session.user.email = (token.email as string | null | undefined) ?? session.user.email;
+				session.user.image = (token.picture as string | null | undefined) ?? session.user.image;
 				session.user.isAdmin = Boolean(token.isAdmin);
 			}
 			return session;

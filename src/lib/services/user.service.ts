@@ -3,38 +3,75 @@ import type { RequestContext } from "@/lib/context/types";
 import { UserRepositoryD1 } from "@/lib/repositories/admin.repository.d1";
 import type { UserRecord } from "@/lib/repositories/admin.repository";
 import { md5 } from "@/lib/auth/md5";
+import { getAvatarUrl, normalizeOptionalProfileField } from "@/lib/users/profile";
 
 interface UpdateUserInput {
 	username?: string;
+	name?: string | null;
+	email?: string | null;
 	password?: string;
 	isAdmin?: boolean;
+	avatarKey?: string | null;
 }
 
 export class UserService {
 	private readonly userRepository: UserRepositoryD1;
+	private readonly env: Record<string, unknown>;
 
 	constructor(ctx: RequestContext) {
 		const db = getDb(ctx.env);
 		this.userRepository = new UserRepositoryD1(db);
+		this.env = ctx.env as unknown as Record<string, unknown>;
+	}
+
+	private withAvatarUrl(user: UserRecord): UserRecord {
+		return {
+			...user,
+			avatarUrl: getAvatarUrl(user.avatarKey, this.env),
+		};
 	}
 
 	async listUsers(): Promise<UserRecord[]> {
-		return this.userRepository.list();
+		const users = await this.userRepository.list();
+		return users.map((user) => this.withAvatarUrl(user));
 	}
 
 	async getById(id: string): Promise<UserRecord | null> {
-		return this.userRepository.getById(id);
+		const user = await this.userRepository.getById(id);
+		return user ? this.withAvatarUrl(user) : null;
 	}
 
-	async createUser(username: string, password: string, isAdmin = true): Promise<UserRecord> {
+	async createUser(
+		username: string,
+		password: string,
+		isAdmin = true,
+		name?: string | null,
+		email?: string | null
+	): Promise<UserRecord> {
 		const normalizedUsername = username.trim();
 		if (!normalizedUsername) {
 			throw new Error("Username is required");
 		}
 		const id = crypto.randomUUID();
 		const passwordHash = md5(password);
-		await this.userRepository.create(id, normalizedUsername, passwordHash, isAdmin);
-		return { id, username: normalizedUsername, isAdmin };
+		const normalizedName = normalizeOptionalProfileField(name);
+		const normalizedEmail = normalizeOptionalProfileField(email);
+		await this.userRepository.create(
+			id,
+			normalizedUsername,
+			normalizedName,
+			normalizedEmail,
+			passwordHash,
+			isAdmin
+		);
+		return this.withAvatarUrl({
+			id,
+			username: normalizedUsername,
+			name: normalizedName,
+			email: normalizedEmail,
+			avatarKey: null,
+			isAdmin,
+		});
 	}
 
 	async updateUser(id: string, updates: UpdateUserInput, actorUserId: string): Promise<UserRecord> {
@@ -43,7 +80,14 @@ export class UserService {
 			throw new Error("User not found");
 		}
 
-		const patch: { username?: string; passwordHash?: string; isAdmin?: boolean } = {};
+		const patch: {
+			username?: string;
+			name?: string | null;
+			email?: string | null;
+			passwordHash?: string;
+			isAdmin?: boolean;
+			avatarKey?: string | null;
+		} = {};
 		if (updates.username !== undefined) {
 			const username = updates.username.trim();
 			if (!username) {
@@ -51,8 +95,17 @@ export class UserService {
 			}
 			patch.username = username;
 		}
+		if (updates.name !== undefined) {
+			patch.name = normalizeOptionalProfileField(updates.name);
+		}
+		if (updates.email !== undefined) {
+			patch.email = normalizeOptionalProfileField(updates.email);
+		}
 		if (updates.password !== undefined && updates.password.trim()) {
 			patch.passwordHash = md5(updates.password);
+		}
+		if (updates.avatarKey !== undefined) {
+			patch.avatarKey = updates.avatarKey;
 		}
 		if (updates.isAdmin !== undefined) {
 			if (id === actorUserId && updates.isAdmin === false) {
@@ -73,7 +126,7 @@ export class UserService {
 		if (!updated) {
 			throw new Error("User not found");
 		}
-		return updated;
+		return this.withAvatarUrl(updated);
 	}
 
 	async deleteUser(id: string, actorUserId: string): Promise<void> {

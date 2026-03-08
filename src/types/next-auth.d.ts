@@ -11,6 +11,7 @@ declare module "next-auth" {
 
 	interface User {
 		isAdmin?: boolean;
+		avatarKey?: string | null;
 	}
 }
 
@@ -18,5 +19,6 @@ declare module "next-auth/jwt" {
 	interface JWT extends DefaultJWT {
 		id?: string;
 		isAdmin?: boolean;
+		picture?: string | null;
 	}
 }

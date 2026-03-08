@@ -16,12 +16,17 @@ enum UsersPageActionType {
 	SET_LOADING = "SET_LOADING",
 	SET_ERROR = "SET_ERROR",
 	SET_USERNAME = "SET_USERNAME",
+	SET_NAME = "SET_NAME",
+	SET_EMAIL = "SET_EMAIL",
 	SET_PASSWORD = "SET_PASSWORD",
 	SET_IS_ADMIN = "SET_IS_ADMIN",
 	SET_EDITING_USER_ID = "SET_EDITING_USER_ID",
 	SET_EDITING_USERNAME = "SET_EDITING_USERNAME",
+	SET_EDITING_NAME = "SET_EDITING_NAME",
+	SET_EDITING_EMAIL = "SET_EDITING_EMAIL",
 	SET_EDITING_PASSWORD = "SET_EDITING_PASSWORD",
 	SET_EDITING_IS_ADMIN = "SET_EDITING_IS_ADMIN",
+	SET_UPLOADING_AVATAR_USER_ID = "SET_UPLOADING_AVATAR_USER_ID",
 }
 
 interface UsersPageState {
@@ -29,12 +34,17 @@ interface UsersPageState {
 	loading: boolean;
 	error: string | null;
 	username: string;
+	name: string;
+	email: string;
 	password: string;
 	isAdmin: boolean;
 	editingUserId: string | null;
 	editingUsername: string;
+	editingName: string;
+	editingEmail: string;
 	editingPassword: string;
 	editingIsAdmin: boolean;
+	uploadingAvatarUserId: string | null;
 }
 
 const initialState: UsersPageState = {
@@ -42,12 +52,17 @@ const initialState: UsersPageState = {
 	loading: true,
 	error: null,
 	username: "",
+	name: "",
+	email: "",
 	password: "",
 	isAdmin: true,
 	editingUserId: null,
 	editingUsername: "",
+	editingName: "",
+	editingEmail: "",
 	editingPassword: "",
 	editingIsAdmin: true,
+	uploadingAvatarUserId: null,
 };
 
 function reducer(
@@ -63,6 +78,10 @@ function reducer(
 			return { ...state, error: (action.data as string | null) ?? null };
 		case UsersPageActionType.SET_USERNAME:
 			return { ...state, username: (action.data as string) ?? "" };
+		case UsersPageActionType.SET_NAME:
+			return { ...state, name: (action.data as string) ?? "" };
+		case UsersPageActionType.SET_EMAIL:
+			return { ...state, email: (action.data as string) ?? "" };
 		case UsersPageActionType.SET_PASSWORD:
 			return { ...state, password: (action.data as string) ?? "" };
 		case UsersPageActionType.SET_IS_ADMIN:
@@ -71,10 +90,16 @@ function reducer(
 			return { ...state, editingUserId: (action.data as string | null) ?? null };
 		case UsersPageActionType.SET_EDITING_USERNAME:
 			return { ...state, editingUsername: (action.data as string) ?? "" };
+		case UsersPageActionType.SET_EDITING_NAME:
+			return { ...state, editingName: (action.data as string) ?? "" };
+		case UsersPageActionType.SET_EDITING_EMAIL:
+			return { ...state, editingEmail: (action.data as string) ?? "" };
 		case UsersPageActionType.SET_EDITING_PASSWORD:
 			return { ...state, editingPassword: (action.data as string) ?? "" };
 		case UsersPageActionType.SET_EDITING_IS_ADMIN:
 			return { ...state, editingIsAdmin: (action.data as boolean | undefined) ?? false };
+		case UsersPageActionType.SET_UPLOADING_AVATAR_USER_ID:
+			return { ...state, uploadingAvatarUserId: (action.data as string | null) ?? null };
 		default:
 			return state;
 	}
@@ -101,12 +126,17 @@ function UsersPageContent() {
 		loading,
 		error,
 		username,
+		name,
+		email,
 		password,
 		isAdmin,
 		editingUserId,
 		editingUsername,
+		editingName,
+		editingEmail,
 		editingPassword,
 		editingIsAdmin,
+		uploadingAvatarUserId,
 	} = state;
 
 	const load = async () => {
@@ -132,8 +162,10 @@ function UsersPageContent() {
 		e.preventDefault();
 		dispatch({ type: UsersPageActionType.SET_ERROR, data: null });
 		try {
-			await createUser(username, password, isAdmin);
+			await createUser(username, password, isAdmin, name, email);
 			dispatch({ type: UsersPageActionType.SET_USERNAME, data: "" });
+			dispatch({ type: UsersPageActionType.SET_NAME, data: "" });
+			dispatch({ type: UsersPageActionType.SET_EMAIL, data: "" });
 			dispatch({ type: UsersPageActionType.SET_PASSWORD, data: "" });
 			dispatch({ type: UsersPageActionType.SET_IS_ADMIN, data: true });
 			await load();
@@ -148,6 +180,8 @@ function UsersPageContent() {
 	const startEdit = (user: UserRecord) => {
 		dispatch({ type: UsersPageActionType.SET_EDITING_USER_ID, data: user.id });
 		dispatch({ type: UsersPageActionType.SET_EDITING_USERNAME, data: user.username });
+		dispatch({ type: UsersPageActionType.SET_EDITING_NAME, data: user.name ?? "" });
+		dispatch({ type: UsersPageActionType.SET_EDITING_EMAIL, data: user.email ?? "" });
 		dispatch({ type: UsersPageActionType.SET_EDITING_PASSWORD, data: "" });
 		dispatch({ type: UsersPageActionType.SET_EDITING_IS_ADMIN, data: user.isAdmin });
 	};
@@ -159,11 +193,15 @@ function UsersPageContent() {
 		try {
 			await updateUser(editingUserId, {
 				username: editingUsername,
+				name: editingName,
+				email: editingEmail,
 				password: editingPassword,
 				isAdmin: editingIsAdmin,
 			});
 			dispatch({ type: UsersPageActionType.SET_EDITING_USER_ID, data: null });
 			dispatch({ type: UsersPageActionType.SET_EDITING_USERNAME, data: "" });
+			dispatch({ type: UsersPageActionType.SET_EDITING_NAME, data: "" });
+			dispatch({ type: UsersPageActionType.SET_EDITING_EMAIL, data: "" });
 			dispatch({ type: UsersPageActionType.SET_EDITING_PASSWORD, data: "" });
 			await load();
 		} catch (err) {
@@ -184,6 +222,34 @@ function UsersPageContent() {
 				type: UsersPageActionType.SET_ERROR,
 				data: err instanceof Error ? err.message : "Failed to delete user",
 			});
+		}
+	};
+
+	const handleAvatarUpload = async (userId: string, file: File) => {
+		dispatch({ type: UsersPageActionType.SET_ERROR, data: null });
+		dispatch({ type: UsersPageActionType.SET_UPLOADING_AVATAR_USER_ID, data: userId });
+		try {
+			const formData = new FormData();
+			formData.set("userId", userId);
+			formData.set("file", file);
+			const response = await fetch("/api/users/avatar", {
+				method: "POST",
+				body: formData,
+			});
+			if (!response.ok) {
+				const payload = (await response.json().catch(() => null)) as
+					| { error_description?: string; error?: string }
+					| null;
+				throw new Error(payload?.error_description ?? payload?.error ?? "Failed to upload avatar");
+			}
+			await load();
+		} catch (err) {
+			dispatch({
+				type: UsersPageActionType.SET_ERROR,
+				data: err instanceof Error ? err.message : "Failed to upload avatar",
+			});
+		} finally {
+			dispatch({ type: UsersPageActionType.SET_UPLOADING_AVATAR_USER_ID, data: null });
 		}
 	};
 
@@ -208,7 +274,7 @@ function UsersPageContent() {
 					{error && (
 						<p className="mb-3 rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">{error}</p>
 					)}
-					<form onSubmit={handleCreate} className="grid gap-3 md:grid-cols-4">
+					<form onSubmit={handleCreate} className="grid gap-3 md:grid-cols-6">
 						<input
 							type="text"
 							value={username}
@@ -216,6 +282,24 @@ function UsersPageContent() {
 								dispatch({ type: UsersPageActionType.SET_USERNAME, data: e.target.value })
 							}
 							placeholder="Username"
+							className="rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground placeholder:text-foreground/50 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+						/>
+						<input
+							type="text"
+							value={name}
+							onChange={(e) =>
+								dispatch({ type: UsersPageActionType.SET_NAME, data: e.target.value })
+							}
+							placeholder="Display name (optional)"
+							className="rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground placeholder:text-foreground/50 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+						/>
+						<input
+							type="email"
+							value={email}
+							onChange={(e) =>
+								dispatch({ type: UsersPageActionType.SET_EMAIL, data: e.target.value })
+							}
+							placeholder="Email (optional)"
 							className="rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground placeholder:text-foreground/50 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
 						/>
 						<input
@@ -256,7 +340,7 @@ function UsersPageContent() {
 								className="rounded-xl border border-brand-muted px-3 py-2"
 							>
 								{editingUserId === user.id ? (
-									<form onSubmit={handleUpdate} className="grid gap-2 md:grid-cols-5">
+									<form onSubmit={handleUpdate} className="grid gap-2 md:grid-cols-7">
 										<input
 											type="text"
 											value={editingUsername}
@@ -266,6 +350,30 @@ function UsersPageContent() {
 													data: e.target.value,
 												})
 											}
+											className="rounded-xl border border-brand-muted bg-background px-2 py-1 text-sm focus:border-brand focus:outline-none"
+										/>
+										<input
+											type="text"
+											value={editingName}
+											onChange={(e) =>
+												dispatch({
+													type: UsersPageActionType.SET_EDITING_NAME,
+													data: e.target.value,
+												})
+											}
+											placeholder="Display name"
+											className="rounded-xl border border-brand-muted bg-background px-2 py-1 text-sm focus:border-brand focus:outline-none"
+										/>
+										<input
+											type="email"
+											value={editingEmail}
+											onChange={(e) =>
+												dispatch({
+													type: UsersPageActionType.SET_EDITING_EMAIL,
+													data: e.target.value,
+												})
+											}
+											placeholder="Email"
 											className="rounded-xl border border-brand-muted bg-background px-2 py-1 text-sm focus:border-brand focus:outline-none"
 										/>
 										<input
@@ -314,13 +422,47 @@ function UsersPageContent() {
 									</form>
 								) : (
 									<div className="flex items-center justify-between">
-										<div className="flex flex-col">
-											<span className="font-medium">{user.username}</span>
+										<div className="flex items-center gap-3">
+											{user.avatarUrl ? (
+												<div
+													className="h-10 w-10 rounded-full bg-cover bg-center"
+													style={{ backgroundImage: `url("${user.avatarUrl}")` }}
+												/>
+											) : (
+												<div className="flex h-10 w-10 items-center justify-center rounded-full border border-brand-muted text-xs font-semibold">
+													{(user.name ?? user.username).slice(0, 2).toUpperCase()}
+												</div>
+											)}
+											<div className="flex flex-col">
+											<span className="font-medium">{user.name ?? user.username}</span>
+											<span className="text-xs text-muted-foreground">
+												@{user.username}
+											</span>
+											{user.email && (
+												<span className="text-xs text-muted-foreground">{user.email}</span>
+											)}
 											<span className="text-xs text-muted-foreground">
 												{user.isAdmin ? "Admin" : "User"}
 											</span>
+											</div>
 										</div>
-										<div className="flex items-center gap-1">
+										<div className="flex items-center gap-2">
+											<label className="cursor-pointer rounded-full border border-brand-muted px-2 py-1 text-xs hover:bg-brand-muted/30">
+												{uploadingAvatarUserId === user.id ? "Uploading..." : "Photo"}
+												<input
+													type="file"
+													accept="image/jpeg,image/png,image/webp"
+													disabled={uploadingAvatarUserId != null}
+													className="hidden"
+													onChange={(e) => {
+														const file = e.target.files?.[0];
+														if (file) {
+															void handleAvatarUpload(user.id, file);
+														}
+														e.currentTarget.value = "";
+													}}
+												/>
+											</label>
 											<button
 												type="button"
 												onClick={() => startEdit(user)}

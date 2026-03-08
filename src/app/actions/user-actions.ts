@@ -26,16 +26,29 @@ export async function listUsers() {
 	});
 }
 
-export async function createUser(username: string, password: string, isAdmin = true) {
+export async function createUser(
+	username: string,
+	password: string,
+	isAdmin = true,
+	name?: string | null,
+	email?: string | null
+) {
 	return onServerAction(async (_ctx, getServices) => {
 		const { userService } = getServices();
-		return userService.createUser(username, password, isAdmin);
+		return userService.createUser(username, password, isAdmin, name, email);
 	});
 }
 
 export async function updateUser(
 	id: string,
-	updates: { username?: string; password?: string; isAdmin?: boolean }
+	updates: {
+		username?: string;
+		name?: string | null;
+		email?: string | null;
+		password?: string;
+		isAdmin?: boolean;
+		avatarKey?: string | null;
+	}
 ) {
 	const session = await auth();
 	if (!session?.user?.id) {

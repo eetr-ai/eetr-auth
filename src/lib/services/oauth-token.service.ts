@@ -93,6 +93,7 @@ export interface ValidateTokenResult {
 	valid: boolean;
 	active: boolean;
 	clientId: string | null;
+	subject: string | null;
 	environmentId: string | null;
 	environmentMatch: boolean;
 	expectedEnvironmentName: string | null;
@@ -699,26 +700,12 @@ export class OauthTokenService {
 		const normalizedEnvironmentName = environmentName?.trim() ?? "";
 		const expectedEnvironmentName =
 			normalizedEnvironmentName.length > 0 ? normalizedEnvironmentName : null;
-		if (!expectedEnvironmentName) {
-			return {
-				valid: false,
-				active: false,
-				clientId: null,
-				environmentId: null,
-				environmentMatch: false,
-				expectedEnvironmentName: null,
-				tokenEnvironmentName: null,
-				expiresAt: null,
-				tokenScopes: [],
-				requiredScopes,
-				missingScopes: requiredScopes,
-			};
-		}
 		if (!token?.trim()) {
 			return {
 				valid: false,
 				active: false,
 				clientId: null,
+				subject: null,
 				environmentId: null,
 				environmentMatch: false,
 				expectedEnvironmentName,
@@ -742,6 +729,7 @@ export class OauthTokenService {
 				valid: false,
 				active: false,
 				clientId: null,
+				subject: null,
 				environmentId: null,
 				environmentMatch: false,
 				expectedEnvironmentName,
@@ -758,15 +746,17 @@ export class OauthTokenService {
 		const tokenScopeSet = new Set(tokenRecord.scopeNames);
 		const missingScopes = requiredScopes.filter((scope) => !tokenScopeSet.has(scope));
 		const environmentMatch =
-			expectedEnvironmentName != null &&
-			tokenRecord.environmentName.toLocaleLowerCase() ===
-				expectedEnvironmentName.toLocaleLowerCase();
+			expectedEnvironmentName == null
+				? true
+				: tokenRecord.environmentName.toLocaleLowerCase() ===
+					expectedEnvironmentName.toLocaleLowerCase();
 		const valid = active && missingScopes.length === 0 && environmentMatch;
 
 		return {
 			valid,
 			active,
 			clientId: tokenRecord.clientId,
+			subject: null,
 			environmentId: tokenRecord.environmentId,
 			environmentMatch,
 			expectedEnvironmentName,
@@ -828,6 +818,7 @@ export class OauthTokenService {
 			valid: false,
 			active: false,
 			clientId: null,
+			subject: null,
 			environmentId: null,
 			environmentMatch: false,
 			expectedEnvironmentName,
@@ -844,15 +835,16 @@ export class OauthTokenService {
 			environmentName: string;
 			expiresAt: string;
 			scopeNames: string[];
-		}): ValidateTokenResult => {
+		}, subject: string | null): ValidateTokenResult => {
 			const nowIso = new Date().toISOString();
 			const active = tokenRecord.expiresAt > nowIso;
 			const tokenScopeSet = new Set(tokenRecord.scopeNames);
 			const missingScopes = requiredScopes.filter((scope) => !tokenScopeSet.has(scope));
 			const environmentMatch =
-				expectedEnvironmentName != null &&
-				tokenRecord.environmentName.toLocaleLowerCase() ===
-					expectedEnvironmentName.toLocaleLowerCase();
+				expectedEnvironmentName == null
+					? true
+					: tokenRecord.environmentName.toLocaleLowerCase() ===
+						expectedEnvironmentName.toLocaleLowerCase();
 			const valid = active && missingScopes.length === 0 && environmentMatch;
 			if (!valid) {
 				console.warn("[oauth_token] JWT validation: token found but valid=false.", {
@@ -867,6 +859,7 @@ export class OauthTokenService {
 				valid,
 				active,
 				clientId: tokenRecord.clientId,
+				subject,
 				environmentId: tokenRecord.environmentId,
 				environmentMatch,
 				expectedEnvironmentName,
@@ -892,7 +885,7 @@ export class OauthTokenService {
 			if (!jti) return invalidResult();
 			const tokenRecord = await this.tokenRepo.getAccessTokenByTokenId(jti);
 			if (!tokenRecord) return invalidResult();
-			return validateFromRecord(tokenRecord);
+			return validateFromRecord(tokenRecord, null);
 		};
 
 		// Prefer JWKS from env (e.g. JWT_JWKS_JSON in .env.local) so next dev uses same key as signing
@@ -927,11 +920,12 @@ export class OauthTokenService {
 			const { payload } = await jwtVerify(token, JWKS);
 			const jti = payload.jti as string | undefined;
 			if (!jti) return invalidResult();
+			const subject = typeof payload.sub === "string" ? payload.sub : null;
 
 			const tokenRecord = await this.tokenRepo.getAccessTokenByTokenId(jti);
 			if (!tokenRecord) return invalidResult();
 			console.log("[oauth_token] JWT verification: signature verified", { jwksSource, jti });
-			return validateFromRecord(tokenRecord);
+			return validateFromRecord(tokenRecord, subject);
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			const code = err && typeof err === "object" && "code" in err ? (err as { code: string }).code : undefined;

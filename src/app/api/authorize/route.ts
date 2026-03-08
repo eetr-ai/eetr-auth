@@ -48,6 +48,11 @@ async function handleAuthorize(
 		loginUrl.searchParams.set("callbackUrl", req.url);
 		return NextResponse.redirect(loginUrl);
 	}
+	if (req.method === "GET") {
+		const confirmUrl = new URL("/oauth/confirm", req.url);
+		confirmUrl.searchParams.set("callbackUrl", req.url);
+		return NextResponse.redirect(confirmUrl);
+	}
 
 	const source: URLSearchParams | FormData =
 		req.method === "GET" ? req.nextUrl.searchParams : await req.formData();
