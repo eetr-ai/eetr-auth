@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { auth } from "@/auth";
+import {
+	collectPendingAuthorizationParams,
+	encodePendingAuthorizationCookie,
+	getPendingCookieName,
+	getPendingCookieTtlSeconds,
+} from "@/lib/auth/oauth-pending-cookie";
 import { withApiContext } from "@/lib/context/with-api-context";
 import type { Services } from "@/lib/services/registry";
 import { isOAuthServiceError } from "@/lib/services/oauth.types";
@@ -37,25 +43,67 @@ interface AuthorizeLogContext {
 	ip: string | null;
 }
 
+function applyPendingCookie(response: NextResponse, req: NextRequest, value: string) {
+	response.cookies.set(getPendingCookieName(), value, {
+		httpOnly: true,
+		sameSite: "lax",
+		secure: req.nextUrl.protocol === "https:",
+		path: "/",
+		maxAge: getPendingCookieTtlSeconds(),
+	});
+}
+
+function clearPendingCookie(response: NextResponse, req: NextRequest) {
+	response.cookies.set(getPendingCookieName(), "", {
+		httpOnly: true,
+		sameSite: "lax",
+		secure: req.nextUrl.protocol === "https:",
+		path: "/",
+		maxAge: 0,
+	});
+}
+
 async function handleAuthorize(
 	req: NextRequest,
 	services: Services,
 	logContext: AuthorizeLogContext
 ) {
 	const session = await auth();
-	if (!session?.user?.id) {
-		const loginUrl = new URL("/", req.url);
-		loginUrl.searchParams.set("callbackUrl", req.url);
-		return NextResponse.redirect(loginUrl);
-	}
+
 	if (req.method === "GET") {
-		const confirmUrl = new URL("/oauth/confirm", req.url);
-		confirmUrl.searchParams.set("callbackUrl", req.url);
-		return NextResponse.redirect(confirmUrl);
+		const pendingParams = collectPendingAuthorizationParams(req.nextUrl.searchParams);
+		let response: NextResponse;
+		if (!session?.user?.id) {
+			const loginUrl = new URL("/", req.url);
+			loginUrl.searchParams.set("callbackUrl", "/oauth/confirm");
+			response = NextResponse.redirect(loginUrl);
+		} else {
+			const confirmUrl = new URL("/oauth/confirm", req.url);
+			response = NextResponse.redirect(confirmUrl);
+		}
+		try {
+			const cookieValue = await encodePendingAuthorizationCookie(pendingParams);
+			applyPendingCookie(response, req, cookieValue);
+		} catch (error) {
+			console.error("[oauth_authorize] failed to encode pending cookie", error);
+			return NextResponse.json(
+				{
+					error: "server_error",
+					error_description: "Unable to preserve authorization request.",
+				},
+				{ status: 500 }
+			);
+		}
+		return response;
 	}
 
-	const source: URLSearchParams | FormData =
-		req.method === "GET" ? req.nextUrl.searchParams : await req.formData();
+	if (!session?.user?.id) {
+		const loginUrl = new URL("/", req.url);
+		loginUrl.searchParams.set("callbackUrl", "/oauth/confirm");
+		return NextResponse.redirect(loginUrl);
+	}
+
+	const source = await req.formData();
 	const clientId = asString(source.get("client_id"));
 
 	try {
@@ -78,7 +126,9 @@ async function handleAuthorize(
 			clientId,
 			durationMs,
 		}));
-		return NextResponse.redirect(result.redirectTo);
+		const redirectResponse = NextResponse.redirect(result.redirectTo);
+		clearPendingCookie(redirectResponse, req);
+		return redirectResponse;
 	} catch (error) {
 		const durationMs = Date.now() - logContext.startMs;
 		scheduleActivityLog(logContext.ctx, services.tokenActivityLogService.logActivity({

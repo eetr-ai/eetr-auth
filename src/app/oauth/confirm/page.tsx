@@ -1,44 +1,30 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { auth, signOut } from "@/auth";
+import {
+	AUTHORIZE_PARAM_KEYS,
+	decodePendingAuthorizationCookie,
+	getPendingCookieName,
+} from "@/lib/auth/oauth-pending-cookie";
 
-const AUTHORIZE_PARAM_KEYS = [
-	"response_type",
-	"client_id",
-	"redirect_uri",
-	"scope",
-	"state",
-	"code_challenge",
-	"code_challenge_method",
-] as const;
-
-function parseAuthorizeCallbackUrl(raw: string | undefined, origin: string): URL | null {
-	if (!raw) return null;
-	try {
-		const url = new URL(raw);
-		if (url.origin !== origin) return null;
-		if (url.pathname !== "/api/authorize") return null;
-		return url;
-	} catch {
-		return null;
-	}
-}
-
-export default async function OAuthConfirmPage({
-	searchParams,
-}: {
-	searchParams: Promise<{ callbackUrl?: string }>;
-}) {
+export default async function OAuthConfirmPage() {
 	const session = await auth();
-	const { callbackUrl } = await searchParams;
-	const origin = process.env.NEXTAUTH_URL ?? "https://auth.progression-ai.com";
-	const authorizeUrl = parseAuthorizeCallbackUrl(callbackUrl, origin);
+	const cookieStore = await cookies();
+	const pendingParams = await decodePendingAuthorizationCookie(
+		cookieStore.get(getPendingCookieName())?.value
+	);
+	const hasPkce =
+		typeof pendingParams?.code_challenge === "string" &&
+		pendingParams.code_challenge.length > 0 &&
+		typeof pendingParams?.code_challenge_method === "string" &&
+		pendingParams.code_challenge_method.length > 0;
 
-	if (!authorizeUrl) {
-		redirect("/");
+	if (!pendingParams || !hasPkce) {
+		redirect("/?error=oauth_confirm_missing_pkce");
 	}
 
 	if (!session?.user?.id) {
-		redirect(`/?callbackUrl=${encodeURIComponent(authorizeUrl.toString())}`);
+		redirect(`/?callbackUrl=${encodeURIComponent("/oauth/confirm")}`);
 	}
 
 	const displayName = session.user.name ?? session.user.email ?? session.user.id;
@@ -72,7 +58,7 @@ export default async function OAuthConfirmPage({
 
 				<form action="/api/authorize" method="POST" className="mt-6">
 					{AUTHORIZE_PARAM_KEYS.map((key) => {
-						const value = authorizeUrl.searchParams.get(key);
+						const value = pendingParams[key];
 						if (!value) return null;
 						return <input key={key} type="hidden" name={key} value={value} />;
 					})}
@@ -88,7 +74,7 @@ export default async function OAuthConfirmPage({
 					action={async () => {
 						"use server";
 						await signOut({
-							redirectTo: `/?callbackUrl=${encodeURIComponent(authorizeUrl.toString())}`,
+							redirectTo: `/?callbackUrl=${encodeURIComponent("/oauth/confirm")}`,
 						});
 					}}
 					className="mt-3"
