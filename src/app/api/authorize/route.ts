@@ -34,7 +34,7 @@ function withOAuthRedirectError(
 	if (state) {
 		url.searchParams.set("state", state);
 	}
-	return NextResponse.redirect(url);
+	return NextResponse.redirect(url, 303);
 }
 
 interface AuthorizeLogContext {
@@ -126,7 +126,7 @@ async function handleAuthorize(
 			clientId,
 			durationMs,
 		}));
-		const redirectResponse = NextResponse.redirect(result.redirectTo);
+		const redirectResponse = NextResponse.redirect(result.redirectTo, 303);
 		clearPendingCookie(redirectResponse, req);
 		return redirectResponse;
 	} catch (error) {
