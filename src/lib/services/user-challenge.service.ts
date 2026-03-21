@@ -52,6 +52,7 @@ export class UserChallengeService {
 	private readonly siteSettings: SiteSettingsService;
 	private readonly mail: TransactionalEmailService;
 	private readonly env: Record<string, unknown>;
+	private readonly cfEnv: CloudflareEnv;
 
 	constructor(ctx: RequestContext) {
 		const db = getDb(ctx.env);
@@ -60,13 +61,16 @@ export class UserChallengeService {
 		this.siteRepo = new SiteSettingsRepositoryD1(db);
 		this.siteSettings = new SiteSettingsService(ctx);
 		this.mail = new TransactionalEmailService(ctx);
+		this.cfEnv = ctx.env;
 		this.env = ctx.env as unknown as Record<string, unknown>;
 	}
 
 	async verifyUsernamePassword(username: string, password: string): Promise<UserWithPassword | null> {
 		const user = await this.userRepo.findByUsername(username.trim());
 		if (!user) return null;
-		const v = await verifyPassword(password, user.passwordHash);
+		const v = await verifyPassword(password, user.passwordHash, {
+			argonHasher: this.cfEnv.ARGON_HASHER,
+		});
 		if (!v.ok) return null;
 		if (v.rehash) {
 			await this.userRepo.update(user.id, { passwordHash: v.rehash });

@@ -30,6 +30,15 @@
 			// see https://opennext.js.org/cloudflare/caching
 			"binding": "WORKER_SELF_REFERENCE",
 			"service": "progression-ai-auth"
+		},
+		{
+			// glotlabs/argon-hasher (or compatible): legacy Argon2 PHC verify via POST /verify
+			// Host in Request URL is ignored; routing is by binding. props must match hasher (403 otherwise).
+			"binding": "ARGON_HASHER",
+			"service": "argon-hasher",
+			"props": {
+				"internal": true
+			}
 		}
 	],
 	"observability": {

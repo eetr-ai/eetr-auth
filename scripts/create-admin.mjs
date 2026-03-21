@@ -6,11 +6,18 @@
  *    or: USER_USERNAME=x USER_PASSWORD=y node scripts/create-admin.mjs
  * Options: --local-only | --remote-only (default: both)
  */
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes, randomUUID, pbkdf2 } from "node:crypto";
+import { promisify } from "node:util";
 import { writeFileSync, unlinkSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
-import { argon2id } from "hash-wasm";
+
+const pbkdf2Async = promisify(pbkdf2);
+const PBKDF2_ITERATIONS = 210000;
+
+function encodeB64NoPad(buf) {
+	return Buffer.from(buf).toString("base64").replace(/=+$/, "");
+}
 
 const args = process.argv.slice(2);
 const localOnly = args.includes("--local-only");
@@ -35,16 +42,9 @@ function escapeSql(value) {
 }
 
 async function hashPassword(plain) {
-	const salt = Uint8Array.from(randomBytes(16));
-	return argon2id({
-		password: new TextEncoder().encode(plain),
-		salt,
-		iterations: 3,
-		parallelism: 1,
-		memorySize: 19456,
-		hashLength: 32,
-		outputType: "encoded",
-	});
+	const salt = randomBytes(16);
+	const hash = await pbkdf2Async(plain, salt, PBKDF2_ITERATIONS, 32, "sha256");
+	return `$pbkdf2-sha256$${PBKDF2_ITERATIONS}$${encodeB64NoPad(salt)}$${encodeB64NoPad(hash)}`;
 }
 
 const id = randomUUID();

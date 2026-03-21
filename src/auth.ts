@@ -39,7 +39,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 					return null;
 				}
 
-				const verified = await verifyPassword(password, user.passwordHash);
+				const verified = await verifyPassword(password, user.passwordHash, {
+					argonHasher: env.ARGON_HASHER,
+				});
 				if (!verified.ok) {
 					console.log("[auth] authorize: password mismatch for username", username);
 					return null;
