@@ -12,6 +12,17 @@ import type { RequestContext } from "@/lib/context/types";
 import { UserChallengeService } from "@/lib/services/user-challenge.service";
 import { MFA_CHALLENGE_COOKIE } from "@/lib/auth/mfa-cookie";
 
+/** Structured sign-in logs (grep `sign_in_authorize`). Never includes password or OTP. */
+function signInAuthorizeLog(payload: Record<string, unknown>) {
+	console.info(
+		JSON.stringify({
+			event: "sign_in_authorize",
+			ts: new Date().toISOString(),
+			...payload,
+		})
+	);
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
 	providers: [
 		Credentials({
@@ -24,28 +35,60 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 				const username = credentials?.username as string | undefined;
 				const password = credentials?.password as string | undefined;
 				const otp = (credentials?.otp as string | undefined)?.trim() ?? "";
-				console.log("[auth] authorize: attempt", { username: username ?? "(missing)" });
+				const usernameNorm = username?.trim() ?? "";
+				signInAuthorizeLog({
+					outcome: "attempt",
+					username: usernameNorm || null,
+					hasOtpField: otp.length > 0,
+				});
 				if (!username || !password) {
-					console.log("[auth] authorize: missing username or password");
+					signInAuthorizeLog({
+						outcome: "failure",
+						reason: "missing_username_or_password",
+						username: usernameNorm || null,
+						hasPassword: Boolean(password),
+					});
 					return null;
 				}
 
 				const { env, cf, ctx } = await getCloudflareContext({ async: true });
+				const envRecord = env as unknown as Record<string, unknown>;
+				const hashMethod = resolveHashMethod(envRecord);
+				const hasArgonHasher = Boolean(env.ARGON_HASHER);
 				const db = getDb(env);
 				const repo = new UserRepositoryD1(db);
 				const siteRepo = new SiteSettingsRepositoryD1(db);
 				const user = await repo.findByUsername(username);
 				if (!user) {
-					console.log("[auth] authorize: no user found for username", username);
+					signInAuthorizeLog({
+						outcome: "failure",
+						reason: "user_not_found",
+						username: usernameNorm,
+						hashMethod,
+						hasArgonHasher,
+					});
 					return null;
 				}
 
 				const verified = await verifyPassword(password, user.passwordHash, {
 					argonHasher: env.ARGON_HASHER,
-					hashMethod: resolveHashMethod(env as unknown as Record<string, unknown>),
+					hashMethod,
 				});
 				if (!verified.ok) {
-					console.log("[auth] authorize: password mismatch for username", username);
+					signInAuthorizeLog({
+						outcome: "failure",
+						reason: "password_invalid",
+						userId: user.id,
+						username: user.username,
+						hashMethod,
+						hasArgonHasher,
+						hint:
+							hashMethod === "argon" && !hasArgonHasher
+								? "HASH_METHOD=argon requires ARGON_HASHER binding"
+								: hashMethod === "md5"
+									? "MD5-only verify; Argon2-stored passwords are rejected in md5 mode"
+									: undefined,
+					});
 					return null;
 				}
 				if (verified.rehash) {
@@ -59,33 +102,58 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
 				if (mfaActive) {
 					if (!user.email?.trim()) {
-						console.log("[auth] authorize: MFA on but user has no email", user.id);
+						signInAuthorizeLog({
+							outcome: "failure",
+							reason: "mfa_enabled_no_user_email",
+							userId: user.id,
+							username: user.username,
+						});
 						return null;
 					}
 					if (!otp) {
-						console.log("[auth] authorize: MFA required but no OTP");
+						signInAuthorizeLog({
+							outcome: "failure",
+							reason: "mfa_otp_required_submit_code",
+							userId: user.id,
+							username: user.username,
+						});
 						return null;
 					}
 					const jar = await cookies();
 					const challengeId = jar.get(MFA_CHALLENGE_COOKIE)?.value;
 					if (!challengeId) {
-						console.log("[auth] authorize: MFA cookie missing");
+						signInAuthorizeLog({
+							outcome: "failure",
+							reason: "mfa_challenge_cookie_missing",
+							userId: user.id,
+							username: user.username,
+							hint: "Call beginMfaSignIn first so the MFA cookie is set",
+						});
 						return null;
 					}
 					const requestCtx: RequestContext = { env, cf, ctx };
 					const challengeSvc = new UserChallengeService(requestCtx);
-					const ok = await challengeSvc.verifyMfaOtpAndConsume(challengeId, user.id, otp);
-					if (!ok) {
-						console.log("[auth] authorize: invalid MFA code");
+					const mfaResult = await challengeSvc.verifyMfaOtpAndConsume(challengeId, user.id, otp);
+					if (!mfaResult.ok) {
+						signInAuthorizeLog({
+							outcome: "failure",
+							reason: "mfa_otp_verify_failed",
+							mfaFailure: mfaResult.reason,
+							userId: user.id,
+							username: user.username,
+							challengeIdPrefix: challengeId.slice(0, 8),
+						});
 						return null;
 					}
 					jar.delete(MFA_CHALLENGE_COOKIE);
 				}
 
-				console.log("[auth] authorize: success", {
-					id: user.id,
+				signInAuthorizeLog({
+					outcome: "success",
+					userId: user.id,
 					username: user.username,
 					isAdmin: user.isAdmin,
+					mfaUsed: mfaActive,
 				});
 				return {
 					id: user.id,

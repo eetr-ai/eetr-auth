@@ -25,6 +25,15 @@ import type { UserWithPassword } from "@/lib/repositories/admin.repository";
 
 const MFA_OTP_TTL_MS = 10 * 60 * 1000;
 
+export type MfaOtpFailureReason =
+	| "challenge_missing_or_mismatch"
+	| "challenge_consumed"
+	| "challenge_expired"
+	| "otp_incorrect"
+	| "otp_max_attempts_exceeded";
+
+export type MfaOtpVerifyResult = { ok: true } | { ok: false; reason: MfaOtpFailureReason };
+
 function randomSixDigitCode(): string {
 	const buf = new Uint32Array(1);
 	crypto.getRandomValues(buf);
@@ -62,6 +71,7 @@ export class UserChallengeService {
 		if (!user) return null;
 		const v = await verifyPassword(password, user.passwordHash, {
 			argonHasher: this.cfEnv.ARGON_HASHER,
+			hashMethod: resolveHashMethod(this.env),
 		});
 		if (!v.ok) return null;
 		if (v.rehash) {
@@ -124,15 +134,21 @@ export class UserChallengeService {
 		return challengeId;
 	}
 
-	async verifyMfaOtpAndConsume(challengeId: string, userId: string, code: string): Promise<boolean> {
+	async verifyMfaOtpAndConsume(
+		challengeId: string,
+		userId: string,
+		code: string
+	): Promise<MfaOtpVerifyResult> {
 		const row = await this.challengeRepo.getById(challengeId);
 		if (!row || row.kind !== "mfa_otp" || row.userId !== userId) {
-			return false;
+			return { ok: false, reason: "challenge_missing_or_mismatch" };
 		}
-		if (row.consumedAt) return false;
+		if (row.consumedAt) {
+			return { ok: false, reason: "challenge_consumed" };
+		}
 		if (row.expiresAt <= new Date().toISOString()) {
 			await this.challengeRepo.deleteById(challengeId);
-			return false;
+			return { ok: false, reason: "challenge_expired" };
 		}
 		const expected = await hashMfaOtp(challengeId, code.trim());
 		if (!timingSafeEqualHex(expected, row.codeHash ?? "")) {
@@ -140,11 +156,12 @@ export class UserChallengeService {
 			const newCount = await this.challengeRepo.incrementOtpFailedAttempts(challengeId);
 			if (newCount != null && newCount >= maxAttempts) {
 				await this.challengeRepo.deleteById(challengeId);
+				return { ok: false, reason: "otp_max_attempts_exceeded" };
 			}
-			return false;
+			return { ok: false, reason: "otp_incorrect" };
 		}
 		await this.challengeRepo.deleteById(challengeId);
-		return true;
+		return { ok: true };
 	}
 
 	/**
