@@ -6,11 +6,11 @@
  *    or: USER_USERNAME=x USER_PASSWORD=y node scripts/create-admin.mjs
  * Options: --local-only | --remote-only (default: both)
  */
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { writeFileSync, unlinkSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
-import md5 from "md5";
+import { argon2id } from "hash-wasm";
 
 const args = process.argv.slice(2);
 const localOnly = args.includes("--local-only");
@@ -34,8 +34,21 @@ function escapeSql(value) {
 	return String(value).replace(/'/g, "''");
 }
 
+async function hashPassword(plain) {
+	const salt = Uint8Array.from(randomBytes(16));
+	return argon2id({
+		password: new TextEncoder().encode(plain),
+		salt,
+		iterations: 3,
+		parallelism: 1,
+		memorySize: 19456,
+		hashLength: 32,
+		outputType: "encoded",
+	});
+}
+
 const id = randomUUID();
-const passwordHash = md5(password);
+const passwordHash = await hashPassword(password);
 const escapedUsername = escapeSql(username);
 const escapedHash = escapeSql(passwordHash);
 

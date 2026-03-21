@@ -13,6 +13,7 @@ export async function updateSiteSettings(input: {
 	siteTitle?: string | null;
 	siteUrl?: string | null;
 	cdnUrl?: string | null;
+	mfaEnabled?: boolean;
 }) {
 	return onServerAction(async (_ctx, getServices) => {
 		const { siteSettingsService } = getServices();

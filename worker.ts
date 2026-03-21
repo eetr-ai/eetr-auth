@@ -1,4 +1,3 @@
-// @ts-expect-error -- OpenNext generates this module during bundling; missing until build
 import openNextWorker from "./.open-next/worker.js";
 import { OauthTokenService } from "./src/lib/services/oauth-token.service";
 import { getDb } from "./src/lib/db";

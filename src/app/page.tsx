@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { AuthError, CredentialsSignin } from "next-auth";
-import { signIn, signOut, auth } from "@/auth";
+import { signOut, auth } from "@/auth";
 import { getPublicSiteSettings } from "@/lib/public-site-settings";
+import { SignInForm } from "@/app/sign-in-form";
 
 export const dynamic = "force-dynamic";
 
@@ -17,14 +17,14 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function HomePage({
 	searchParams,
 }: {
-	searchParams: Promise<{ error?: string; callbackUrl?: string }>;
+	searchParams: Promise<{ error?: string; callbackUrl?: string; reset?: string }>;
 }) {
-	const [session, site, { error, callbackUrl }] = await Promise.all([
+	const [session, site, { error, callbackUrl, reset }] = await Promise.all([
 		auth(),
 		getPublicSiteSettings(),
 		searchParams,
 	]);
-	const { displayTitle, displayLogoUrl, siteUrl } = site;
+	const { displayTitle, displayLogoUrl, siteUrl, mfaEnabled } = site;
 	const normalizedCallbackUrl = callbackUrl?.trim() ?? "";
 	const callbackTargetsAdmin =
 		normalizedCallbackUrl.startsWith("/dashboard") || normalizedCallbackUrl.startsWith("/admin");
@@ -75,6 +75,11 @@ export default async function HomePage({
 						Something went wrong. Please try again.
 					</p>
 				)}
+				{reset === "success" && (
+					<p className="rounded-xl bg-emerald-950/50 px-3 py-2 text-sm text-emerald-200">
+						Your password was updated. You can sign in below.
+					</p>
+				)}
 				{session?.user?.id ? (
 					<div className="space-y-4">
 						<p className="rounded-xl bg-brand-muted/30 px-3 py-2 text-sm">
@@ -96,70 +101,12 @@ export default async function HomePage({
 						</form>
 					</div>
 				) : (
-					<form
-						action={async (formData: FormData) => {
-							"use server";
-							try {
-								await signIn("credentials", {
-									username: formData.get("username") as string,
-									password: formData.get("password") as string,
-									redirectTo:
-										(typeof formData.get("callbackUrl") === "string"
-											? (formData.get("callbackUrl") as string)
-											: null) ?? "/",
-								});
-							} catch (err) {
-								if (err instanceof CredentialsSignin) {
-									redirect("/?error=CredentialsSignin");
-								}
-								if (err instanceof AuthError) {
-									redirect("/?error=AuthError");
-								}
-								throw err;
-							}
-						}}
-						className="space-y-6"
-					>
-						<input
-							type="hidden"
-							name="callbackUrl"
-							value={callbackUrl && callbackUrl.trim().length > 0 ? callbackUrl : "/"}
-						/>
-						<div className="space-y-2">
-							<label htmlFor="username" className="block text-sm font-medium text-foreground">
-								Username
-							</label>
-							<input
-								id="username"
-								name="username"
-								type="text"
-								required
-								autoComplete="username"
-								className="w-full rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground placeholder:text-foreground/50 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-								placeholder="Enter username"
-							/>
-						</div>
-						<div className="space-y-2">
-							<label htmlFor="password" className="block text-sm font-medium text-foreground">
-								Password
-							</label>
-							<input
-								id="password"
-								name="password"
-								type="password"
-								required
-								autoComplete="current-password"
-								className="w-full rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground placeholder:text-foreground/50 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-								placeholder="Enter password"
-							/>
-						</div>
-						<button
-							type="submit"
-							className="w-full rounded-full bg-brand px-4 py-2 font-medium text-white hover:bg-brand-muted focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 focus:ring-offset-background"
-						>
-							Sign in
-						</button>
-					</form>
+					<SignInForm
+						mfaEnabled={mfaEnabled}
+						callbackUrl={
+							callbackUrl && callbackUrl.trim().length > 0 ? callbackUrl : "/"
+						}
+					/>
 				)}
 			</div>
 		</div>

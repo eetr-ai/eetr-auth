@@ -3,6 +3,7 @@ export interface SiteSettingsRow {
 	siteUrl: string | null;
 	cdnUrl: string | null;
 	logoKey: string | null;
+	mfaEnabled: boolean;
 }
 
 export interface SiteSettingsRepository {
@@ -12,5 +13,6 @@ export interface SiteSettingsRepository {
 		siteUrl?: string | null;
 		cdnUrl?: string | null;
 		logoKey?: string | null;
+		mfaEnabled?: boolean;
 	}): Promise<void>;
 }

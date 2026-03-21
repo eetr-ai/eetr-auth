@@ -13,6 +13,9 @@ export interface SiteSettingsDto {
 	siteUrl: string | null;
 	cdnUrl: string | null;
 	logoKey: string | null;
+	mfaEnabled: boolean;
+	/** True when Site URL and Resend are configured so MFA can be turned on. */
+	mfaCanEnable: boolean;
 	displayTitle: string;
 	displayLogoUrl: string;
 }
@@ -71,17 +74,37 @@ export class SiteSettingsService {
 		return this.getLogoPublicUrlForKey(key, cdnUrlOverride);
 	}
 
+	private getResendApiKey(): string | null {
+		const e = this.env;
+		const v =
+			(typeof e.RESEND_API_KEY === "string" && e.RESEND_API_KEY.trim().length > 0
+				? e.RESEND_API_KEY
+				: null) ??
+			(typeof process.env.RESEND_API_KEY === "string" && process.env.RESEND_API_KEY.trim().length > 0
+				? process.env.RESEND_API_KEY
+				: null);
+		return v;
+	}
+
+	private computeMfaCanEnable(siteUrl: string | null): boolean {
+		return !!(normalizeOptional(siteUrl) && this.getResendApiKey());
+	}
+
 	async get(): Promise<SiteSettingsDto> {
 		const row = await this.siteRepo.get();
 		const siteTitle = row?.siteTitle ?? null;
 		const siteUrl = row?.siteUrl ?? null;
 		const cdnUrl = row?.cdnUrl ?? null;
 		const logoKey = row?.logoKey ?? null;
+		const mfaEnabled = row?.mfaEnabled ?? false;
+		const mfaCanEnable = this.computeMfaCanEnable(siteUrl);
 		return {
 			siteTitle,
 			siteUrl,
 			cdnUrl,
 			logoKey,
+			mfaEnabled,
+			mfaCanEnable,
 			displayTitle: this.getDisplaySiteTitle(siteTitle),
 			displayLogoUrl: this.getDisplayLogoUrl(logoKey, cdnUrl),
 		};
@@ -91,7 +114,9 @@ export class SiteSettingsService {
 		siteTitle?: string | null;
 		siteUrl?: string | null;
 		cdnUrl?: string | null;
+		mfaEnabled?: boolean;
 	}): Promise<SiteSettingsDto> {
+		const current = await this.siteRepo.get();
 		const siteTitle = input.siteTitle !== undefined ? normalizeOptional(input.siteTitle) : undefined;
 		const siteUrl = input.siteUrl !== undefined ? normalizeOptional(input.siteUrl) : undefined;
 		const cdnUrl = input.cdnUrl !== undefined ? normalizeOptional(input.cdnUrl) : undefined;
@@ -99,10 +124,32 @@ export class SiteSettingsService {
 		if (siteUrl !== undefined) assertOptionalHttpUrl("Site URL", siteUrl);
 		if (cdnUrl !== undefined) assertOptionalHttpUrl("CDN URL", cdnUrl);
 
+		const nextSiteUrl = siteUrl !== undefined ? siteUrl : current?.siteUrl ?? null;
+		const nextMfaEnabled =
+			input.mfaEnabled !== undefined ? input.mfaEnabled : current?.mfaEnabled ?? false;
+
+		if (input.mfaEnabled === true) {
+			if (!normalizeOptional(nextSiteUrl)) {
+				throw new Error("Configure Site URL before enabling MFA.");
+			}
+			if (!this.getResendApiKey()) {
+				throw new Error("RESEND_API_KEY is not configured; cannot enable MFA.");
+			}
+		}
+
+		if (normalizeOptional(nextSiteUrl) === null && nextMfaEnabled) {
+			throw new Error("Clear MFA before removing Site URL.");
+		}
+
+		if (siteUrl !== undefined && normalizeOptional(siteUrl) === null && (current?.mfaEnabled ?? false)) {
+			throw new Error("Disable MFA before clearing Site URL.");
+		}
+
 		await this.siteRepo.update({
 			...(siteTitle !== undefined ? { siteTitle } : {}),
 			...(siteUrl !== undefined ? { siteUrl } : {}),
 			...(cdnUrl !== undefined ? { cdnUrl } : {}),
+			...(input.mfaEnabled !== undefined ? { mfaEnabled: input.mfaEnabled } : {}),
 		});
 		return this.get();
 	}

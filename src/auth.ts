@@ -1,10 +1,15 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import { cookies } from "next/headers";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { getDb } from "@/lib/db";
 import { UserRepositoryD1 } from "@/lib/repositories/admin.repository.d1";
-import { md5 } from "@/lib/auth/md5";
+import { SiteSettingsRepositoryD1 } from "@/lib/repositories/site-settings.repository.d1";
+import { verifyPassword } from "@/lib/auth/password-hash";
 import { getAvatarUrl } from "@/lib/users/profile";
+import type { RequestContext } from "@/lib/context/types";
+import { UserChallengeService } from "@/lib/services/user-challenge.service";
+import { MFA_CHALLENGE_COOKIE } from "@/lib/auth/mfa-cookie";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
 	providers: [
@@ -12,35 +17,65 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 			credentials: {
 				username: { label: "Username", type: "text" },
 				password: { label: "Password", type: "password" },
+				otp: { label: "One-time code", type: "text" },
 			},
 			async authorize(credentials) {
 				const username = credentials?.username as string | undefined;
 				const password = credentials?.password as string | undefined;
+				const otp = (credentials?.otp as string | undefined)?.trim() ?? "";
 				console.log("[auth] authorize: attempt", { username: username ?? "(missing)" });
 				if (!username || !password) {
 					console.log("[auth] authorize: missing username or password");
 					return null;
 				}
 
-				const { env } = await getCloudflareContext({ async: true });
+				const { env, cf, ctx } = await getCloudflareContext({ async: true });
 				const db = getDb(env);
 				const repo = new UserRepositoryD1(db);
+				const siteRepo = new SiteSettingsRepositoryD1(db);
 				const user = await repo.findByUsername(username);
 				if (!user) {
 					console.log("[auth] authorize: no user found for username", username);
 					return null;
 				}
 
-				const passwordHash = md5(password);
-				const headTail = (s: string) =>
-					s.length >= 8 ? `${s.slice(0, 4)}...${s.slice(-4)}` : "(short)";
-				console.log("[auth] authorize: MD5 verification", {
-					computed: headTail(passwordHash),
-					fromDb: headTail(user.passwordHash),
-				});
-				if (passwordHash !== user.passwordHash) {
+				const verified = await verifyPassword(password, user.passwordHash);
+				if (!verified.ok) {
 					console.log("[auth] authorize: password mismatch for username", username);
 					return null;
+				}
+				if (verified.rehash) {
+					await repo.update(user.id, { passwordHash: verified.rehash });
+				}
+
+				const siteRow = await siteRepo.get();
+				const mfaEnabled = siteRow?.mfaEnabled ?? false;
+				const siteUrl = siteRow?.siteUrl?.trim();
+				const mfaActive = mfaEnabled && !!siteUrl;
+
+				if (mfaActive) {
+					if (!user.email?.trim()) {
+						console.log("[auth] authorize: MFA on but user has no email", user.id);
+						return null;
+					}
+					if (!otp) {
+						console.log("[auth] authorize: MFA required but no OTP");
+						return null;
+					}
+					const jar = await cookies();
+					const challengeId = jar.get(MFA_CHALLENGE_COOKIE)?.value;
+					if (!challengeId) {
+						console.log("[auth] authorize: MFA cookie missing");
+						return null;
+					}
+					const requestCtx: RequestContext = { env, cf, ctx };
+					const challengeSvc = new UserChallengeService(requestCtx);
+					const ok = await challengeSvc.verifyMfaOtpAndConsume(challengeId, user.id, otp);
+					if (!ok) {
+						console.log("[auth] authorize: invalid MFA code");
+						return null;
+					}
+					jar.delete(MFA_CHALLENGE_COOKIE);
 				}
 
 				console.log("[auth] authorize: success", {

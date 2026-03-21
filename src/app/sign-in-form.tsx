@@ -1,0 +1,150 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import Link from "next/link";
+import { beginMfaSignIn } from "@/app/actions/mfa-actions";
+import { submitSignIn } from "@/app/actions/sign-in-actions";
+
+type Props = {
+	mfaEnabled: boolean;
+	callbackUrl: string;
+};
+
+export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
+	const [step, setStep] = useState<"password" | "otp">("password");
+	const [username, setUsername] = useState("");
+	const [password, setPassword] = useState("");
+	const [otp, setOtp] = useState("");
+	const [error, setError] = useState<string | null>(null);
+	const [pending, startTransition] = useTransition();
+
+	const onPasswordSubmit = (e: React.FormEvent) => {
+		e.preventDefault();
+		setError(null);
+		startTransition(async () => {
+			if (!mfaEnabled) {
+				await submitSignIn({ username, password, callbackUrl });
+				return;
+			}
+			const r = await beginMfaSignIn(username, password);
+			if (r.ok) {
+				setStep("otp");
+				setOtp("");
+				return;
+			}
+			setError(r.error);
+		});
+	};
+
+	const onOtpSubmit = (e: React.FormEvent) => {
+		e.preventDefault();
+		setError(null);
+		startTransition(async () => {
+			await submitSignIn({ username, password, otp, callbackUrl });
+		});
+	};
+
+	if (step === "otp") {
+		return (
+			<form onSubmit={onOtpSubmit} className="space-y-6">
+				<p className="rounded-xl bg-brand-muted/30 px-3 py-2 text-sm text-foreground">
+					Enter the 6-digit code sent to your email.
+				</p>
+				<div className="space-y-2">
+					<label htmlFor="otp" className="block text-sm font-medium text-foreground">
+						Verification code
+					</label>
+					<input
+						id="otp"
+						name="otp"
+						type="text"
+						inputMode="numeric"
+						autoComplete="one-time-code"
+						pattern="[0-9]{6}"
+						maxLength={6}
+						required
+						value={otp}
+						onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+						className="w-full rounded-xl border border-brand-muted bg-background px-3 py-2 text-center tracking-[0.3em] text-foreground placeholder:text-foreground/50 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+						placeholder="000000"
+					/>
+				</div>
+				{error ? (
+					<p className="rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">{error}</p>
+				) : null}
+				<button
+					type="submit"
+					disabled={pending}
+					className="w-full rounded-full bg-brand px-4 py-2 font-medium text-white hover:bg-brand-muted focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50"
+				>
+					{pending ? "Signing in…" : "Verify and sign in"}
+				</button>
+				<button
+					type="button"
+					disabled={pending}
+					onClick={() => {
+						setStep("password");
+						setOtp("");
+						setError(null);
+					}}
+					className="w-full text-sm text-muted-foreground underline hover:text-foreground"
+				>
+					Back
+				</button>
+			</form>
+		);
+	}
+
+	return (
+		<form onSubmit={onPasswordSubmit} className="space-y-6">
+			<input type="hidden" name="callbackUrl" value={callbackUrl} readOnly />
+			<div className="space-y-2">
+				<label htmlFor="username" className="block text-sm font-medium text-foreground">
+					Username
+				</label>
+				<input
+					id="username"
+					name="username"
+					type="text"
+					required
+					autoComplete="username"
+					value={username}
+					onChange={(e) => setUsername(e.target.value)}
+					className="w-full rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground placeholder:text-foreground/50 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+					placeholder="Enter username"
+				/>
+			</div>
+			<div className="space-y-2">
+				<label htmlFor="password" className="block text-sm font-medium text-foreground">
+					Password
+				</label>
+				<input
+					id="password"
+					name="password"
+					type="password"
+					required
+					autoComplete="current-password"
+					value={password}
+					onChange={(e) => setPassword(e.target.value)}
+					className="w-full rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground placeholder:text-foreground/50 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+					placeholder="Enter password"
+				/>
+			</div>
+			{error ? (
+				<p className="rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">{error}</p>
+			) : null}
+			<button
+				type="submit"
+				disabled={pending}
+				className="w-full rounded-full bg-brand px-4 py-2 font-medium text-white hover:bg-brand-muted focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50"
+			>
+				{pending ? "Continue…" : mfaEnabled ? "Continue" : "Sign in"}
+			</button>
+			<p className="text-center text-sm">
+				<Link href="/forgot-password" className="text-muted-foreground underline hover:text-foreground">
+					Forgot password?
+				</Link>
+			</p>
+		</form>
+	);
+}

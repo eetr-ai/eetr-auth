@@ -7,6 +7,7 @@ import { OauthAuthorizationService } from "./oauth-authorization.service";
 import { OauthTokenService } from "./oauth-token.service";
 import { TokenActivityLogService } from "./token-activity-log.service";
 import { SiteSettingsService } from "./site-settings.service";
+import { UserChallengeService } from "./user-challenge.service";
 
 export interface Services {
 	userService: UserService;
@@ -17,6 +18,7 @@ export interface Services {
 	oauthTokenService: OauthTokenService;
 	tokenActivityLogService: TokenActivityLogService;
 	siteSettingsService: SiteSettingsService;
+	userChallengeService: UserChallengeService;
 }
 
 /**
@@ -32,5 +34,6 @@ export function getServices(ctx: RequestContext): Services {
 		oauthTokenService: new OauthTokenService(ctx),
 		tokenActivityLogService: new TokenActivityLogService(ctx),
 		siteSettingsService: new SiteSettingsService(ctx),
+		userChallengeService: new UserChallengeService(ctx),
 	};
 }

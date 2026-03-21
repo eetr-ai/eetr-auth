@@ -38,6 +38,7 @@ export interface UserRepository {
 	): Promise<void>;
 	list(): Promise<UserRecord[]>;
 	findByUsername(username: string): Promise<UserWithPassword | null>;
+	findByEmail(email: string): Promise<UserWithPassword | null>;
 	getById(id: string): Promise<UserRecord | null>;
 	update(id: string, updates: UserUpdateInput): Promise<void>;
 	delete(id: string): Promise<void>;

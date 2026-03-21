@@ -56,6 +56,28 @@ export class UserRepositoryD1 implements UserRepository {
 			: null;
 	}
 
+	async findByEmail(email: string): Promise<UserWithPassword | null> {
+		const normalized = email.trim().toLowerCase();
+		if (!normalized) return null;
+		const result = await this.db
+			.prepare(
+				"SELECT id, username, name, email, avatar_key as avatarKey, password_hash as passwordHash, is_admin as isAdmin FROM users WHERE lower(trim(email)) = ?"
+			)
+			.bind(normalized)
+			.first<{ id: string; username: string; name: string | null; email: string | null; avatarKey: string | null; passwordHash: string; isAdmin: number }>();
+		return result
+			? {
+					id: result.id,
+					username: result.username,
+					name: result.name,
+					email: result.email,
+					avatarKey: result.avatarKey,
+					passwordHash: result.passwordHash,
+					isAdmin: !!result.isAdmin,
+				}
+			: null;
+	}
+
 	async getById(id: string): Promise<UserRecord | null> {
 		const result = await this.db
 			.prepare("SELECT id, username, name, email, avatar_key as avatarKey, is_admin as isAdmin FROM users WHERE id = ?")

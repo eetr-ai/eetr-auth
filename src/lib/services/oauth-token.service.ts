@@ -1,4 +1,5 @@
 import { SignJWT, importPKCS8, jwtVerify, createLocalJWKSet, decodeJwt } from "jose";
+import { resolveIssuerBaseUrl } from "@/lib/config/issuer-base-url";
 import { getDb } from "@/lib/db";
 import type { RequestContext } from "@/lib/context/types";
 import { ClientRepositoryD1 } from "@/lib/repositories/client.repository.d1";
@@ -194,7 +195,7 @@ export class OauthTokenService {
 			(typeof env.JWT_PRIVATE_KEY === "string" ? env.JWT_PRIVATE_KEY : null) ??
 			(typeof process.env.JWT_PRIVATE_KEY === "string" ? process.env.JWT_PRIVATE_KEY : null);
 		const blogImages = env.BLOG_IMAGES as { get(key: string): Promise<{ body: ReadableStream } | null> } | undefined;
-		const issuer = (typeof env.ISSUER_BASE_URL === "string" ? env.ISSUER_BASE_URL : null) ?? "https://auth.progression-ai.com";
+		const issuer = resolveIssuerBaseUrl(env);
 		const jwksR2Key = (typeof env.JWKS_R2_KEY === "string" ? env.JWKS_R2_KEY : null) ?? JWKS_R2_KEY_DEFAULT;
 
 		const clientIdentifier = params.clientIdentifier;

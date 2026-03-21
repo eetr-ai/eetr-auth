@@ -62,6 +62,7 @@ enum SetupPageActionType {
 	SET_SITE_TITLE_INPUT = "SET_SITE_TITLE_INPUT",
 	SET_SITE_URL_INPUT = "SET_SITE_URL_INPUT",
 	SET_CDN_URL_INPUT = "SET_CDN_URL_INPUT",
+	SET_MFA_ENABLED_INPUT = "SET_MFA_ENABLED_INPUT",
 	SET_CLIENTS = "SET_CLIENTS",
 	SET_SELECTED_ADMIN_CLIENT_IDS = "SET_SELECTED_ADMIN_CLIENT_IDS",
 	SET_SITE_ERROR = "SET_SITE_ERROR",
@@ -86,6 +87,7 @@ interface SetupPageState {
 	siteTitleInput: string;
 	siteUrlInput: string;
 	cdnUrlInput: string;
+	mfaEnabledInput: boolean;
 	clients: ClientListItem[];
 	selectedAdminClientIds: string[];
 	siteError: string | null;
@@ -110,6 +112,7 @@ const initialState: SetupPageState = {
 	siteTitleInput: "",
 	siteUrlInput: "",
 	cdnUrlInput: "",
+	mfaEnabledInput: false,
 	clients: [],
 	selectedAdminClientIds: [],
 	siteError: null,
@@ -152,6 +155,7 @@ function reducer(
 				siteTitleInput: dto?.siteTitle ?? "",
 				siteUrlInput: dto?.siteUrl ?? "",
 				cdnUrlInput: dto?.cdnUrl ?? "",
+				mfaEnabledInput: dto?.mfaEnabled ?? false,
 			};
 		}
 		case SetupPageActionType.SET_SITE_TITLE_INPUT:
@@ -160,6 +164,8 @@ function reducer(
 			return { ...state, siteUrlInput: (action.data as string) ?? "" };
 		case SetupPageActionType.SET_CDN_URL_INPUT:
 			return { ...state, cdnUrlInput: (action.data as string) ?? "" };
+		case SetupPageActionType.SET_MFA_ENABLED_INPUT:
+			return { ...state, mfaEnabledInput: Boolean(action.data) };
 		case SetupPageActionType.SET_CLIENTS:
 			return { ...state, clients: (action.data as ClientListItem[]) ?? [] };
 		case SetupPageActionType.SET_SELECTED_ADMIN_CLIENT_IDS:
@@ -210,6 +216,7 @@ function SetupPageContent() {
 		siteTitleInput,
 		siteUrlInput,
 		cdnUrlInput,
+		mfaEnabledInput,
 		clients,
 		selectedAdminClientIds,
 		siteError,
@@ -360,6 +367,7 @@ function SetupPageContent() {
 				siteTitle: siteTitleInput.trim() || null,
 				siteUrl: siteUrlInput.trim() || null,
 				cdnUrl: cdnUrlInput.trim() || null,
+				mfaEnabled: mfaEnabledInput,
 			});
 			dispatch({ type: SetupPageActionType.SET_SITE_SETTINGS, data: dto });
 		} catch (err) {
@@ -566,6 +574,30 @@ function SetupPageContent() {
 								Used for public URLs to the uploaded site logo. Optional if you only use the default
 								static logo.
 							</p>
+						</div>
+						<div className="md:col-span-2">
+							<label className="flex cursor-pointer items-start gap-3 text-sm text-foreground">
+								<input
+									type="checkbox"
+									checked={mfaEnabledInput}
+									disabled={!siteSettings?.mfaCanEnable && !mfaEnabledInput}
+									onChange={(e) =>
+										dispatch({
+											type: SetupPageActionType.SET_MFA_ENABLED_INPUT,
+											data: e.target.checked,
+										})
+									}
+									className="mt-1 rounded border-brand-muted"
+								/>
+								<span>
+									<span className="font-medium">Require email verification (MFA) at sign-in</span>
+									<span className="mt-1 block text-xs font-normal text-muted-foreground">
+										Users receive a 6-digit code after entering their password. Requires Site URL,
+										RESEND_API_KEY, and an email on each account. Sender is no-reply@your site
+										domain (verify the domain in Resend).
+									</span>
+								</span>
+							</label>
 						</div>
 					</div>
 

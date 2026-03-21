@@ -2,7 +2,7 @@ import { getDb } from "@/lib/db";
 import type { RequestContext } from "@/lib/context/types";
 import { UserRepositoryD1 } from "@/lib/repositories/admin.repository.d1";
 import type { UserRecord } from "@/lib/repositories/admin.repository";
-import { md5 } from "@/lib/auth/md5";
+import { hashPassword } from "@/lib/auth/password-hash";
 import { getAvatarUrl, normalizeOptionalProfileField } from "@/lib/users/profile";
 
 interface UpdateUserInput {
@@ -53,7 +53,7 @@ export class UserService {
 			throw new Error("Username is required");
 		}
 		const id = crypto.randomUUID();
-		const passwordHash = md5(password);
+		const passwordHash = await hashPassword(password);
 		const normalizedName = normalizeOptionalProfileField(name);
 		const normalizedEmail = normalizeOptionalProfileField(email);
 		await this.userRepository.create(
@@ -102,7 +102,7 @@ export class UserService {
 			patch.email = normalizeOptionalProfileField(updates.email);
 		}
 		if (updates.password !== undefined && updates.password.trim()) {
-			patch.passwordHash = md5(updates.password);
+			patch.passwordHash = await hashPassword(updates.password);
 		}
 		if (updates.avatarKey !== undefined) {
 			patch.avatarKey = updates.avatarKey;
