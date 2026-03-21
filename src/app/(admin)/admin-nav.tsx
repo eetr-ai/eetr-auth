@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Settings, KeyRound, Fingerprint, Users, LogOut, ListTodo } from "lucide-react";
+import {
+	LayoutDashboard,
+	Settings,
+	KeyRound,
+	Fingerprint,
+	Users,
+	LogOut,
+	ListTodo,
+} from "lucide-react";
 import { logout } from "@/app/actions/user-actions";
 
 const navItems = [
@@ -14,14 +22,34 @@ const navItems = [
 	{ href: "/dashboard/logs", label: "Logs", icon: ListTodo },
 ];
 
-export function AdminNav() {
+export function AdminNav({
+	displayTitle,
+	displayLogoUrl,
+}: {
+	displayTitle: string;
+	displayLogoUrl: string;
+}) {
 	const pathname = usePathname();
 
 	return (
-		<aside className="flex w-56 flex-col border-r border-brand-muted bg-background">
-			<nav className="flex flex-1 flex-col gap-1 p-4">
+		<aside className="sticky top-0 flex h-screen max-h-dvh w-56 shrink-0 flex-col self-start overflow-hidden border-r border-brand-muted bg-background">
+			<div className="shrink-0 border-b border-brand-muted p-4">
+				<Link href="/dashboard" className="flex items-center gap-3 rounded-xl outline-none ring-brand focus-visible:ring-2">
+					{/* eslint-disable-next-line @next/next/no-img-element -- dynamic CDN or local paths */}
+					<img
+						src={displayLogoUrl}
+						alt=""
+						className="h-9 w-9 shrink-0 object-contain"
+						width={36}
+						height={36}
+					/>
+					<span className="truncate font-semibold text-foreground">{displayTitle}</span>
+				</Link>
+			</div>
+			<nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-4">
 				{navItems.map(({ href, label, icon: Icon }) => {
-					const isActive = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+					const isActive =
+						pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
 					return (
 						<Link
 							key={href}
@@ -38,7 +66,7 @@ export function AdminNav() {
 					);
 				})}
 			</nav>
-			<div className="border-t border-brand-muted p-4">
+			<div className="shrink-0 border-t border-brand-muted p-4">
 				<form action={logout}>
 					<button
 						type="submit"

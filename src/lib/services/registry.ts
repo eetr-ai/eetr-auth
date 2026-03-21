@@ -6,6 +6,7 @@ import { ClientService } from "./client.service";
 import { OauthAuthorizationService } from "./oauth-authorization.service";
 import { OauthTokenService } from "./oauth-token.service";
 import { TokenActivityLogService } from "./token-activity-log.service";
+import { SiteSettingsService } from "./site-settings.service";
 
 export interface Services {
 	userService: UserService;
@@ -15,6 +16,7 @@ export interface Services {
 	oauthAuthorizationService: OauthAuthorizationService;
 	oauthTokenService: OauthTokenService;
 	tokenActivityLogService: TokenActivityLogService;
+	siteSettingsService: SiteSettingsService;
 }
 
 /**
@@ -29,5 +31,6 @@ export function getServices(ctx: RequestContext): Services {
 		oauthAuthorizationService: new OauthAuthorizationService(ctx),
 		oauthTokenService: new OauthTokenService(ctx),
 		tokenActivityLogService: new TokenActivityLogService(ctx),
+		siteSettingsService: new SiteSettingsService(ctx),
 	};
 }

@@ -169,3 +169,21 @@ CREATE TABLE IF NOT EXISTS token_activity_log (
 
 CREATE INDEX IF NOT EXISTS idx_token_activity_log_created_at ON token_activity_log(created_at);
 CREATE INDEX IF NOT EXISTS idx_token_activity_log_request_type_env ON token_activity_log(request_type, environment_name, created_at);
+
+-- Site identity (singleton row id = 'default')
+CREATE TABLE IF NOT EXISTS site_settings (
+  id TEXT PRIMARY KEY CHECK (id = 'default'),
+  site_title TEXT,
+  site_url TEXT,
+  cdn_url TEXT,
+  logo_key TEXT
+);
+
+INSERT OR IGNORE INTO site_settings (id, site_title, site_url, cdn_url, logo_key)
+VALUES ('default', 'Eetr Auth', NULL, NULL, NULL);
+
+-- OAuth clients allowed for future admin API (internal clients.id)
+CREATE TABLE IF NOT EXISTS site_admin_api_clients (
+  client_row_id TEXT NOT NULL PRIMARY KEY,
+  FOREIGN KEY (client_row_id) REFERENCES clients(id) ON DELETE CASCADE
+);
