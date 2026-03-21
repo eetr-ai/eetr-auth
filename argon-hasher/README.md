@@ -30,7 +30,9 @@ View logs with:
 
 - `npx wrangler dev` (terminal output)
 - `npx wrangler tail` (deployed Worker)
-- [Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/) in the dashboard
+- **Dashboard:** Workers & Pages → this Worker → **Observability** (requires `[observability] enabled = true` in `wrangler.toml`, then redeploy)
+
+See [Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/).
 
 ## Toolchain
 

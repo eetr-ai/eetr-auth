@@ -3,6 +3,11 @@ name = "argon-hasher"
 main = "build/index.js"
 compatibility_date = "2025-03-01"
 
+# Workers Logs + dashboard Observability (requires wrangler ≥ 3.78.6). Redeploy after changing.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 # Paid Workers: Argon2 is CPU-heavy; raise if you hit default limits (see README).
 # [limits]
 # cpu_ms = 30_000
