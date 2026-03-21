@@ -1,23 +1,21 @@
 #!/usr/bin/env node
 /**
  * Create an admin user in local and/or remote D1.
+ *
+ * Hashing:
+ * - If ARGON_HASHER_HASH_URL or ARGON_HASHER_URL is set → POST /hash (Argon2 PHC).
+ * - Else → MD5 hex (same as app when `ARGON_HASHER` is not bound).
+ *
  * Usage: node scripts/create-admin.mjs <username> <password>
  *    or: ADMIN_USERNAME=x ADMIN_PASSWORD=y node scripts/create-admin.mjs
  *    or: USER_USERNAME=x USER_PASSWORD=y node scripts/create-admin.mjs
  * Options: --local-only | --remote-only (default: both)
  */
-import { randomBytes, randomUUID, pbkdf2 } from "node:crypto";
-import { promisify } from "node:util";
+import { randomUUID } from "node:crypto";
+import md5 from "md5";
 import { writeFileSync, unlinkSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
-
-const pbkdf2Async = promisify(pbkdf2);
-const PBKDF2_ITERATIONS = 210000;
-
-function encodeB64NoPad(buf) {
-	return Buffer.from(buf).toString("base64").replace(/=+$/, "");
-}
 
 const args = process.argv.slice(2);
 const localOnly = args.includes("--local-only");
@@ -41,10 +39,35 @@ function escapeSql(value) {
 	return String(value).replace(/'/g, "''");
 }
 
+async function hashPasswordViaHttp(plain) {
+	const full = process.env.ARGON_HASHER_HASH_URL?.trim();
+	const base = process.env.ARGON_HASHER_URL?.trim();
+	const url = full || (base ? `${base.replace(/\/$/, "")}/hash` : null);
+	if (!url) {
+		return null;
+	}
+	const res = await fetch(url, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ password: plain }),
+	});
+	if (!res.ok) {
+		const t = await res.text().catch(() => "");
+		throw new Error(`argon-hasher HTTP ${res.status}: ${t.slice(0, 200)}`);
+	}
+	const data = await res.json();
+	if (typeof data.hash !== "string" || !data.hash.startsWith("$argon2")) {
+		throw new Error("argon-hasher did not return an Argon2 PHC string");
+	}
+	return data.hash;
+}
+
 async function hashPassword(plain) {
-	const salt = randomBytes(16);
-	const hash = await pbkdf2Async(plain, salt, PBKDF2_ITERATIONS, 32, "sha256");
-	return `$pbkdf2-sha256$${PBKDF2_ITERATIONS}$${encodeB64NoPad(salt)}$${encodeB64NoPad(hash)}`;
+	const fromHttp = await hashPasswordViaHttp(plain);
+	if (fromHttp != null) {
+		return fromHttp;
+	}
+	return md5(plain);
 }
 
 const id = randomUUID();

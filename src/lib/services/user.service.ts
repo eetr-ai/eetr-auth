@@ -17,10 +17,12 @@ interface UpdateUserInput {
 export class UserService {
 	private readonly userRepository: UserRepositoryD1;
 	private readonly env: Record<string, unknown>;
+	private readonly cfEnv: CloudflareEnv;
 
 	constructor(ctx: RequestContext) {
 		const db = getDb(ctx.env);
 		this.userRepository = new UserRepositoryD1(db);
+		this.cfEnv = ctx.env;
 		this.env = ctx.env as unknown as Record<string, unknown>;
 	}
 
@@ -53,7 +55,7 @@ export class UserService {
 			throw new Error("Username is required");
 		}
 		const id = crypto.randomUUID();
-		const passwordHash = await hashPassword(password);
+		const passwordHash = await hashPassword(password, { argonHasher: this.cfEnv.ARGON_HASHER });
 		const normalizedName = normalizeOptionalProfileField(name);
 		const normalizedEmail = normalizeOptionalProfileField(email);
 		await this.userRepository.create(
@@ -102,7 +104,9 @@ export class UserService {
 			patch.email = normalizeOptionalProfileField(updates.email);
 		}
 		if (updates.password !== undefined && updates.password.trim()) {
-			patch.passwordHash = await hashPassword(updates.password);
+			patch.passwordHash = await hashPassword(updates.password, {
+				argonHasher: this.cfEnv.ARGON_HASHER,
+			});
 		}
 		if (updates.avatarKey !== undefined) {
 			patch.avatarKey = updates.avatarKey;

@@ -239,7 +239,7 @@ export class UserChallengeService {
 		if (row.expiresAt <= new Date().toISOString()) {
 			throw new Error("This reset link has expired.");
 		}
-		const hash = await hashPassword(newPassword);
+		const hash = await hashPassword(newPassword, { argonHasher: this.cfEnv.ARGON_HASHER });
 		await this.userRepo.update(userId, { passwordHash: hash });
 		await this.challengeRepo.markConsumed(challengeId, new Date().toISOString());
 	}
