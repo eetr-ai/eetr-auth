@@ -26,12 +26,14 @@ fn argon2_hasher() -> Result<Argon2<'static>> {
     Ok(Argon2::new(Algorithm::Argon2id, Version::V0x13, params))
 }
 
-fn require_service_binding(ctx: &Context) -> Result<()> {
-    let props = ctx
-        .props::<ServiceBindingProps>()
-        .map_err(|_| Error::RustError("forbidden".into()))?;
+/// Returns `Err(Response)` with status 403 when the invocation is not from a configured service binding with `internal = true`.
+fn require_service_binding(ctx: &Context) -> std::result::Result<(), Response> {
+    let props = match ctx.props::<ServiceBindingProps>() {
+        Ok(p) => p,
+        Err(_) => return Err(json_error(403, "forbidden").unwrap()),
+    };
     if !props.internal {
-        return Err(Error::RustError("forbidden".into()));
+        return Err(json_error(403, "forbidden").unwrap());
     }
     Ok(())
 }
@@ -77,7 +79,9 @@ struct VerifyResponse {
 }
 
 async fn handle_hash(mut req: Request, ctx: Context) -> Result<Response> {
-    require_service_binding(&ctx)?;
+    if let Err(resp) = require_service_binding(&ctx) {
+        return Ok(resp);
+    }
     let body: HashRequest = match req.json().await {
         Ok(b) => b,
         Err(_) => return json_error(400, "invalid JSON body"),
@@ -87,25 +91,27 @@ async fn handle_hash(mut req: Request, ctx: Context) -> Result<Response> {
     }
 
     let argon2 = argon2_hasher()?;
-    // 16 random bytes encoded in PHC salt string (see password-hash / SaltString).
+    // Salt: 16 random bytes, encoded as a PHC `SaltString`.
     let salt = SaltString::generate(&mut OsRng);
     let t0 = now_ms();
     let hash = argon2
         .hash_password(body.password.as_bytes(), &salt)
         .map_err(|e| Error::RustError(format!("hash failed: {e}")))?;
     let t1 = now_ms();
-    console_log!(
-        "argon2 hash: {:.2}ms",
-        (t1 - t0).max(0.0)
-    );
+    console_log!("argon2 hash: {:.2}ms", (t1 - t0).max(0.0));
 
-    json_response(200, &HashResponse {
-        hash: hash.to_string(),
-    })
+    json_response(
+        200,
+        &HashResponse {
+            hash: hash.to_string(),
+        },
+    )
 }
 
 async fn handle_verify(mut req: Request, ctx: Context) -> Result<Response> {
-    require_service_binding(&ctx)?;
+    if let Err(resp) = require_service_binding(&ctx) {
+        return Ok(resp);
+    }
     let body: VerifyRequest = match req.json().await {
         Ok(b) => b,
         Err(_) => return json_error(400, "invalid JSON body"),
@@ -124,10 +130,7 @@ async fn handle_verify(mut req: Request, ctx: Context) -> Result<Response> {
         .verify_password(body.password.as_bytes(), &parsed_hash)
         .is_ok();
     let t1 = now_ms();
-    console_log!(
-        "argon2 verify: {:.2}ms",
-        (t1 - t0).max(0.0)
-    );
+    console_log!("argon2 verify: {:.2}ms", (t1 - t0).max(0.0));
 
     json_response(200, &VerifyResponse { valid })
 }

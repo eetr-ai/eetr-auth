@@ -1,0 +1,4 @@
+[toolchain]
+# `worker-build` pulls deps that require a recent stable (e.g. `time` needs rustc ≥ 1.88).
+channel = "stable"
+targets = ["wasm32-unknown-unknown"]
