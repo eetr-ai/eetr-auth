@@ -145,11 +145,25 @@ async function verifyArgon2ViaHasherService(
 			body: JSON.stringify({ password: plain, hash: storedHash }),
 		})
 	);
-	if (!verifyRes.ok) return false;
+	if (!verifyRes.ok) {
+		logPasswordVerify({
+			step: "argon2_hasher",
+			outcome: "http_error",
+			status: verifyRes.status,
+			statusText: verifyRes.statusText,
+		});
+		return false;
+	}
 	try {
 		const data = (await verifyRes.json()) as { valid?: boolean };
-		return data.valid === true;
+		const valid = data.valid === true;
+		logPasswordVerify({
+			step: "argon2_hasher",
+			outcome: valid ? "valid" : "invalid_password",
+		});
+		return valid;
 	} catch {
+		logPasswordVerify({ step: "argon2_hasher", outcome: "bad_json_response" });
 		return false;
 	}
 }
@@ -172,14 +186,26 @@ export interface VerifyPasswordResult {
 /** Legacy 32-char hex MD5 in DB — independent of Argon2 service. */
 async function verifyLegacyMd5Hex(
 	plain: string,
-	storedHash: string
+	storedHash: string,
+	source: "direct" | "argon2_without_hasher"
 ): Promise<VerifyPasswordResult> {
+	logPasswordVerify({
+		step: "legacy_md5",
+		source,
+	});
 	const legacy = md5(plain);
 	const ok = legacy === storedHash.toLowerCase();
 	if (!ok) {
+		logPasswordVerify({ step: "legacy_md5", source, outcome: "mismatch" });
 		return { ok: false };
 	}
 	const rehash = await hashPasswordPbkdf2(plain);
+	logPasswordVerify({
+		step: "legacy_md5",
+		source,
+		outcome: "match",
+		rehashToPbkdf2: true,
+	});
 	return { ok: true, rehash };
 }
 
@@ -193,20 +219,46 @@ export async function verifyPassword(
 	storedHash: string,
 	options?: VerifyPasswordOptions
 ): Promise<VerifyPasswordResult> {
+	const kind = storedHashKind(storedHash);
+	logPasswordVerify({
+		step: "start",
+		storedKind: kind,
+		hasArgonHasherBinding: Boolean(options?.argonHasher),
+	});
+
 	if (isPbkdf2StoredHash(storedHash)) {
 		const ok = await verifyPbkdf2(plain, storedHash);
+		logPasswordVerify({
+			step: "pbkdf2",
+			outcome: ok ? "match" : "mismatch",
+		});
 		return { ok };
 	}
 	if (isArgon2StoredHash(storedHash)) {
 		const argonHasher = options?.argonHasher;
 		if (argonHasher) {
+			logPasswordVerify({ step: "route", path: "argon2_service" });
 			const ok = await verifyArgon2ViaHasherService(plain, storedHash, argonHasher);
 			if (ok) {
-				return { ok: true, rehash: await hashPasswordPbkdf2(plain) };
+				const rehash = await hashPasswordPbkdf2(plain);
+				logPasswordVerify({
+					step: "argon2_done",
+					outcome: "match",
+					rehashToPbkdf2: true,
+				});
+				return { ok: true, rehash };
 			}
+			logPasswordVerify({
+				step: "argon2_done",
+				outcome: "reject_no_md5_fallback",
+			});
 			return { ok: false };
 		}
-		return verifyLegacyMd5Hex(plain, storedHash);
+		logPasswordVerify({
+			step: "route",
+			path: "argon2_no_hasher_try_legacy_md5",
+		});
+		return verifyLegacyMd5Hex(plain, storedHash, "argon2_without_hasher");
 	}
-	return verifyLegacyMd5Hex(plain, storedHash);
+	return verifyLegacyMd5Hex(plain, storedHash, "direct");
 }
