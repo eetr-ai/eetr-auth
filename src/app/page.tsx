@@ -1,15 +1,30 @@
-import Image from "next/image";
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { AuthError, CredentialsSignin } from "next-auth";
 import { signIn, signOut, auth } from "@/auth";
+import { getPublicSiteSettings } from "@/lib/public-site-settings";
+
+export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+	const settings = await getPublicSiteSettings();
+	return {
+		title: settings.displayTitle,
+		description: `Sign in to ${settings.displayTitle}`,
+	};
+}
 
 export default async function HomePage({
 	searchParams,
 }: {
 	searchParams: Promise<{ error?: string; callbackUrl?: string }>;
 }) {
-	const session = await auth();
-	const { error, callbackUrl } = await searchParams;
+	const [session, site, { error, callbackUrl }] = await Promise.all([
+		auth(),
+		getPublicSiteSettings(),
+		searchParams,
+	]);
+	const { displayTitle, displayLogoUrl, siteUrl } = site;
 	const normalizedCallbackUrl = callbackUrl?.trim() ?? "";
 	const callbackTargetsAdmin =
 		normalizedCallbackUrl.startsWith("/dashboard") || normalizedCallbackUrl.startsWith("/admin");
@@ -24,18 +39,31 @@ export default async function HomePage({
 	}
 
 	return (
-		<div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-4">
+		<div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 text-foreground">
 			<div className="w-full max-w-sm space-y-8 rounded-xl border border-brand-muted bg-background p-8">
-				<div className="flex flex-col items-center gap-4">
-					<Image
-						src="/logo.png"
-						alt="ProgressionAI"
+				<div className="flex flex-col items-center gap-3">
+					{/* eslint-disable-next-line @next/next/no-img-element -- CDN or /public paths from site settings */}
+					<img
+						src={displayLogoUrl}
+						alt=""
 						width={120}
 						height={120}
-						priority
-						className="rounded-xl"
+						className="h-[120px] w-[120px] rounded-xl object-contain"
 					/>
-					<h1 className="text-2xl font-semibold text-foreground">Sign in</h1>
+					<div className="text-center">
+						<h1 className="text-2xl font-semibold text-foreground">{displayTitle}</h1>
+						<p className="mt-1 text-sm text-muted-foreground">Sign in</p>
+					</div>
+					{siteUrl ? (
+						<a
+							href={siteUrl}
+							target="_blank"
+							rel="noopener noreferrer"
+							className="text-xs text-muted-foreground underline hover:text-foreground"
+						>
+							{siteUrl.replace(/^https?:\/\//, "")}
+						</a>
+					) : null}
 				</div>
 				{error === "CredentialsSignin" && (
 					<p className="rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">
