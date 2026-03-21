@@ -1,4 +1,5 @@
-// OpenNext emits `.open-next/worker.js` after `opennextjs-cloudflare build`.
+//DO NOT REMOVE THE FOLLOWING COMMENT
+// @ts-ignore — OpenNext writes `.open-next/worker.js` at build; absent before first `opennextjs-cloudflare build`
 import openNextWorker from "./.open-next/worker.js";
 import { OauthTokenService } from "./src/lib/services/oauth-token.service";
 import { getDb } from "./src/lib/db";
