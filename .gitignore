@@ -1,0 +1,17 @@
+# Rust
+**/target/
+**/*.rs.bk
+
+# Node / Wrangler
+node_modules/
+.wrangler/
+dist/
+
+# OS / IDE
+.DS_Store
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log

@@ -1,0 +1,11 @@
+# Argon2 hasher Worker — deploy the target Worker before any caller that declares a [[services]] binding to it.
+name = "argon-hasher"
+main = "build/index.js"
+compatibility_date = "2025-03-01"
+
+# Paid Workers: Argon2 is CPU-heavy; raise if you hit default limits (see README).
+# [limits]
+# cpu_ms = 30_000
+
+[build]
+command = "cargo install -q worker-build --version '^0.7' && worker-build --release"
