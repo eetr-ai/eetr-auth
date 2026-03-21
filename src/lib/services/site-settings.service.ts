@@ -74,6 +74,17 @@ export class SiteSettingsService {
 		return this.getLogoPublicUrlForKey(key, cdnUrlOverride);
 	}
 
+	/** Absolute URL for `<img src>` in HTML emails (uploaded logo via CDN, or default asset on site origin). */
+	getEmailLogoAbsoluteUrl(siteUrlHttp: string, logoKey: string | null, cdnUrlOverride: string | null): string {
+		const raw = siteUrlHttp.trim();
+		const u = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
+		const key = normalizeOptional(logoKey);
+		if (!key) {
+			return `${u.origin}${DEFAULT_LOGO_PATH}`;
+		}
+		return this.getLogoPublicUrlForKey(key, cdnUrlOverride);
+	}
+
 	private getResendApiKey(): string | null {
 		const e = this.env;
 		const v =

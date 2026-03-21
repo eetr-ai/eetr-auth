@@ -13,18 +13,16 @@ import {
 	PASSWORD_RESET_JWT_TTL_SECONDS,
 } from "@/lib/auth/password-reset-jwt";
 import { resolveIssuerBaseUrl } from "@/lib/config/issuer-base-url";
+import {
+	buildTransactionalEmailHtml,
+	mfaOtpBodyHtml,
+	passwordResetBodyHtml,
+} from "@/lib/email/transactional-html";
 import { TransactionalEmailService } from "./transactional-email.service";
+import { SiteSettingsService } from "./site-settings.service";
 import type { UserWithPassword } from "@/lib/repositories/admin.repository";
 
 const MFA_OTP_TTL_MS = 10 * 60 * 1000;
-
-function escapeHtml(s: string): string {
-	return s
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;");
-}
 
 function randomSixDigitCode(): string {
 	const buf = new Uint32Array(1);
@@ -51,6 +49,7 @@ export class UserChallengeService {
 	private readonly userRepo: UserRepositoryD1;
 	private readonly challengeRepo: UserChallengeRepositoryD1;
 	private readonly siteRepo: SiteSettingsRepositoryD1;
+	private readonly siteSettings: SiteSettingsService;
 	private readonly mail: TransactionalEmailService;
 	private readonly env: Record<string, unknown>;
 
@@ -59,6 +58,7 @@ export class UserChallengeService {
 		this.userRepo = new UserRepositoryD1(db);
 		this.challengeRepo = new UserChallengeRepositoryD1(db);
 		this.siteRepo = new SiteSettingsRepositoryD1(db);
+		this.siteSettings = new SiteSettingsService(ctx);
 		this.mail = new TransactionalEmailService(ctx);
 		this.env = ctx.env as unknown as Record<string, unknown>;
 	}
@@ -100,23 +100,22 @@ export class UserChallengeService {
 		});
 
 		const displayTitle = site?.siteTitle?.trim() || "Sign in";
-		const logoUrl =
-			site?.logoKey && site?.cdnUrl
-				? `${site.cdnUrl.replace(/\/+$/, "")}/${site.logoKey.replace(/^\/+/, "")}`
-				: null;
-
-		const from = this.mail.noReplyFromAddress(
-			siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`
+		const siteUrlHttp = siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`;
+		const logoUrl = this.siteSettings.getEmailLogoAbsoluteUrl(
+			siteUrlHttp,
+			site?.logoKey ?? null,
+			site?.cdnUrl ?? null
 		);
-		const html = `
-<!DOCTYPE html>
-<html><body style="font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
-  ${logoUrl ? `<p><img src="${escapeHtml(logoUrl)}" alt="" width="120" height="120" style="object-fit:contain;" /></p>` : ""}
-  <h1 style="font-size: 20px;">${escapeHtml(displayTitle)}</h1>
-  <p>Your verification code is:</p>
-  <p style="font-size: 28px; letter-spacing: 0.2em; font-weight: bold;">${escapeHtml(code)}</p>
-  <p style="color: #666; font-size: 14px;">This code expires in 10 minutes. If you did not try to sign in, ignore this email.</p>
-</body></html>`;
+		const logoAlt = this.siteSettings.getDisplaySiteTitle(site?.siteTitle);
+
+		const from = this.mail.noReplyFromAddress(siteUrlHttp);
+		const html = buildTransactionalEmailHtml({
+			heading: displayTitle,
+			logoUrl,
+			logoAlt,
+			bodyHtml: mfaOtpBodyHtml(code),
+			footerLine: `Sent by ${logoAlt}. If you did not try to sign in, you can ignore this email.`,
+		});
 
 		await this.mail.send({
 			from,
@@ -194,33 +193,33 @@ export class UserChallengeService {
 
 		const base = resolveIssuerBaseUrl(this.env);
 		const resetUrl = `${base}/reset-password?token=${encodeURIComponent(token)}`;
+		const cancelUrl = `${base}/reset-password/cancel?token=${encodeURIComponent(token)}`;
 
 		const displayTitle = site?.siteTitle?.trim() || "Password reset";
-		const logoUrl =
-			site?.logoKey && site?.cdnUrl
-				? `${site.cdnUrl.replace(/\/+$/, "")}/${site.logoKey.replace(/^\/+/, "")}`
-				: null;
-
-		const from = this.mail.noReplyFromAddress(
-			siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`
+		const siteUrlHttp = siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`;
+		const logoUrl = this.siteSettings.getEmailLogoAbsoluteUrl(
+			siteUrlHttp,
+			site?.logoKey ?? null,
+			site?.cdnUrl ?? null
 		);
+		const logoAlt = this.siteSettings.getDisplaySiteTitle(site?.siteTitle);
 
-		const html = `
-<!DOCTYPE html>
-<html><body style="font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
-  ${logoUrl ? `<p><img src="${escapeHtml(logoUrl)}" alt="" width="120" height="120" style="object-fit:contain;" /></p>` : ""}
-  <h1 style="font-size: 20px;">${escapeHtml(displayTitle)}</h1>
-  <p>We received a request to reset your password. Click the link below (valid for ${Math.floor(PASSWORD_RESET_JWT_TTL_SECONDS / 60)} minutes):</p>
-  <p><a href="${escapeHtml(resetUrl)}">${escapeHtml(resetUrl)}</a></p>
-  <p style="color: #666; font-size: 14px;">If you did not request this, you can ignore this email.</p>
-</body></html>`;
+		const from = this.mail.noReplyFromAddress(siteUrlHttp);
+		const validMinutes = Math.floor(PASSWORD_RESET_JWT_TTL_SECONDS / 60);
+		const html = buildTransactionalEmailHtml({
+			heading: displayTitle,
+			logoUrl,
+			logoAlt,
+			bodyHtml: passwordResetBodyHtml(resetUrl, cancelUrl, validMinutes),
+			footerLine: `Sent by ${logoAlt}. If you did not request a password reset, you can ignore this email.`,
+		});
 
 		await this.mail.send({
 			from,
 			to: user.email.trim(),
 			subject: `Reset your password — ${displayTitle}`,
 			html,
-			text: `Reset your password: ${resetUrl}`,
+			text: `Reset your password: ${resetUrl}\n\nIf you did not request this, cancel the reset (invalidates the link): ${cancelUrl}`,
 		});
 	}
 
@@ -239,5 +238,24 @@ export class UserChallengeService {
 		const hash = await hashPassword(newPassword);
 		await this.userRepo.update(userId, { passwordHash: hash });
 		await this.challengeRepo.markConsumed(challengeId, new Date().toISOString());
+	}
+
+	/**
+	 * Deletes the password_reset challenge so the emailed link stops working.
+	 * Uses the same JWT as the reset link.
+	 */
+	async cancelPasswordReset(token: string): Promise<void> {
+		const { challengeId, userId } = await verifyPasswordResetJwt(this.env, token);
+		const row = await this.challengeRepo.getById(challengeId);
+		if (!row) {
+			return;
+		}
+		if (row.kind !== "password_reset" || row.userId !== userId) {
+			throw new Error("Invalid or expired reset link.");
+		}
+		if (row.consumedAt) {
+			throw new Error("This reset link is no longer valid.");
+		}
+		await this.challengeRepo.deleteById(challengeId);
 	}
 }

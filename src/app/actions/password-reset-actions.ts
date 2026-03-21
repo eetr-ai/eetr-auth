@@ -17,3 +17,11 @@ export async function completePasswordReset(token: string, newPassword: string) 
 		return { ok: true as const };
 	});
 }
+
+export async function cancelPasswordReset(token: string) {
+	return onPublicServerAction(async (_ctx, getServices) => {
+		const { userChallengeService } = getServices();
+		await userChallengeService.cancelPasswordReset(token);
+		return { ok: true as const };
+	});
+}
