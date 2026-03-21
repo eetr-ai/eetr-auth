@@ -1,4 +1,5 @@
 import { md5 } from "@/lib/auth/md5";
+import type { HashMethod } from "@/lib/config/hash-method";
 
 /** Any valid https origin; routing is by service binding, not DNS. */
 const ARGON_HASHER_HASH_URL = "https://argon-hasher.internal/hash";
@@ -51,10 +52,16 @@ export async function hashPasswordArgon2ViaService(
 export interface HashPasswordOptions {
 	/** When set → Argon2 PHC via `POST /hash`. When unset → MD5 hex. */
 	argonHasher?: Fetcher;
+	/** `argon` requires `argonHasher`. `md5` uses MD5 hex only (ignores binding). */
+	hashMethod?: HashMethod;
 }
 
 export async function hashPassword(plain: string, options?: HashPasswordOptions): Promise<string> {
-	if (options?.argonHasher) {
+	const method = options?.hashMethod ?? "md5";
+	if (method === "argon") {
+		if (!options?.argonHasher) {
+			throw new Error("HASH_METHOD=argon requires ARGON_HASHER binding");
+		}
 		return hashPasswordArgon2ViaService(plain, options.argonHasher);
 	}
 	return md5(plain);
@@ -97,6 +104,7 @@ async function verifyArgon2ViaHasherService(
 
 export interface VerifyPasswordOptions {
 	argonHasher?: Fetcher;
+	hashMethod?: HashMethod;
 }
 
 export interface VerifyPasswordResult {
@@ -106,56 +114,66 @@ export interface VerifyPasswordResult {
 }
 
 /**
- * Verify: **argon-hasher** when `argonHasher` is set (Argon2 PHC via `/verify`, or MD5 hex → upgrade).
- * **Without** binding: **MD5 hex only** (32-char rows).
+ * Verify: depends on `hashMethod`.
+ * - **argon**: requires `argonHasher`; Argon2 via `/verify` or MD5 hex → upgrade. Never MD5-only fallback without binding.
+ * - **md5**: MD5 hex rows only; rejects Argon2 PHC stored hashes.
  */
 export async function verifyPassword(
 	plain: string,
 	storedHash: string,
 	options?: VerifyPasswordOptions
 ): Promise<VerifyPasswordResult> {
+	const method = options?.hashMethod ?? "md5";
 	const argonHasher = options?.argonHasher;
 	const kind = storedHashKind(storedHash);
 	logPasswordVerify({
 		step: "start",
 		storedKind: kind,
+		hashMethod: method,
 		hasArgonHasherBinding: Boolean(argonHasher),
 	});
 
-	if (argonHasher) {
+	if (method === "md5") {
 		if (isArgon2StoredHash(storedHash)) {
-			logPasswordVerify({ step: "route", path: "argon2_service" });
-			const ok = await verifyArgon2ViaHasherService(plain, storedHash, argonHasher);
-			if (ok) {
-				logPasswordVerify({ step: "done", outcome: "argon2_match" });
-				return { ok: true };
-			}
-			logPasswordVerify({ step: "done", outcome: "argon2_mismatch" });
+			logPasswordVerify({ step: "done", outcome: "md5_mode_rejects_argon2_stored" });
 			return { ok: false };
 		}
-		if (isMd5HexStoredHash(storedHash)) {
-			const legacy = md5(plain);
-			const ok = legacy === storedHash.toLowerCase();
-			logPasswordVerify({ step: "route", path: "md5_then_upgrade", outcome: ok ? "match" : "mismatch" });
-			if (!ok) {
-				return { ok: false };
-			}
-			const rehash = await hashPasswordArgon2ViaService(plain, argonHasher);
-			logPasswordVerify({ step: "done", outcome: "md5_upgraded_to_argon2" });
-			return { ok: true, rehash };
+		if (!isMd5HexStoredHash(storedHash)) {
+			logPasswordVerify({ step: "done", outcome: "unsupported_stored_format" });
+			return { ok: false };
 		}
-		logPasswordVerify({ step: "done", outcome: "unsupported_stored_format" });
+		const ok = md5(plain) === storedHash.toLowerCase();
+		logPasswordVerify({ step: "done", path: "md5_only", outcome: ok ? "match" : "mismatch" });
+		return { ok };
+	}
+
+	const hasher = argonHasher;
+	if (!hasher) {
+		logPasswordVerify({ step: "done", outcome: "argon_mode_requires_binding" });
 		return { ok: false };
 	}
 
-	if (!isMd5HexStoredHash(storedHash)) {
-		logPasswordVerify({
-			step: "done",
-			outcome: "md5_fallback_requires_32_hex_stored",
-		});
+	if (isArgon2StoredHash(storedHash)) {
+		logPasswordVerify({ step: "route", path: "argon2_service" });
+		const ok = await verifyArgon2ViaHasherService(plain, storedHash, hasher);
+		if (ok) {
+			logPasswordVerify({ step: "done", outcome: "argon2_match" });
+			return { ok: true };
+		}
+		logPasswordVerify({ step: "done", outcome: "argon2_mismatch" });
 		return { ok: false };
 	}
-	const ok = md5(plain) === storedHash.toLowerCase();
-	logPasswordVerify({ step: "done", path: "md5_only", outcome: ok ? "match" : "mismatch" });
-	return { ok };
+	if (isMd5HexStoredHash(storedHash)) {
+		const legacy = md5(plain);
+		const ok = legacy === storedHash.toLowerCase();
+		logPasswordVerify({ step: "route", path: "md5_then_upgrade", outcome: ok ? "match" : "mismatch" });
+		if (!ok) {
+			return { ok: false };
+		}
+		const rehash = await hashPasswordArgon2ViaService(plain, hasher);
+		logPasswordVerify({ step: "done", outcome: "md5_upgraded_to_argon2" });
+		return { ok: true, rehash };
+	}
+	logPasswordVerify({ step: "done", outcome: "unsupported_stored_format" });
+	return { ok: false };
 }

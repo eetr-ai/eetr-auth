@@ -81,6 +81,8 @@
 		"AUTH_URL": "https://auth.progression-ai.com/api/auth/session",
 		"ISSUER_BASE_URL": "https://auth.progression-ai.com",
 		"JWKS_CDN_BASE_URL": "https://cdn.progression-ai.com",
-		"JWKS_R2_KEY": "jwks.json"
+		"JWKS_R2_KEY": "jwks.json",
+		"HASH_METHOD": "argon",
+		"MFA_OTP_MAX_ATTEMPTS": "5"
 	}
 }

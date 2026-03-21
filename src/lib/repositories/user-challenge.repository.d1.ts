@@ -8,7 +8,7 @@ export class UserChallengeRepositoryD1 implements UserChallengeRepository {
 	constructor(private readonly db: D1Database) {}
 
 	async insert(
-		row: Omit<UserChallengeRow, "consumedAt"> & { consumedAt?: null }
+		row: Omit<UserChallengeRow, "consumedAt" | "otpFailedAttempts"> & { consumedAt?: null }
 	): Promise<void> {
 		await this.db
 			.prepare(
@@ -30,7 +30,8 @@ export class UserChallengeRepositoryD1 implements UserChallengeRepository {
 		const r = await this.db
 			.prepare(
 				`SELECT id, user_id as userId, kind, code_hash as codeHash, expires_at as expiresAt,
-            created_at as createdAt, consumed_at as consumedAt
+            created_at as createdAt, consumed_at as consumedAt,
+            otp_failed_attempts as otpFailedAttempts
          FROM user_challenges WHERE id = ?`
 			)
 			.bind(id)
@@ -42,6 +43,7 @@ export class UserChallengeRepositoryD1 implements UserChallengeRepository {
 				expiresAt: string;
 				createdAt: string;
 				consumedAt: string | null;
+				otpFailedAttempts: number;
 			}>();
 		if (!r) return null;
 		return {
@@ -52,6 +54,7 @@ export class UserChallengeRepositoryD1 implements UserChallengeRepository {
 			expiresAt: r.expiresAt,
 			createdAt: r.createdAt,
 			consumedAt: r.consumedAt,
+			otpFailedAttempts: r.otpFailedAttempts ?? 0,
 		};
 	}
 
@@ -72,5 +75,17 @@ export class UserChallengeRepositoryD1 implements UserChallengeRepository {
 			.bind(iso)
 			.run();
 		return result.meta.changes ?? 0;
+	}
+
+	async incrementOtpFailedAttempts(id: string): Promise<number | null> {
+		const r = await this.db
+			.prepare(
+				`UPDATE user_challenges SET otp_failed_attempts = otp_failed_attempts + 1
+         WHERE id = ? AND kind = 'mfa_otp'
+         RETURNING otp_failed_attempts as otpFailedAttempts`
+			)
+			.bind(id)
+			.first<{ otpFailedAttempts: number }>();
+		return r ? r.otpFailedAttempts : null;
 	}
 }

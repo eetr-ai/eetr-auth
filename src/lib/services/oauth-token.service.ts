@@ -13,6 +13,7 @@ import type {
 } from "@/lib/repositories/refresh-token.repository";
 import type { AccessTokenActivity } from "@/lib/repositories/token.repository";
 import { OAuthServiceError } from "./oauth.types";
+import { resolveHmacKey, verifyClientSecretAgainstStored } from "@/lib/auth/secret-at-rest";
 
 const JWKS_R2_KEY_DEFAULT = "jwks.json";
 
@@ -150,8 +151,17 @@ export class OauthTokenService {
 		}
 		const client = await this.clientRepo.getByClientIdentifier(clientId);
 		logTokenStep("authenticate_client_lookup", t0);
-		if (!client || client.clientSecret !== clientSecret) {
+		if (!client) {
 			throw new OAuthServiceError("invalid_client", "Invalid client credentials.", 401);
+		}
+		const env = this.ctx.env as unknown as Record<string, unknown>;
+		const hmacKey = resolveHmacKey(env);
+		const v = await verifyClientSecretAgainstStored(clientSecret, client.clientSecret, hmacKey);
+		if (!v.ok) {
+			throw new OAuthServiceError("invalid_client", "Invalid client credentials.", 401);
+		}
+		if (v.upgradeToStored) {
+			await this.clientRepo.updateSecret(client.id, v.upgradeToStored);
 		}
 		const nowIso = new Date().toISOString();
 		if (client.expiresAt && client.expiresAt <= nowIso) {

@@ -2,9 +2,9 @@
 /**
  * Create an admin user in local and/or remote D1.
  *
- * Hashing:
- * - If ARGON_HASHER_HASH_URL or ARGON_HASHER_URL is set → POST /hash (Argon2 PHC).
- * - Else → MD5 hex (same as app when `ARGON_HASHER` is not bound).
+ * Hashing (align with app `HASH_METHOD`):
+ * - `HASH_METHOD=argon` → POST /hash via ARGON_HASHER_HASH_URL or ARGON_HASHER_URL (required; throws if unset).
+ * - `HASH_METHOD=md5` or unset → MD5 hex only (does not use Argon URLs).
  *
  * Usage: node scripts/create-admin.mjs <username> <password>
  *    or: ADMIN_USERNAME=x ADMIN_PASSWORD=y node scripts/create-admin.mjs
@@ -62,9 +62,22 @@ async function hashPasswordViaHttp(plain) {
 	return data.hash;
 }
 
+function resolveHashMethod() {
+	const raw = (process.env.HASH_METHOD ?? "").trim().toLowerCase();
+	if (raw === "md5") return "md5";
+	//the default is argon
+	return "argon";
+}
+
 async function hashPassword(plain) {
-	const fromHttp = await hashPasswordViaHttp(plain);
-	if (fromHttp != null) {
+	const method = resolveHashMethod();
+	if (method === "argon") {
+		const fromHttp = await hashPasswordViaHttp(plain);
+		if (fromHttp == null) {
+			throw new Error(
+				"HASH_METHOD=argon requires ARGON_HASHER_HASH_URL or ARGON_HASHER_URL (argon-hasher /hash), same as the ARGON_HASHER binding in the app."
+			);
+		}
 		return fromHttp;
 	}
 	return md5(plain);

@@ -20,6 +20,7 @@
 		"db:create-user": "npm run db:create-admin",
 		"db:create-user:local": "npm run db:create-admin:local",
 		"db:create-user:remote": "npm run db:create-admin:remote",
+		"setup:hmac-key": "bash scripts/setup-hmac-key.sh",
 		"jwt:setup-secrets": "node scripts/setup-jwt-secrets.mjs",
 		"jwt:generate-local-cert": "node scripts/generate-local-jwt-cert.mjs"
 	},

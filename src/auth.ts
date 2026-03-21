@@ -6,6 +6,7 @@ import { getDb } from "@/lib/db";
 import { UserRepositoryD1 } from "@/lib/repositories/admin.repository.d1";
 import { SiteSettingsRepositoryD1 } from "@/lib/repositories/site-settings.repository.d1";
 import { verifyPassword } from "@/lib/auth/password-hash";
+import { resolveHashMethod } from "@/lib/config/hash-method";
 import { getAvatarUrl } from "@/lib/users/profile";
 import type { RequestContext } from "@/lib/context/types";
 import { UserChallengeService } from "@/lib/services/user-challenge.service";
@@ -41,6 +42,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
 				const verified = await verifyPassword(password, user.passwordHash, {
 					argonHasher: env.ARGON_HASHER,
+					hashMethod: resolveHashMethod(env as unknown as Record<string, unknown>),
 				});
 				if (!verified.ok) {
 					console.log("[auth] authorize: password mismatch for username", username);

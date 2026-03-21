@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/db";
 import type { RequestContext } from "@/lib/context/types";
+import { hashClientSecretForStorage, resolveHmacKey } from "@/lib/auth/secret-at-rest";
 import { ClientRepositoryD1 } from "@/lib/repositories/client.repository.d1";
 import type {
 	Client,
@@ -37,10 +38,12 @@ export interface CreateClientResult {
 
 export class ClientService {
 	private readonly clientRepo: ClientRepositoryD1;
+	private readonly env: Record<string, unknown>;
 
 	constructor(ctx: RequestContext) {
 		const db = getDb(ctx.env);
 		this.clientRepo = new ClientRepositoryD1(db);
+		this.env = ctx.env as unknown as Record<string, unknown>;
 	}
 
 	async list(environmentId?: string): Promise<Client[]> {
@@ -66,13 +69,18 @@ export class ClientService {
 	}
 
 	async create(params: CreateClientParams): Promise<CreateClientResult> {
+		const hmacKey = resolveHmacKey(this.env);
+		if (!hmacKey) {
+			throw new Error("HMAC_KEY is required to create OAuth clients (set in Wrangler secrets or .dev.vars).");
+		}
 		const id = crypto.randomUUID();
 		const clientId = generateClientId();
 		const clientSecret = generateClientSecret();
+		const clientSecretStored = await hashClientSecretForStorage(clientSecret, hmacKey);
 		await this.clientRepo.create({
 			id,
 			client_id: clientId,
-			client_secret: clientSecret,
+			client_secret: clientSecretStored,
 			environment_id: params.environmentId,
 			created_by: params.createdBy,
 			expires_at: params.expiresAt ?? null,
@@ -118,10 +126,15 @@ export class ClientService {
 	}
 
 	async rotateSecret(id: string): Promise<{ client: Client; clientSecret: string } | null> {
+		const hmacKey = resolveHmacKey(this.env);
+		if (!hmacKey) {
+			throw new Error("HMAC_KEY is required to rotate OAuth client secrets (set in Wrangler secrets or .dev.vars).");
+		}
 		const client = await this.clientRepo.getById(id);
 		if (!client) return null;
 		const newSecret = generateClientSecret();
-		await this.clientRepo.updateSecret(id, newSecret);
+		const stored = await hashClientSecretForStorage(newSecret, hmacKey);
+		await this.clientRepo.updateSecret(id, stored);
 		const updated = await this.clientRepo.getById(id);
 		return updated ? { client: updated, clientSecret: newSecret } : null;
 	}

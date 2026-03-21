@@ -192,6 +192,7 @@ CREATE TABLE IF NOT EXISTS user_challenges (
   expires_at TEXT NOT NULL,
   created_at TEXT NOT NULL,
   consumed_at TEXT,
+  otp_failed_attempts INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 

@@ -3,6 +3,7 @@ import type { RequestContext } from "@/lib/context/types";
 import { UserRepositoryD1 } from "@/lib/repositories/admin.repository.d1";
 import type { UserRecord } from "@/lib/repositories/admin.repository";
 import { hashPassword } from "@/lib/auth/password-hash";
+import { resolveHashMethod } from "@/lib/config/hash-method";
 import { getAvatarUrl, normalizeOptionalProfileField } from "@/lib/users/profile";
 
 interface UpdateUserInput {
@@ -55,7 +56,10 @@ export class UserService {
 			throw new Error("Username is required");
 		}
 		const id = crypto.randomUUID();
-		const passwordHash = await hashPassword(password, { argonHasher: this.cfEnv.ARGON_HASHER });
+		const passwordHash = await hashPassword(password, {
+			argonHasher: this.cfEnv.ARGON_HASHER,
+			hashMethod: resolveHashMethod(this.env),
+		});
 		const normalizedName = normalizeOptionalProfileField(name);
 		const normalizedEmail = normalizeOptionalProfileField(email);
 		await this.userRepository.create(
@@ -106,6 +110,7 @@ export class UserService {
 		if (updates.password !== undefined && updates.password.trim()) {
 			patch.passwordHash = await hashPassword(updates.password, {
 				argonHasher: this.cfEnv.ARGON_HASHER,
+				hashMethod: resolveHashMethod(this.env),
 			});
 		}
 		if (updates.avatarKey !== undefined) {

@@ -1,5 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
-import { Buffer } from "node:buffer";
 import { getDb } from "@/lib/db";
 import type { RequestContext } from "@/lib/context/types";
 import { UserRepositoryD1 } from "@/lib/repositories/admin.repository.d1";
@@ -13,6 +11,9 @@ import {
 	PASSWORD_RESET_JWT_TTL_SECONDS,
 } from "@/lib/auth/password-reset-jwt";
 import { resolveIssuerBaseUrl } from "@/lib/config/issuer-base-url";
+import { resolveHashMethod } from "@/lib/config/hash-method";
+import { resolveMfaOtpMaxAttempts } from "@/lib/config/mfa-otp-max-attempts";
+import { timingSafeEqualHex } from "@/lib/crypto/hmac-sha256";
 import {
 	buildTransactionalEmailHtml,
 	mfaOtpBodyHtml,
@@ -34,15 +35,6 @@ async function hashMfaOtp(challengeId: string, code: string): Promise<string> {
 	const raw = `${challengeId}:${code}:${getAuthSecret()}`;
 	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(raw));
 	return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-function timingSafeEqualHex(a: string, b: string): boolean {
-	if (a.length !== b.length) return false;
-	try {
-		return timingSafeEqual(Buffer.from(a, "hex"), Buffer.from(b, "hex"));
-	} catch {
-		return false;
-	}
 }
 
 export class UserChallengeService {
@@ -144,6 +136,11 @@ export class UserChallengeService {
 		}
 		const expected = await hashMfaOtp(challengeId, code.trim());
 		if (!timingSafeEqualHex(expected, row.codeHash ?? "")) {
+			const maxAttempts = resolveMfaOtpMaxAttempts(this.env);
+			const newCount = await this.challengeRepo.incrementOtpFailedAttempts(challengeId);
+			if (newCount != null && newCount >= maxAttempts) {
+				await this.challengeRepo.deleteById(challengeId);
+			}
 			return false;
 		}
 		await this.challengeRepo.deleteById(challengeId);
@@ -239,7 +236,10 @@ export class UserChallengeService {
 		if (row.expiresAt <= new Date().toISOString()) {
 			throw new Error("This reset link has expired.");
 		}
-		const hash = await hashPassword(newPassword, { argonHasher: this.cfEnv.ARGON_HASHER });
+		const hash = await hashPassword(newPassword, {
+			argonHasher: this.cfEnv.ARGON_HASHER,
+			hashMethod: resolveHashMethod(this.env),
+		});
 		await this.userRepo.update(userId, { passwordHash: hash });
 		await this.challengeRepo.markConsumed(challengeId, new Date().toISOString());
 	}
