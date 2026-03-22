@@ -54,6 +54,7 @@ wrangler.generated.jsonc
 infra/terraform/terraform.tfvars
 infra/terraform/.terraform/
 infra/out/terraform.tf.json
+infra/terraform/terraform.tfstate
 
 
 !.dev.vars.example
