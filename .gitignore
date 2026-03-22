@@ -48,6 +48,12 @@ next-env.d.ts
 # wrangler files
 .wrangler
 .dev.vars*
+wrangler.generated.jsonc
+
+# Terraform / infra (secrets and generated outputs)
+infra/terraform/terraform.tfvars
+infra/terraform/.terraform/
+infra/out/terraform.tf.json
 
 
 !.dev.vars.example

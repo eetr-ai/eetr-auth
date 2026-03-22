@@ -8,11 +8,12 @@
 		"start": "next start",
 		"lint": "next lint",
 		"deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+		"deploy:infra": "opennextjs-cloudflare build && opennextjs-cloudflare deploy -c wrangler.generated.jsonc",
 		"upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
 		"preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
 		"cf-typegen": "wrangler types --env-interface CloudflareEnv ./cloudflare-env.d.ts",
-		"db:migrate": "wrangler d1 execute progression-ai-auth --local --file=./db/schema.sql",
-		"db:migrate:remote": "wrangler d1 execute progression-ai-auth --remote --file=./db/schema.sql",
+		"db:migrate": "node scripts/run-d1-migrate.mjs --local",
+		"db:migrate:remote": "node scripts/run-d1-migrate.mjs --remote",
 		"db:bootstrap": "npm run db:migrate && npm run db:migrate:remote",
 		"db:create-admin": "node scripts/create-admin.mjs",
 		"db:create-admin:local": "node scripts/create-admin.mjs --local-only",
@@ -22,7 +23,10 @@
 		"db:create-user:remote": "npm run db:create-admin:remote",
 		"setup:hmac-key": "bash scripts/setup-hmac-key.sh",
 		"jwt:setup-secrets": "node scripts/setup-jwt-secrets.mjs",
-		"jwt:generate-local-cert": "node scripts/generate-local-jwt-cert.mjs"
+		"jwt:generate-local-cert": "node scripts/generate-local-jwt-cert.mjs",
+		"infra:terraform-output": "node scripts/terraform-output.mjs",
+		"infra:render-wrangler": "node scripts/render-wrangler-config.mjs --tf-json infra/out/terraform.tf.json",
+		"infra:provision": "node scripts/provision-env.mjs"
 	},
 	"dependencies": {
 		"@eetr/react-reducer-utils": "^0.1.1",
@@ -44,6 +48,7 @@
 		"@types/react-dom": "^19.1.5",
 		"eslint": "^9",
 		"eslint-config-next": "15.4.6",
+		"strip-json-comments": "^5.0.1",
 		"tailwindcss": "^4",
 		"typescript": "^5.7.4",
 		"wrangler": "^4.69.0"

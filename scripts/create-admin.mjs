@@ -97,9 +97,10 @@ try {
 	if (!existsSync(tmpDir)) mkdirSync(tmpDir, { recursive: true });
 	writeFileSync(sqlPath, sql, "utf8");
 
+	const dbName = process.env.D1_DATABASE_NAME || "progression-ai-auth";
 	const run = (target) => {
 		const flag = target === "local" ? "--local" : "--remote";
-		execSync(`npx wrangler d1 execute progression-ai-auth ${flag} --file=${sqlPath}`, {
+		execSync(`npx wrangler d1 execute ${dbName} ${flag} --file=${sqlPath}`, {
 			stdio: "inherit",
 			cwd: process.cwd(),
 		});

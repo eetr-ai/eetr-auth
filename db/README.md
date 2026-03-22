@@ -16,7 +16,7 @@ From the project root:
 - **Both**:  
   `npm run db:bootstrap`
 
-Requires the D1 database `progression-ai-auth` to exist. For a new remote DB, create it in the Cloudflare dashboard and set `database_id` in `wrangler.jsonc`.
+Requires the D1 database to exist. Default name is `progression-ai-auth`; override with **`D1_DATABASE_NAME`** for Terraform-created databases. For a new remote DB, use [infra/INSTALL.md](../infra/INSTALL.md) (Terraform + `wrangler.generated.jsonc`) or create it in the dashboard and set `database_id` in `wrangler.jsonc`.
 
 For login (Auth.js), set `AUTH_SECRET` in `.env.local` (dev) or via `wrangler secret put AUTH_SECRET` (production). See `.env.example`.
 

@@ -37,6 +37,8 @@ npm run deploy
 # or similar package manager command
 ```
 
+**New environment (Terraform + generated Wrangler config):** see [infra/INSTALL.md](infra/INSTALL.md). After provisioning, deploy with `npm run deploy:infra` (uses `wrangler.generated.jsonc`).
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

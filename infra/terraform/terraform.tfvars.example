@@ -1,0 +1,17 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+# account_id = "00000000000000000000000000000000"
+
+# d1_database_name = "progression-ai-auth"
+# r2_bucket_name   = "blog-images"
+
+# worker_name = "progression-ai-auth"
+
+# issuer_base_url     = "https://auth.example.com"
+# auth_url            = "https://auth.example.com/api/auth/session"
+# jwks_cdn_base_url   = "https://cdn.example.com"
+
+# Optional Resend (email); leave unset or empty to skip automatic wrangler secret put.
+# resend_api_key = "re_..."
+
+# Optional R2 location hint: WNAM, ENAM, WEUR, EEUR, APAC, OC
+# r2_location = "WEUR"
