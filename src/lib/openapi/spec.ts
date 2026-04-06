@@ -508,6 +508,108 @@ export function getOpenApiDocument(serverUrl?: string) {
 					},
 				},
 			},
+			"/api/users/passkey/challenge": {
+				post: {
+					tags: ["Users"],
+					summary: "Create passkey registration challenge",
+					description:
+						"Generates a WebAuthn registration challenge for the authenticated user. The returned `options` must be passed to `startRegistration()` on the client. The `challengeId` must be submitted with the registration response to `/api/users/passkey/register`.",
+					security: [{ bearerAuth: [] }],
+					responses: {
+						"200": {
+							description: "Registration challenge created",
+							content: {
+								"application/json": {
+									schema: {
+										type: "object",
+										required: ["challengeId", "options"],
+										properties: {
+											challengeId: { type: "string", format: "uuid" },
+											options: {
+												type: "object",
+												description: "PublicKeyCredentialCreationOptionsJSON from @simplewebauthn/types",
+											},
+										},
+									},
+								},
+							},
+						},
+						"401": {
+							description: "Missing or invalid JWT access token",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"500": {
+							description: "Server error",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+					},
+				},
+			},
+			"/api/users/passkey/register": {
+				post: {
+					tags: ["Users"],
+					summary: "Register a passkey",
+					description:
+						"Verifies the browser's WebAuthn registration response and stores the passkey credential for the authenticated user. The `challengeId` must match the one returned by `/api/users/passkey/challenge`.",
+					security: [{ bearerAuth: [] }],
+					requestBody: {
+						required: true,
+						content: {
+							"application/json": {
+								schema: {
+									type: "object",
+									required: ["challengeId", "registrationResponse"],
+									properties: {
+										challengeId: { type: "string", format: "uuid" },
+										registrationResponse: {
+											type: "object",
+											description: "RegistrationResponseJSON from @simplewebauthn/types",
+										},
+									},
+								},
+							},
+						},
+					},
+					responses: {
+						"201": {
+							description: "Passkey registered",
+							content: {
+								"application/json": {
+									schema: { $ref: "#/components/schemas/PasskeyCredential" },
+								},
+							},
+						},
+						"400": {
+							description: "Invalid or expired challenge / verification failed",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"401": {
+							description: "Missing or invalid JWT access token",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"409": {
+							description: "Credential already registered",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"500": {
+							description: "Server error",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+					},
+				},
+			},
 			"/api/admin/site-logo": {
 				post: {
 					tags: ["Admin"],
@@ -576,6 +678,19 @@ export function getOpenApiDocument(serverUrl?: string) {
 						active: { type: "boolean" },
 						client_id: { type: ["string", "null"] },
 						expires_at: { type: ["string", "null"], format: "date-time" },
+					},
+				},
+				PasskeyCredential: {
+					type: "object",
+					required: ["id", "userId", "credentialId", "deviceType", "backedUp", "createdAt"],
+					properties: {
+						id: { type: "string", format: "uuid" },
+						userId: { type: "string" },
+						credentialId: { type: "string", description: "base64url-encoded WebAuthn credentialId" },
+						deviceType: { type: "string", enum: ["singleDevice", "multiDevice"] },
+						backedUp: { type: "boolean" },
+						transports: { type: ["string", "null"], description: "JSON array of AuthenticatorTransport values" },
+						createdAt: { type: "string", format: "date-time" },
 					},
 				},
 				UserRecord: {
