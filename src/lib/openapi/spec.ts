@@ -698,6 +698,31 @@ export function getOpenApiDocument(serverUrl?: string) {
 					},
 				},
 			},
+			"/api/users/passkey/has": {
+				get: {
+					tags: ["Users"],
+					summary: "Check if current user has a passkey",
+					description: "Returns whether the authenticated user has at least one passkey enrolled. Requires an active session cookie.",
+					security: [],
+					responses: {
+						"200": {
+							description: "Passkey presence check",
+							content: {
+								"application/json": {
+									schema: {
+										type: "object",
+										required: ["hasPasskey"],
+										properties: {
+											hasPasskey: { type: "boolean" },
+										},
+									},
+								},
+							},
+						},
+						"401": { description: "Not authenticated" },
+					},
+				},
+			},
 			"/api/admin/site-logo": {
 				post: {
 					tags: ["Admin"],

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { withApiContext } from "@/lib/context/with-api-context";
+import { auth } from "@/auth";
 import type { RegistrationResponseJSON } from "@simplewebauthn/types";
 
 function parseBearerToken(authorizationHeader: string | null): string | null {
@@ -47,16 +48,25 @@ function toErrorResponse(error: unknown) {
 }
 
 export const POST = withApiContext(async (req, _ctx, getServices) => {
-	const token = parseBearerToken(req.headers.get("authorization"));
-	if (!token || !isLikelyJwt(token)) {
-		return UNAUTHORIZED("A valid JWT access token is required.");
+	let userId: string | null = null;
+
+	const bearerToken = parseBearerToken(req.headers.get("authorization"));
+	if (bearerToken && isLikelyJwt(bearerToken)) {
+		const { oauthTokenService } = getServices();
+		const validation = await oauthTokenService.validateAccessToken(bearerToken, [], null);
+		if (!validation.valid || !validation.subject) {
+			return UNAUTHORIZED("Invalid or expired access token.");
+		}
+		userId = validation.subject;
+	} else {
+		const session = await auth();
+		if (session?.user?.id) {
+			userId = session.user.id;
+		}
 	}
 
-	const { oauthTokenService, passkeyService } = getServices();
-	const validation = await oauthTokenService.validateAccessToken(token, [], null);
-
-	if (!validation.valid || !validation.subject) {
-		return UNAUTHORIZED("Invalid or expired access token.");
+	if (!userId) {
+		return UNAUTHORIZED("A valid access token or session is required.");
 	}
 
 	let payload: unknown;
@@ -85,8 +95,9 @@ export const POST = withApiContext(async (req, _ctx, getServices) => {
 	}
 
 	try {
+		const { passkeyService } = getServices();
 		const credential = await passkeyService.verifyAndStoreRegistration(
-			validation.subject,
+			userId,
 			body.challengeId.trim(),
 			body.registrationResponse as RegistrationResponseJSON
 		);

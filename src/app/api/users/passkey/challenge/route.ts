@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { withApiContext } from "@/lib/context/with-api-context";
+import { auth } from "@/auth";
 
 function parseBearerToken(authorizationHeader: string | null): string | null {
 	if (!authorizationHeader) return null;
@@ -22,20 +23,30 @@ const UNAUTHORIZED = (description: string) =>
 	);
 
 export const POST = withApiContext(async (req, _ctx, getServices) => {
-	const token = parseBearerToken(req.headers.get("authorization"));
-	if (!token || !isLikelyJwt(token)) {
-		return UNAUTHORIZED("A valid JWT access token is required.");
+	let userId: string | null = null;
+
+	const bearerToken = parseBearerToken(req.headers.get("authorization"));
+	if (bearerToken && isLikelyJwt(bearerToken)) {
+		const { oauthTokenService } = getServices();
+		const validation = await oauthTokenService.validateAccessToken(bearerToken, [], null);
+		if (!validation.valid || !validation.subject) {
+			return UNAUTHORIZED("Invalid or expired access token.");
+		}
+		userId = validation.subject;
+	} else {
+		const session = await auth();
+		if (session?.user?.id) {
+			userId = session.user.id;
+		}
 	}
 
-	const { oauthTokenService, passkeyService } = getServices();
-	const validation = await oauthTokenService.validateAccessToken(token, [], null);
-
-	if (!validation.valid || !validation.subject) {
-		return UNAUTHORIZED("Invalid or expired access token.");
+	if (!userId) {
+		return UNAUTHORIZED("A valid access token or session is required.");
 	}
 
 	try {
-		const result = await passkeyService.generateRegistrationChallenge(validation.subject);
+		const { passkeyService } = getServices();
+		const result = await passkeyService.generateRegistrationChallenge(userId);
 		return NextResponse.json(result, {
 			status: 200,
 			headers: { "Cache-Control": "no-store" },

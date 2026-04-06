@@ -66,7 +66,24 @@ export function AdminNav({
 					);
 				})}
 			</nav>
-			<div className="shrink-0 border-t border-brand-muted p-4">
+			<div className="shrink-0 border-t border-brand-muted p-4 space-y-2">
+				{(() => {
+					const href = "/dashboard/settings";
+					const isActive = pathname === href || pathname.startsWith(href);
+					return (
+						<Link
+							href={href}
+							className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+								isActive
+									? "bg-brand-muted/50 text-foreground"
+									: "text-muted-foreground hover:bg-brand-muted/30 hover:text-foreground"
+							}`}
+						>
+							<Settings className="h-4 w-4" />
+							Settings
+						</Link>
+					);
+				})()}
 				<form action={logout}>
 					<button
 						type="submit"
