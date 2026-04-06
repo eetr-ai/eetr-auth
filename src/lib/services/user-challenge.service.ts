@@ -216,6 +216,9 @@ export class UserChallengeService {
 			return;
 		}
 
+		const base = resolveIssuerBaseUrl(this.env);
+		const siteUrlHttp = siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`;
+
 		const challengeId = crypto.randomUUID();
 		const now = new Date();
 		const expiresAt = new Date(now.getTime() + PASSWORD_RESET_JWT_TTL_SECONDS * 1000);
@@ -242,12 +245,10 @@ export class UserChallengeService {
 			expiresAt: expiresAt.toISOString(),
 		});
 
-		const base = resolveIssuerBaseUrl(this.env);
 		const resetUrl = `${base}/reset-password?token=${encodeURIComponent(token)}`;
 		const cancelUrl = `${base}/reset-password/cancel?token=${encodeURIComponent(token)}`;
 
 		const displayTitle = site?.siteTitle?.trim() || "Password reset";
-		const siteUrlHttp = siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`;
 		const logoUrl = this.siteSettings.getEmailLogoAbsoluteUrl(
 			siteUrlHttp,
 			site?.logoKey ?? null,

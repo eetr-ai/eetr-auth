@@ -139,3 +139,10 @@ This project now exposes OAuth authorization server endpoints for:
   - `npm run db:create-user:local -- <username> <email>`
   - `npm run db:create-user:remote -- --config wrangler.generated.jsonc <username> <email>`
   - the script stores a random placeholder password hash; users should complete setup through the password reset flow
+
+### Site URL setup (required for password reset emails)
+
+- Set in both local + remote D1:
+  - `npm run db:set-site-url -- https://auth.example.com`
+- Remote only with generated Wrangler config:
+  - `npm run db:set-site-url:remote -- --config wrangler.generated.jsonc https://auth.example.com`
