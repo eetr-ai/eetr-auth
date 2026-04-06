@@ -350,6 +350,57 @@ export function getOpenApiDocument(serverUrl?: string) {
 					},
 				},
 			},
+			"/api/users": {
+				patch: {
+					tags: ["Users"],
+					summary: "Update current user profile",
+					description:
+						"Accepts either an authenticated session or a bearer JWT access token and updates only the current authenticated user. Only `name` and `email` may be changed through this endpoint.",
+					security: [{ bearerAuth: [] }],
+					requestBody: {
+						required: true,
+						content: {
+							"application/json": {
+								schema: {
+									type: "object",
+									properties: {
+										name: { type: ["string", "null"] },
+										email: { type: ["string", "null"], format: "email" },
+									},
+									additionalProperties: false,
+								},
+							},
+						},
+					},
+					responses: {
+						"200": {
+							description: "Current user updated",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/UserRecord" } },
+							},
+						},
+						"400": {
+							description: "Validation error",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"401": {
+							description: "Missing session or invalid JWT access token",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"404": { description: "Authenticated user not found" },
+						"409": {
+							description: "Email conflict",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+					},
+				},
+			},
 			"/api/admin/users": {
 				post: {
 					tags: ["Admin"],
