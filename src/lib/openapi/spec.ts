@@ -508,6 +508,94 @@ export function getOpenApiDocument(serverUrl?: string) {
 					},
 				},
 			},
+			"/api/auth/passkey/challenge": {
+				post: {
+					tags: ["OAuth"],
+					summary: "Create passkey authentication challenge",
+					description:
+						"Generates a WebAuthn authentication challenge for discoverable-credential sign-in (no username required). Pass the returned `options` to `startAuthentication()` on the client, then submit the response to `/api/auth/passkey/verify`.",
+					responses: {
+						"200": {
+							description: "Authentication challenge created",
+							content: {
+								"application/json": {
+									schema: {
+										type: "object",
+										required: ["challengeId", "options"],
+										properties: {
+											challengeId: { type: "string", format: "uuid" },
+											options: {
+												type: "object",
+												description: "PublicKeyCredentialRequestOptionsJSON from @simplewebauthn/types",
+											},
+										},
+									},
+								},
+							},
+						},
+						"500": {
+							description: "Server error",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+					},
+				},
+			},
+			"/api/auth/passkey/verify": {
+				post: {
+					tags: ["OAuth"],
+					summary: "Verify passkey and obtain exchange token",
+					description:
+						"Verifies the browser's WebAuthn authentication response. On success returns a short-lived `exchangeToken` (2-minute TTL, single-use) that must be passed to the NextAuth credentials sign-in action to establish a session.",
+					requestBody: {
+						required: true,
+						content: {
+							"application/json": {
+								schema: {
+									type: "object",
+									required: ["challengeId", "authenticationResponse"],
+									properties: {
+										challengeId: { type: "string", format: "uuid" },
+										authenticationResponse: {
+											type: "object",
+											description: "AuthenticationResponseJSON from @simplewebauthn/types",
+										},
+									},
+								},
+							},
+						},
+					},
+					responses: {
+						"200": {
+							description: "Authentication verified — use the exchangeToken to sign in via NextAuth",
+							content: {
+								"application/json": {
+									schema: {
+										type: "object",
+										required: ["exchangeToken"],
+										properties: {
+											exchangeToken: { type: "string", format: "uuid" },
+										},
+									},
+								},
+							},
+						},
+						"400": {
+							description: "Invalid/expired challenge or verification failed",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"500": {
+							description: "Server error",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+					},
+				},
+			},
 			"/api/users/passkey/challenge": {
 				post: {
 					tags: ["Users"],
