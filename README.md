@@ -128,13 +128,14 @@ This project now exposes OAuth authorization server endpoints for:
 ### User model and admin access
 
 - Dashboard authentication uses the `users` table with:
-  - `id`, `username`, `password_hash`, `is_admin`
+  - `id`, `username`, `email`, `password_hash`, `is_admin`
 - Only users with `is_admin = 1` can sign in and access `/dashboard`.
 - User management (create, update, delete) is available at `/dashboard/users`.
 - For existing deployments with `admins`, run the one-time migration:
   - `wrangler d1 execute progression-ai-auth --local --file=./db/migration-20260303-rename-admins-to-users.sql`
   - `wrangler d1 execute progression-ai-auth --remote --file=./db/migration-20260303-rename-admins-to-users.sql`
 - Bootstrap admin user commands:
-  - `npm run db:create-user -- <username> <password>`
-  - `npm run db:create-user:local -- <username> <password>`
-  - `npm run db:create-user:remote -- <username> <password>`
+  - `npm run db:create-user -- <username> <email>`
+  - `npm run db:create-user:local -- <username> <email>`
+  - `npm run db:create-user:remote -- --config wrangler.generated.jsonc <username> <email>`
+  - the script stores a random placeholder password hash; users should complete setup through the password reset flow

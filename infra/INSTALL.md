@@ -98,13 +98,13 @@ Uses `wrangler.generated.jsonc` (`opennextjs-cloudflare deploy -c wrangler.gener
 
 ## 9. Create first admin
 
-For `HASH_METHOD=argon`, set `ARGON_HASHER_HASH_URL` or `ARGON_HASHER_URL` to your hasher’s `/hash` endpoint (same binding as production). Then:
+Create the user with a random placeholder password hash, then complete setup through the password reset flow:
 
 ```bash
-export D1_DATABASE_NAME=your-d1-name
-export HASH_METHOD=argon
-export ARGON_HASHER_URL=https://...   # or ARGON_HASHER_HASH_URL
-npm run db:create-admin:remote -- <username> <password>
+npm run db:create-admin:remote -- --config wrangler.generated.jsonc <username> <email>
+
+# If your environment uses a non-default Wrangler config:
+npm run db:create-admin:remote -- --config path/to/your.wrangler.jsonc <username> <email>
 ```
 
 ## 10. Smoke test

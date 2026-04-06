@@ -38,23 +38,24 @@ If the migration fails with `there is already another table or index with this n
 
 ## Create an admin user
 
-From the project root, create an admin (`users.is_admin = 1`) in **both** local and remote D1 (password is MD5-hashed, same as login):
+From the project root, create an admin (`users.is_admin = 1`) in **both** local and remote D1 using `username` + `email`.
+The script stores a random placeholder password hash; finish setup via password reset.
 
 ```bash
-npm run db:create-admin -- <username> <password>
+npm run db:create-admin -- <username> <email>
 ```
 
 Alias:
 
 ```bash
-npm run db:create-user -- <username> <password>
+npm run db:create-user -- <username> <email>
 ```
 
-Or use env vars (e.g. to avoid putting the password in shell history):
+Or use env vars:
 
 ```bash
-ADMIN_USERNAME=admin ADMIN_PASSWORD=yourpassword npm run db:create-admin
+ADMIN_USERNAME=admin ADMIN_EMAIL=admin@example.com npm run db:create-admin
 ```
 
-- **Local only:** `npm run db:create-admin:local -- <username> <password>`
-- **Remote only:** `npm run db:create-admin:remote -- <username> <password>`
+- **Local only:** `npm run db:create-admin:local -- <username> <email>`
+- **Remote only:** `npm run db:create-admin:remote -- --config wrangler.generated.jsonc <username> <email>`

@@ -2,36 +2,109 @@
 /**
  * Create an admin user in local and/or remote D1.
  *
- * Hashing (align with app `HASH_METHOD`):
- * - `HASH_METHOD=argon` → POST /hash via ARGON_HASHER_HASH_URL or ARGON_HASHER_URL (required; throws if unset).
- * - `HASH_METHOD=md5` or unset → MD5 hex only (does not use Argon URLs).
+ * The inserted password hash is a random placeholder that cannot be used to sign in.
+ * Complete account setup via the password reset flow.
  *
- * Usage: node scripts/create-admin.mjs <username> <password>
- *    or: ADMIN_USERNAME=x ADMIN_PASSWORD=y node scripts/create-admin.mjs
- *    or: USER_USERNAME=x USER_PASSWORD=y node scripts/create-admin.mjs
- * Options: --local-only | --remote-only (default: both)
+ * Usage: node scripts/create-admin.mjs <username> <email>
+ *    or: ADMIN_USERNAME=x ADMIN_EMAIL=y node scripts/create-admin.mjs
+ *    or: USER_USERNAME=x USER_EMAIL=y node scripts/create-admin.mjs
+ * Options: --local-only | --remote-only | --config <wrangler-config> | --username <u> | --email <e>
+ * Env: WRANGLER_CONFIG (used when --config is not provided)
  */
-import { randomUUID } from "node:crypto";
-import md5 from "md5";
-import { writeFileSync, unlinkSync, mkdirSync, existsSync } from "node:fs";
+import { randomUUID, randomBytes } from "node:crypto";
+import { writeFileSync, unlinkSync, mkdirSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
+import stripJsonComments from "strip-json-comments";
 
 const args = process.argv.slice(2);
-const localOnly = args.includes("--local-only");
-const remoteOnly = args.includes("--remote-only");
-const filteredArgs = args.filter((a) => a !== "--local-only" && a !== "--remote-only");
+let localOnly = false;
+let remoteOnly = false;
+let wranglerConfig = process.env.WRANGLER_CONFIG?.trim() || "";
+let usernameFlag = "";
+let emailFlag = "";
+const filteredArgs = [];
 
-const username = filteredArgs[0] ?? process.env.ADMIN_USERNAME ?? process.env.USER_USERNAME;
-const password = filteredArgs[1] ?? process.env.ADMIN_PASSWORD ?? process.env.USER_PASSWORD;
+for (let i = 0; i < args.length; i++) {
+	const a = args[i];
+	if (a === "--local-only") {
+		localOnly = true;
+		continue;
+	}
+	if (a === "--remote-only") {
+		remoteOnly = true;
+		continue;
+	}
+	if (a === "--config" && args[i + 1]) {
+		wranglerConfig = args[++i];
+		continue;
+	}
+	if (a.startsWith("--config=")) {
+		wranglerConfig = a.slice("--config=".length);
+		continue;
+	}
+	if (a === "--username" && args[i + 1]) {
+		usernameFlag = args[++i];
+		continue;
+	}
+	if (a.startsWith("--username=")) {
+		usernameFlag = a.slice("--username=".length);
+		continue;
+	}
+	if (a === "--email" && args[i + 1]) {
+		emailFlag = args[++i];
+		continue;
+	}
+	if (a.startsWith("--email=")) {
+		emailFlag = a.slice("--email=".length);
+		continue;
+	}
+	filteredArgs.push(a);
+}
 
-if (!username || !password) {
+// Backward-compatible positional config support:
+// node scripts/create-admin.mjs --remote-only wrangler.generated.jsonc user pass
+if (!wranglerConfig && filteredArgs.length >= 3 && /wrangler.*\.jsonc?$/i.test(filteredArgs[0])) {
+	wranglerConfig = filteredArgs.shift() || "";
+}
+
+let configDbName = "";
+
+if (wranglerConfig) {
+	try {
+		const cfgRaw = readFileSync(wranglerConfig, "utf8");
+		const cfg = JSON.parse(stripJsonComments(cfgRaw));
+		if (Array.isArray(cfg?.d1_databases) && cfg.d1_databases[0]) {
+			const fromConfig = cfg.d1_databases[0].database_name;
+			if (typeof fromConfig === "string" && fromConfig.trim()) {
+				configDbName = fromConfig.trim();
+			}
+		}
+	} catch (err) {
+		console.warn(
+			`Warning: could not read Wrangler config ${wranglerConfig}: ${(err && err.message) || err}`
+		);
+	}
+}
+
+const username =
+	usernameFlag || filteredArgs[0] || process.env.ADMIN_USERNAME || process.env.USER_USERNAME || "";
+const email = (emailFlag || filteredArgs[1] || process.env.ADMIN_EMAIL || process.env.USER_EMAIL || "")
+	.trim()
+	.toLowerCase();
+
+if (!username.trim() || !email) {
 	console.error(
-		"Usage: node scripts/create-admin.mjs <username> <password>\n" +
-			"   or: ADMIN_USERNAME=x ADMIN_PASSWORD=y node scripts/create-admin.mjs\n" +
-			"   or: USER_USERNAME=x USER_PASSWORD=y node scripts/create-admin.mjs\n" +
-			"Options: --local-only or --remote-only (default: run both)"
+		"Usage: node scripts/create-admin.mjs <username> <email>\n" +
+			"   or: ADMIN_USERNAME=x ADMIN_EMAIL=y node scripts/create-admin.mjs\n" +
+			"   or: USER_USERNAME=x USER_EMAIL=y node scripts/create-admin.mjs\n" +
+			"Options: --local-only | --remote-only | --config <wrangler-config> | --username <u> | --email <e>"
 	);
+	process.exit(1);
+}
+
+if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+	console.error("Invalid email format.");
 	process.exit(1);
 }
 
@@ -39,56 +112,13 @@ function escapeSql(value) {
 	return String(value).replace(/'/g, "''");
 }
 
-async function hashPasswordViaHttp(plain) {
-	const full = process.env.ARGON_HASHER_HASH_URL?.trim();
-	const base = process.env.ARGON_HASHER_URL?.trim();
-	const url = full || (base ? `${base.replace(/\/$/, "")}/hash` : null);
-	if (!url) {
-		return null;
-	}
-	const res = await fetch(url, {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ password: plain }),
-	});
-	if (!res.ok) {
-		const t = await res.text().catch(() => "");
-		throw new Error(`argon-hasher HTTP ${res.status}: ${t.slice(0, 200)}`);
-	}
-	const data = await res.json();
-	if (typeof data.hash !== "string" || !data.hash.startsWith("$argon2")) {
-		throw new Error("argon-hasher did not return an Argon2 PHC string");
-	}
-	return data.hash;
-}
-
-function resolveHashMethod() {
-	const raw = (process.env.HASH_METHOD ?? "").trim().toLowerCase();
-	if (raw === "md5") return "md5";
-	//the default is argon
-	return "argon";
-}
-
-async function hashPassword(plain) {
-	const method = resolveHashMethod();
-	if (method === "argon") {
-		const fromHttp = await hashPasswordViaHttp(plain);
-		if (fromHttp == null) {
-			throw new Error(
-				"HASH_METHOD=argon requires ARGON_HASHER_HASH_URL or ARGON_HASHER_URL (argon-hasher /hash), same as the ARGON_HASHER binding in the app."
-			);
-		}
-		return fromHttp;
-	}
-	return md5(plain);
-}
-
 const id = randomUUID();
-const passwordHash = await hashPassword(password);
-const escapedUsername = escapeSql(username);
+const passwordHash = `reset-required:${randomBytes(32).toString("hex")}`;
+const escapedUsername = escapeSql(username.trim());
+const escapedEmail = escapeSql(email);
 const escapedHash = escapeSql(passwordHash);
 
-const sql = `INSERT INTO users (id, username, password_hash, is_admin) VALUES ('${id}', '${escapedUsername}', '${escapedHash}', 1);`;
+const sql = `INSERT INTO users (id, username, email, password_hash, is_admin) VALUES ('${id}', '${escapedUsername}', '${escapedEmail}', '${escapedHash}', 1);`;
 
 const tmpDir = join(process.cwd(), ".tmp");
 const sqlPath = join(tmpDir, `create-admin-${Date.now()}.sql`);
@@ -97,13 +127,23 @@ try {
 	if (!existsSync(tmpDir)) mkdirSync(tmpDir, { recursive: true });
 	writeFileSync(sqlPath, sql, "utf8");
 
-	const dbName = process.env.D1_DATABASE_NAME || "progression-ai-auth";
+	const dbName = process.env.D1_DATABASE_NAME || configDbName || "progression-ai-auth";
+	const configArg = wranglerConfig ? ` --config ${JSON.stringify(wranglerConfig)}` : "";
+	if (wranglerConfig) {
+		console.log(`Using Wrangler config: ${wranglerConfig}`);
+	}
+	if (!process.env.D1_DATABASE_NAME && configDbName) {
+		console.log(`Using D1 database_name from config: ${configDbName}`);
+	}
 	const run = (target) => {
 		const flag = target === "local" ? "--local" : "--remote";
-		execSync(`npx wrangler d1 execute ${dbName} ${flag} --file=${sqlPath}`, {
-			stdio: "inherit",
-			cwd: process.cwd(),
-		});
+		execSync(
+			`npx wrangler d1 execute ${JSON.stringify(dbName)} ${flag}${configArg} --file=${JSON.stringify(sqlPath)}`,
+			{
+				stdio: "inherit",
+				cwd: process.cwd(),
+			}
+		);
 	};
 
 	if (!remoteOnly) {
@@ -117,7 +157,8 @@ try {
 		console.log("Remote: done.");
 	}
 
-	console.log(`Admin "${username}" created (id: ${id}).`);
+	console.log(`Admin "${username}" created (id: ${id}, email: ${email}).`);
+	console.log("A random placeholder password was stored. Complete setup via the password reset flow.");
 } catch (err) {
 	console.error(err.message || err);
 	process.exit(1);
