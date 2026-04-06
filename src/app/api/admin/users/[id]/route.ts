@@ -93,11 +93,15 @@ export const PUT = withAdminApiClientContext(async (req, _ctx, getServices, auth
 		is_admin?: unknown;
 		name?: unknown;
 		email?: unknown;
+		emailVerifiedAt?: unknown;
+		email_verified_at?: unknown;
 	};
 	const parsedIsAdmin =
 		body.isAdmin !== undefined
 			? parseOptionalBoolean(body.isAdmin)
 			: parseOptionalBoolean(body.is_admin);
+	const parsedEmailVerifiedAt =
+		body.emailVerifiedAt !== undefined ? body.emailVerifiedAt : body.email_verified_at;
 
 	if (body.username !== undefined && typeof body.username !== "string") {
 		return NextResponse.json(
@@ -133,13 +137,27 @@ export const PUT = withAdminApiClientContext(async (req, _ctx, getServices, auth
 			{ status: 400 }
 		);
 	}
+	if (
+		parsedEmailVerifiedAt !== undefined &&
+		parsedEmailVerifiedAt !== null &&
+		typeof parsedEmailVerifiedAt !== "string"
+	) {
+		return NextResponse.json(
+			{
+				error: "invalid_request",
+				error_description: "emailVerifiedAt/email_verified_at must be a string or null when provided.",
+			},
+			{ status: 400 }
+		);
+	}
 
 	if (
 		body.username === undefined &&
 		body.password === undefined &&
 		parsedIsAdmin === undefined &&
 		body.name === undefined &&
-		body.email === undefined
+		body.email === undefined &&
+		parsedEmailVerifiedAt === undefined
 	) {
 		return NextResponse.json(
 			{ error: "invalid_request", error_description: "At least one updatable field is required." },
@@ -158,6 +176,7 @@ export const PUT = withAdminApiClientContext(async (req, _ctx, getServices, auth
 				...(typeof parsedIsAdmin === "boolean" ? { isAdmin: parsedIsAdmin } : {}),
 				...(body.name !== undefined ? { name: body.name } : {}),
 				...(body.email !== undefined ? { email: body.email } : {}),
+				...(parsedEmailVerifiedAt !== undefined ? { emailVerifiedAt: parsedEmailVerifiedAt } : {}),
 			},
 			actorUserId
 		);

@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { startAuthentication } from "@simplewebauthn/browser";
 import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/types";
-import { beginSignInChallenge } from "@/app/actions/mfa-actions";
+import { LogOut, ShieldCheck } from "lucide-react";
+import { beginSignInChallenge, clearSignInChallenge, signOutFromChallenge } from "@/app/actions/mfa-actions";
 import { submitSignIn, submitPasskeySignIn } from "@/app/actions/sign-in-actions";
 
 type Props = {
@@ -107,6 +108,17 @@ export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
 		});
 	};
 
+	const onOtpSignOut = () => {
+		setError(null);
+		startTransition(async () => {
+			await clearSignInChallenge();
+			await signOutFromChallenge();
+			setStep("password");
+			setOtpPurpose("mfa");
+			setOtp("");
+		});
+	};
+
 	if (step === "otp") {
 		return (
 			<form onSubmit={onOtpSubmit} className="space-y-6">
@@ -140,22 +152,19 @@ export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
 				<button
 					type="submit"
 					disabled={pending}
-					className="w-full rounded-full bg-brand px-4 py-2 font-medium text-white hover:bg-brand-muted focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50"
+					className="flex w-full items-center justify-center gap-2 rounded-full bg-brand px-4 py-2 font-medium text-white hover:bg-brand-muted focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50"
 				>
+					<ShieldCheck className="h-4 w-4" />
 					{pending ? "Signing in…" : "Verify and sign in"}
 				</button>
 				<button
 					type="button"
 					disabled={pending}
-					onClick={() => {
-						setStep("password");
-						setOtpPurpose("mfa");
-						setOtp("");
-						setError(null);
-					}}
-					className="w-full text-sm text-muted-foreground underline hover:text-foreground"
+					onClick={onOtpSignOut}
+					className="flex w-full items-center justify-center gap-2 text-sm text-muted-foreground underline hover:text-foreground"
 				>
-					Back
+					<LogOut className="h-4 w-4" />
+					Sign out
 				</button>
 			</form>
 		);

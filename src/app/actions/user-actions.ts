@@ -45,6 +45,7 @@ export async function updateUser(
 		username?: string;
 		name?: string | null;
 		email?: string | null;
+		emailVerifiedAt?: string | null;
 		password?: string;
 		isAdmin?: boolean;
 		avatarKey?: string | null;

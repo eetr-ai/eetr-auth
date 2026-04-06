@@ -2,7 +2,7 @@
 
 import { ReducerAction, bootstrapProvider } from "@eetr/react-reducer-utils";
 import { useEffect } from "react";
-import { Users, Plus, Pencil, Trash2, Loader2 } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, Loader2, BadgeCheck, BadgeX, RotateCcw } from "lucide-react";
 import {
 	createUser,
 	deleteUser,
@@ -27,6 +27,7 @@ enum UsersPageActionType {
 	SET_EDITING_PASSWORD = "SET_EDITING_PASSWORD",
 	SET_EDITING_IS_ADMIN = "SET_EDITING_IS_ADMIN",
 	SET_UPLOADING_AVATAR_USER_ID = "SET_UPLOADING_AVATAR_USER_ID",
+	SET_RESETTING_VERIFICATION_USER_ID = "SET_RESETTING_VERIFICATION_USER_ID",
 }
 
 interface UsersPageState {
@@ -45,6 +46,7 @@ interface UsersPageState {
 	editingPassword: string;
 	editingIsAdmin: boolean;
 	uploadingAvatarUserId: string | null;
+	resettingVerificationUserId: string | null;
 }
 
 const initialState: UsersPageState = {
@@ -63,6 +65,7 @@ const initialState: UsersPageState = {
 	editingPassword: "",
 	editingIsAdmin: true,
 	uploadingAvatarUserId: null,
+	resettingVerificationUserId: null,
 };
 
 function reducer(
@@ -100,6 +103,8 @@ function reducer(
 			return { ...state, editingIsAdmin: (action.data as boolean | undefined) ?? false };
 		case UsersPageActionType.SET_UPLOADING_AVATAR_USER_ID:
 			return { ...state, uploadingAvatarUserId: (action.data as string | null) ?? null };
+		case UsersPageActionType.SET_RESETTING_VERIFICATION_USER_ID:
+			return { ...state, resettingVerificationUserId: (action.data as string | null) ?? null };
 		default:
 			return state;
 	}
@@ -137,6 +142,7 @@ function UsersPageContent() {
 		editingPassword,
 		editingIsAdmin,
 		uploadingAvatarUserId,
+		resettingVerificationUserId,
 	} = state;
 
 	const load = async () => {
@@ -251,6 +257,42 @@ function UsersPageContent() {
 		} finally {
 			dispatch({ type: UsersPageActionType.SET_UPLOADING_AVATAR_USER_ID, data: null });
 		}
+	};
+
+	const handleResetVerification = async (user: UserRecord) => {
+		dispatch({ type: UsersPageActionType.SET_ERROR, data: null });
+		dispatch({ type: UsersPageActionType.SET_RESETTING_VERIFICATION_USER_ID, data: user.id });
+		try {
+			await updateUser(user.id, { emailVerifiedAt: null });
+			await load();
+		} catch (err) {
+			dispatch({
+				type: UsersPageActionType.SET_ERROR,
+				data: err instanceof Error ? err.message : "Failed to reset email verification",
+			});
+		} finally {
+			dispatch({ type: UsersPageActionType.SET_RESETTING_VERIFICATION_USER_ID, data: null });
+		}
+	};
+
+	const renderVerificationStatus = (user: UserRecord) => {
+		if (!user.email?.trim()) {
+			return <span className="text-xs text-muted-foreground">No email</span>;
+		}
+		if (user.emailVerifiedAt) {
+			return (
+				<span className="inline-flex items-center gap-1 rounded-full bg-emerald-950/50 px-2 py-0.5 text-xs text-emerald-200">
+					<BadgeCheck className="h-3.5 w-3.5" />
+					Verified
+				</span>
+			);
+		}
+		return (
+			<span className="inline-flex items-center gap-1 rounded-full bg-amber-950/50 px-2 py-0.5 text-xs text-amber-200">
+				<BadgeX className="h-3.5 w-3.5" />
+				Unverified
+			</span>
+		);
 	};
 
 	if (loading) {
@@ -441,6 +483,7 @@ function UsersPageContent() {
 											{user.email && (
 												<span className="text-xs text-muted-foreground">{user.email}</span>
 											)}
+											{renderVerificationStatus(user)}
 											<span className="text-xs text-muted-foreground">
 												{user.isAdmin ? "Admin" : "User"}
 											</span>
@@ -463,6 +506,19 @@ function UsersPageContent() {
 													}}
 												/>
 											</label>
+													{user.email?.trim() && user.emailVerifiedAt && !user.isAdmin ? (
+														<button
+															type="button"
+															onClick={() => handleResetVerification(user)}
+															disabled={resettingVerificationUserId === user.id}
+															className="rounded-full border border-brand-muted px-2 py-1 text-xs hover:bg-brand-muted/30 disabled:opacity-50"
+														>
+															<span className="inline-flex items-center gap-1">
+																<RotateCcw className="h-3.5 w-3.5" />
+																{resettingVerificationUserId === user.id ? "Resetting..." : "Require re-verify"}
+															</span>
+														</button>
+													) : null}
 											<button
 												type="button"
 												onClick={() => startEdit(user)}

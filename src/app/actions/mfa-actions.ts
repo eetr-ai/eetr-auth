@@ -1,11 +1,30 @@
 "use server";
 
+import { auth, signOut } from "@/auth";
 import { cookies } from "next/headers";
 import { onPublicServerAction } from "@/lib/context/on-public-server-action";
 import { EMAIL_VERIFICATION_CHALLENGE_COOKIE } from "@/lib/auth/email-verification-cookie";
 import { MFA_CHALLENGE_COOKIE } from "@/lib/auth/mfa-cookie";
 const MFA_COOKIE_MAX_AGE = 600;
 const EMAIL_VERIFICATION_COOKIE_MAX_AGE = 600;
+
+export async function clearSignInChallenge() {
+	const jar = await cookies();
+	jar.delete(MFA_CHALLENGE_COOKIE);
+	jar.delete(EMAIL_VERIFICATION_CHALLENGE_COOKIE);
+	return { ok: true as const };
+}
+
+export async function signOutFromChallenge() {
+	const jar = await cookies();
+	jar.delete(MFA_CHALLENGE_COOKIE);
+	jar.delete(EMAIL_VERIFICATION_CHALLENGE_COOKIE);
+	const session = await auth();
+	if (session?.user?.id) {
+		await signOut({ redirectTo: "/" });
+	}
+	return { ok: true as const };
+}
 
 export async function beginSignInChallenge(username: string, password: string) {
 	return onPublicServerAction(async (_ctx, getServices) => {
@@ -18,15 +37,11 @@ export async function beginSignInChallenge(username: string, password: string) {
 		if (!user) {
 			return { ok: false as const, error: "Invalid username or password." };
 		}
-		if (user.isAdmin) {
-			return { ok: true as const, challenge: "none" as const };
-		}
-		if (!user.email?.trim()) {
-			return { ok: false as const, error: "Your account has no email address; contact an administrator." };
-		}
-		const jar = await cookies();
-
 		if (site.mfaEnabled) {
+			if (!user.email?.trim()) {
+				return { ok: false as const, error: "Your account has no email address; contact an administrator." };
+			}
+			const jar = await cookies();
 			const challengeId = await userChallengeService.createMfaOtpAndSendEmail(user);
 			jar.set(MFA_CHALLENGE_COOKIE, challengeId, {
 				httpOnly: true,
@@ -38,6 +53,14 @@ export async function beginSignInChallenge(username: string, password: string) {
 			jar.delete(EMAIL_VERIFICATION_CHALLENGE_COOKIE);
 			return { ok: true as const, challenge: "mfa" as const };
 		}
+
+		if (user.isAdmin) {
+			return { ok: true as const, challenge: "none" as const };
+		}
+		if (!user.email?.trim()) {
+			return { ok: false as const, error: "Your account has no email address; contact an administrator." };
+		}
+		const jar = await cookies();
 
 		if (user.emailVerifiedAt) {
 			jar.delete(MFA_CHALLENGE_COOKIE);
