@@ -9,7 +9,7 @@ function rowToClient(row: {
 	client_id: string;
 	client_secret: string;
 	environment_id: string;
-	created_by: string;
+	created_by_display: string;
 	expires_at: string | null;
 	name: string | null;
 }): Client {
@@ -18,7 +18,7 @@ function rowToClient(row: {
 		clientId: row.client_id,
 		clientSecret: row.client_secret,
 		environmentId: row.environment_id,
-		createdBy: row.created_by,
+		createdBy: row.created_by_display,
 		expiresAt: row.expires_at,
 		name: row.name,
 	};
@@ -30,8 +30,23 @@ export class ClientRepositoryD1 implements ClientRepository {
 	async list(environmentId?: string): Promise<Client[]> {
 		const query =
 			environmentId != null
-				? "SELECT id, client_id, client_secret, environment_id, created_by, expires_at, name FROM clients WHERE environment_id = ? ORDER BY client_id"
-				: "SELECT id, client_id, client_secret, environment_id, created_by, expires_at, name FROM clients ORDER BY client_id";
+				? [
+					"SELECT c.id, c.client_id, c.client_secret, c.environment_id,",
+					"COALESCE(u.username, c.created_by) AS created_by_display,",
+					"c.expires_at, c.name",
+					"FROM clients c",
+					"LEFT JOIN users u ON u.id = c.created_by",
+					"WHERE c.environment_id = ?",
+					"ORDER BY c.client_id",
+				].join(" ")
+				: [
+					"SELECT c.id, c.client_id, c.client_secret, c.environment_id,",
+					"COALESCE(u.username, c.created_by) AS created_by_display,",
+					"c.expires_at, c.name",
+					"FROM clients c",
+					"LEFT JOIN users u ON u.id = c.created_by",
+					"ORDER BY c.client_id",
+				].join(" ");
 		const stmt =
 			environmentId != null
 				? this.db.prepare(query).bind(environmentId)
@@ -41,7 +56,7 @@ export class ClientRepositoryD1 implements ClientRepository {
 			client_id: string;
 			client_secret: string;
 			environment_id: string;
-			created_by: string;
+			created_by_display: string;
 			expires_at: string | null;
 			name: string | null;
 		}>();
@@ -51,7 +66,14 @@ export class ClientRepositoryD1 implements ClientRepository {
 	async getById(id: string): Promise<Client | null> {
 		const row = await this.db
 			.prepare(
-				"SELECT id, client_id, client_secret, environment_id, created_by, expires_at, name FROM clients WHERE id = ?"
+				[
+					"SELECT c.id, c.client_id, c.client_secret, c.environment_id,",
+					"COALESCE(u.username, c.created_by) AS created_by_display,",
+					"c.expires_at, c.name",
+					"FROM clients c",
+					"LEFT JOIN users u ON u.id = c.created_by",
+					"WHERE c.id = ?",
+				].join(" ")
 			)
 			.bind(id)
 			.first<{
@@ -59,7 +81,7 @@ export class ClientRepositoryD1 implements ClientRepository {
 				client_id: string;
 				client_secret: string;
 				environment_id: string;
-				created_by: string;
+				created_by_display: string;
 				expires_at: string | null;
 				name: string | null;
 			}>();
@@ -69,7 +91,14 @@ export class ClientRepositoryD1 implements ClientRepository {
 	async getByClientIdentifier(clientId: string): Promise<Client | null> {
 		const row = await this.db
 			.prepare(
-				"SELECT id, client_id, client_secret, environment_id, created_by, expires_at, name FROM clients WHERE client_id = ?"
+				[
+					"SELECT c.id, c.client_id, c.client_secret, c.environment_id,",
+					"COALESCE(u.username, c.created_by) AS created_by_display,",
+					"c.expires_at, c.name",
+					"FROM clients c",
+					"LEFT JOIN users u ON u.id = c.created_by",
+					"WHERE c.client_id = ?",
+				].join(" ")
 			)
 			.bind(clientId)
 			.first<{
@@ -77,7 +106,7 @@ export class ClientRepositoryD1 implements ClientRepository {
 				client_id: string;
 				client_secret: string;
 				environment_id: string;
-				created_by: string;
+				created_by_display: string;
 				expires_at: string | null;
 				name: string | null;
 			}>();
