@@ -10,6 +10,7 @@ import { resolveHashMethod } from "@/lib/config/hash-method";
 import { getAvatarUrl } from "@/lib/users/profile";
 import type { RequestContext } from "@/lib/context/types";
 import { UserChallengeService } from "@/lib/services/user-challenge.service";
+import { PasskeyService } from "@/lib/services/passkey.service";
 import { MFA_CHALLENGE_COOKIE } from "@/lib/auth/mfa-cookie";
 
 /** Structured sign-in logs (grep `sign_in_authorize`). Never includes password or OTP. */
@@ -155,6 +156,71 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 					isAdmin: user.isAdmin,
 					mfaUsed: mfaActive,
 				});
+				return {
+					id: user.id,
+					name: user.name ?? user.username,
+					email: user.email,
+					image: getAvatarUrl(user.avatarKey, env as unknown as Record<string, unknown>),
+					isAdmin: user.isAdmin,
+				};
+			},
+		}),
+		Credentials({
+			id: "passkey",
+			credentials: {
+				exchangeToken: { label: "Exchange Token", type: "text" },
+			},
+			async authorize(credentials) {
+				const exchangeToken = (credentials?.exchangeToken as string | undefined)?.trim() ?? "";
+				if (!exchangeToken) return null;
+
+				const { env, cf, ctx } = await getCloudflareContext({ async: true });
+				const requestCtx: RequestContext = { env, cf, ctx };
+				const db = getDb(env);
+				const repo = new UserRepositoryD1(db);
+				const passkeySvc = new PasskeyService(requestCtx);
+
+				const userId = await passkeySvc.consumeExchangeToken(exchangeToken);
+				if (!userId) {
+					console.info(
+						JSON.stringify({
+							event: "sign_in_authorize",
+							ts: new Date().toISOString(),
+							outcome: "failure",
+							provider: "passkey",
+							reason: "invalid_or_expired_exchange_token",
+						})
+					);
+					return null;
+				}
+
+				const user = await repo.getById(userId);
+				if (!user) {
+					console.info(
+						JSON.stringify({
+							event: "sign_in_authorize",
+							ts: new Date().toISOString(),
+							outcome: "failure",
+							provider: "passkey",
+							reason: "user_not_found",
+							userId,
+						})
+					);
+					return null;
+				}
+
+				console.info(
+					JSON.stringify({
+						event: "sign_in_authorize",
+						ts: new Date().toISOString(),
+						outcome: "success",
+						provider: "passkey",
+						userId: user.id,
+						username: user.username,
+						isAdmin: user.isAdmin,
+					})
+				);
+
 				return {
 					id: user.id,
 					name: user.name ?? user.username,
