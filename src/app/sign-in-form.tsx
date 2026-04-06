@@ -2,6 +2,9 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { signIn } from "next-auth/react";
+import { startAuthentication } from "@simplewebauthn/browser";
+import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/types";
 import { beginMfaSignIn } from "@/app/actions/mfa-actions";
 import { submitSignIn } from "@/app/actions/sign-in-actions";
 
@@ -17,6 +20,45 @@ export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
 	const [otp, setOtp] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [pending, startTransition] = useTransition();
+	const [passkeyPending, setPasskeyPending] = useState(false);
+
+	const onPasskeySignIn = async () => {
+		setError(null);
+		setPasskeyPending(true);
+		try {
+			const challengeRes = await fetch("/api/auth/passkey/challenge", { method: "POST" });
+			if (!challengeRes.ok) throw new Error("Failed to get passkey challenge.");
+			const { challengeId, options } = (await challengeRes.json()) as {
+				challengeId: string;
+				options: PublicKeyCredentialRequestOptionsJSON;
+			};
+
+			const authResponse = await startAuthentication(options);
+
+			const verifyRes = await fetch("/api/auth/passkey/verify", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ challengeId, authenticationResponse: authResponse }),
+			});
+			if (!verifyRes.ok) {
+				const body = await verifyRes.json().catch(() => ({}));
+				throw new Error((body as { error_description?: string }).error_description ?? "Passkey verification failed.");
+			}
+			const { exchangeToken } = (await verifyRes.json()) as { exchangeToken: string };
+
+			const result = await signIn("passkey", { exchangeToken, redirect: false });
+			if (result?.error) throw new Error("Sign-in failed. Please try again.");
+			window.location.href = callbackUrl || "/dashboard";
+		} catch (err) {
+			if (err instanceof Error && err.name === "NotAllowedError") {
+				// User cancelled or timed out — silent
+			} else {
+				setError(err instanceof Error ? err.message : "Passkey sign-in failed.");
+			}
+		} finally {
+			setPasskeyPending(false);
+		}
+	};
 
 	const onPasswordSubmit = (e: React.FormEvent) => {
 		e.preventDefault();
@@ -145,6 +187,19 @@ export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
 					Forgot password?
 				</Link>
 			</p>
+			<div className="relative flex items-center gap-3">
+				<hr className="flex-1 border-brand-muted/40" />
+				<span className="text-xs text-muted-foreground">or</span>
+				<hr className="flex-1 border-brand-muted/40" />
+			</div>
+			<button
+				type="button"
+				disabled={pending || passkeyPending}
+				onClick={onPasskeySignIn}
+				className="w-full rounded-full border border-brand-muted px-4 py-2 text-sm font-medium text-foreground hover:bg-brand-muted/20 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50"
+			>
+				{passkeyPending ? "Waiting for passkey…" : "Sign in with passkey"}
+			</button>
 		</form>
 	);
 }
