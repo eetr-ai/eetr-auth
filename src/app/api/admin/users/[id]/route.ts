@@ -1,6 +1,31 @@
 import { NextResponse } from "next/server";
 import { withAdminApiClientContext } from "@/lib/context/with-admin-api-client-context";
 
+function parseOptionalBoolean(value: unknown): boolean | undefined | "invalid" {
+	if (value === undefined || value === null) {
+		return undefined;
+	}
+	if (typeof value === "boolean") {
+		return value;
+	}
+	if (typeof value === "string") {
+		const normalized = value.trim().toLowerCase();
+		if (["true", "1", "yes", "on"].includes(normalized)) {
+			return true;
+		}
+		if (["false", "0", "no", "off"].includes(normalized)) {
+			return false;
+		}
+		return "invalid";
+	}
+	if (typeof value === "number") {
+		if (value === 1) return true;
+		if (value === 0) return false;
+		return "invalid";
+	}
+	return "invalid";
+}
+
 function getUserIdFromPath(pathname: string): string | null {
 	const parts = pathname.split("/").filter(Boolean);
 	if (parts.length < 4) {
@@ -65,9 +90,14 @@ export const PUT = withAdminApiClientContext(async (req, _ctx, getServices, auth
 		username?: unknown;
 		password?: unknown;
 		isAdmin?: unknown;
+		is_admin?: unknown;
 		name?: unknown;
 		email?: unknown;
 	};
+	const parsedIsAdmin =
+		body.isAdmin !== undefined
+			? parseOptionalBoolean(body.isAdmin)
+			: parseOptionalBoolean(body.is_admin);
 
 	if (body.username !== undefined && typeof body.username !== "string") {
 		return NextResponse.json(
@@ -81,9 +111,13 @@ export const PUT = withAdminApiClientContext(async (req, _ctx, getServices, auth
 			{ status: 400 }
 		);
 	}
-	if (body.isAdmin !== undefined && typeof body.isAdmin !== "boolean") {
+	if (parsedIsAdmin === "invalid") {
 		return NextResponse.json(
-			{ error: "invalid_request", error_description: "isAdmin must be a boolean when provided." },
+			{
+				error: "invalid_request",
+				error_description:
+					"isAdmin/is_admin must be a boolean (or true/false, 1/0) when provided.",
+			},
 			{ status: 400 }
 		);
 	}
@@ -103,7 +137,7 @@ export const PUT = withAdminApiClientContext(async (req, _ctx, getServices, auth
 	if (
 		body.username === undefined &&
 		body.password === undefined &&
-		body.isAdmin === undefined &&
+		parsedIsAdmin === undefined &&
 		body.name === undefined &&
 		body.email === undefined
 	) {
@@ -121,7 +155,7 @@ export const PUT = withAdminApiClientContext(async (req, _ctx, getServices, auth
 			{
 				...(body.username !== undefined ? { username: body.username } : {}),
 				...(body.password !== undefined ? { password: body.password } : {}),
-				...(body.isAdmin !== undefined ? { isAdmin: body.isAdmin } : {}),
+				...(typeof parsedIsAdmin === "boolean" ? { isAdmin: parsedIsAdmin } : {}),
 				...(body.name !== undefined ? { name: body.name } : {}),
 				...(body.email !== undefined ? { email: body.email } : {}),
 			},

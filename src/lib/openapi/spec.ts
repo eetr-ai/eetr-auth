@@ -340,7 +340,7 @@ export function getOpenApiDocument(serverUrl?: string) {
 					tags: ["Admin"],
 					summary: "Create user",
 					description:
-						"Admin API endpoint. Requires a bearer JWT whose client is configured in Setup > Admin API.",
+						"Admin API endpoint. Requires a bearer JWT whose client is configured in Setup > Admin API. This endpoint creates regular users only.",
 					security: [{ bearerAuth: [] }],
 					requestBody: {
 						required: true,
@@ -352,7 +352,6 @@ export function getOpenApiDocument(serverUrl?: string) {
 									properties: {
 										username: { type: "string" },
 										password: { type: "string" },
-										isAdmin: { type: "boolean", default: true },
 										name: { type: ["string", "null"] },
 										email: { type: ["string", "null"], format: "email" },
 									},

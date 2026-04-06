@@ -54,6 +54,10 @@ export class ClientService {
 		return this.clientRepo.getById(id);
 	}
 
+	async getByClientIdentifier(clientId: string): Promise<Client | null> {
+		return this.clientRepo.getByClientIdentifier(clientId);
+	}
+
 	async getClientWithDetails(id: string): Promise<ClientWithDetails | null> {
 		const client = await this.clientRepo.getById(id);
 		if (!client) return null;

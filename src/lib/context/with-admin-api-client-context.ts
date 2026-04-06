@@ -83,8 +83,10 @@ export function withAdminApiClientContext(handler: AdminApiClientContextHandler)
 			);
 		}
 
+		const tokenClient = await getServices().clientService.getByClientIdentifier(validation.clientId);
+		const tokenClientRowId = tokenClient?.id ?? validation.clientId;
 		const adminClientRowIds = await siteSettingsService.getAdminApiClientRowIds();
-		if (!adminClientRowIds.includes(validation.clientId)) {
+		if (!adminClientRowIds.includes(tokenClientRowId)) {
 			scheduleActivityLog(ctx.ctx, tokenActivityLogService.logActivity({
 				ip,
 				requestType: "admin_api",
@@ -102,7 +104,7 @@ export function withAdminApiClientContext(handler: AdminApiClientContextHandler)
 		}
 
 		const authContext = {
-			adminClientRowId: validation.clientId,
+			adminClientRowId: tokenClientRowId,
 			subjectUserId: validation.subject,
 		};
 

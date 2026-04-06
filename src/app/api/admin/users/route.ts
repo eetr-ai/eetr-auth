@@ -36,6 +36,7 @@ export const POST = withAdminApiClientContext(async (req, _ctx, getServices) => 
 		username?: unknown;
 		password?: unknown;
 		isAdmin?: unknown;
+		is_admin?: unknown;
 		name?: unknown;
 		email?: unknown;
 	};
@@ -52,9 +53,13 @@ export const POST = withAdminApiClientContext(async (req, _ctx, getServices) => 
 			{ status: 400 }
 		);
 	}
-	if (body.isAdmin !== undefined && typeof body.isAdmin !== "boolean") {
+	if (body.isAdmin !== undefined || body.is_admin !== undefined) {
 		return NextResponse.json(
-			{ error: "invalid_request", error_description: "isAdmin must be a boolean when provided." },
+			{
+				error: "invalid_request",
+				error_description:
+					"Admin API create only supports regular users; do not send isAdmin/is_admin.",
+			},
 			{ status: 400 }
 		);
 	}
@@ -76,7 +81,7 @@ export const POST = withAdminApiClientContext(async (req, _ctx, getServices) => 
 		const user = await userService.createUser(
 			body.username,
 			body.password,
-			typeof body.isAdmin === "boolean" ? body.isAdmin : true,
+			false,
 			body.name === undefined ? undefined : body.name,
 			body.email === undefined ? undefined : body.email
 		);
