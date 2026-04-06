@@ -68,6 +68,11 @@ This project now exposes OAuth authorization server endpoints for:
 - `client_credentials`
 - `refresh_token`
 
+### API Reference (Scalar)
+
+- Interactive docs: `GET /api/docs`
+- OpenAPI document (JSON): `GET /api/openapi`
+
 ### Authorization endpoint
 
 - `GET` or `POST` `/api/authorize`

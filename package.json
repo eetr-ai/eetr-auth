@@ -34,6 +34,7 @@
 	"dependencies": {
 		"@eetr/react-reducer-utils": "^0.1.1",
 		"@opennextjs/cloudflare": "^1.17.1",
+		"@scalar/nextjs-api-reference": "^0.10.6",
 		"jose": "^6.0.11",
 		"lucide-react": "^0.576.0",
 		"md5": "^2.3.0",
