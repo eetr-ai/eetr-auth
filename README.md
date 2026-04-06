@@ -19,6 +19,18 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+## Local Setup
+
+For local sign-in and password-reset testing, bootstrap local D1 with schema, an admin user, and a site URL:
+
+```bash
+npm run db:migrate
+npm run db:create-user:local -- <username> <email>
+npm run db:set-site-url:local -- https://auth.example.com
+```
+
+If you pass arguments to npm scripts, prefer `--` before script args.
+
 ## Preview
 
 Preview the application locally on the Cloudflare runtime:
@@ -144,5 +156,7 @@ This project now exposes OAuth authorization server endpoints for:
 
 - Set in both local + remote D1:
   - `npm run db:set-site-url -- https://auth.example.com`
+- Set in local D1 only:
+  - `npm run db:set-site-url:local -- https://auth.example.com`
 - Remote only with generated Wrangler config:
   - `npm run db:set-site-url:remote -- --config wrangler.generated.jsonc https://auth.example.com`

@@ -117,6 +117,18 @@ npm run db:create-admin:remote -- --config path/to/your.wrangler.jsonc <username
 - `GET /api/health`
 - Sign in and exercise OAuth/token flows as needed.
 
+## Local-only quick setup
+
+If you only need local development setup (no Terraform/deploy), run:
+
+```bash
+npm run db:migrate
+npm run db:create-admin:local -- <username> <email>
+npm run db:set-site-url:local -- https://auth.example.com
+```
+
+This is enough for local sign-in and password reset flow testing.
+
 ## 11. Ongoing
 
 Re-running `npm run infra:provision` **regenerates** `AUTH_SECRET`, `HMAC_KEY`, and JWT keys—only do this when rotating credentials. Re-running `infra:render-wrangler` is safe when Terraform outputs change.
