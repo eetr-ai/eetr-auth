@@ -55,7 +55,10 @@ export function getServices(ctx: RequestContext): Services {
 		userService: new UserService(ctx),
 		environmentService: new EnvironmentService(ctx),
 		scopeService: new ScopeService(ctx),
-		clientService: new ClientService(ctx),
+		clientService: new ClientService({
+			clientRepo,
+			env: ctx.env,
+		}),
 		siteSettingsService,
 		oauthAuthorizationService: new OauthAuthorizationService({
 			clientRepo,

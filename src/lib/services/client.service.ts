@@ -1,10 +1,8 @@
-import { getDb } from "@/lib/db";
-import type { RequestContext } from "@/lib/context/types";
 import { hashClientSecretForStorage, resolveHmacKey } from "@/lib/auth/secret-at-rest";
 import { resolveClientKeyPrefix } from "@/lib/config/client-key-prefix";
-import { ClientRepositoryD1 } from "@/lib/repositories/client.repository.d1";
 import type {
 	Client,
+	ClientRepository,
 	ClientWithDetails,
 } from "@/lib/repositories/client.repository";
 
@@ -37,14 +35,18 @@ export interface CreateClientResult {
 	clientSecret: string;
 }
 
+export interface ClientServiceDeps {
+	clientRepo: ClientRepository;
+	env: CloudflareEnv;
+}
+
 export class ClientService {
-	private readonly clientRepo: ClientRepositoryD1;
+	private readonly clientRepo: ClientRepository;
 	private readonly env: Record<string, unknown>;
 
-	constructor(ctx: RequestContext) {
-		const db = getDb(ctx.env);
-		this.clientRepo = new ClientRepositoryD1(db);
-		this.env = ctx.env as unknown as Record<string, unknown>;
+	constructor({ clientRepo, env }: ClientServiceDeps) {
+		this.clientRepo = clientRepo;
+		this.env = env as unknown as Record<string, unknown>;
 	}
 
 	async list(environmentId?: string): Promise<Client[]> {
