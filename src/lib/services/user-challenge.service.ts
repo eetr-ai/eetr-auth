@@ -34,6 +34,22 @@ export type MfaOtpFailureReason =
 
 export type MfaOtpVerifyResult = { ok: true } | { ok: false; reason: MfaOtpFailureReason };
 
+function maskEmailForLogs(email: string): string {
+	const trimmed = email.trim().toLowerCase();
+	const at = trimmed.indexOf("@");
+	if (at <= 0 || at === trimmed.length - 1) {
+		return "invalid_email";
+	}
+	const local = trimmed.slice(0, at);
+	const domain = trimmed.slice(at + 1);
+	const visibleLocal = local.length <= 2 ? `${local[0] ?? ""}*` : `${local.slice(0, 2)}***`;
+	return `${visibleLocal}@${domain}`;
+}
+
+function logPasswordReset(payload: Record<string, unknown>): void {
+	console.info(JSON.stringify({ event: "password_reset", ...payload }));
+}
+
 function randomSixDigitCode(): string {
 	const buf = new Uint32Array(1);
 	crypto.getRandomValues(buf);
@@ -169,16 +185,20 @@ export class UserChallengeService {
 	 */
 	async requestPasswordReset(emailRaw: string): Promise<void> {
 		const email = emailRaw.trim().toLowerCase();
+		const emailMasked = maskEmailForLogs(email);
+		logPasswordReset({ step: "request_start", emailMasked });
 		const genericDone = async () => {
 			await Promise.resolve();
 		};
 		if (!email) {
+			logPasswordReset({ step: "request_ignored", reason: "empty_email" });
 			await genericDone();
 			return;
 		}
 
 		const user = await this.userRepo.findByEmail(email);
 		if (!user?.email?.trim()) {
+			logPasswordReset({ step: "request_lookup", outcome: "no_matching_user", emailMasked });
 			await genericDone();
 			return;
 		}
@@ -186,6 +206,12 @@ export class UserChallengeService {
 		const site = await this.siteRepo.get();
 		const siteUrl = site?.siteUrl?.trim();
 		if (!siteUrl || !this.mail.getResendApiKey()) {
+			logPasswordReset({
+				step: "request_skipped",
+				reason: !siteUrl ? "missing_site_url" : "missing_resend_api_key",
+				emailMasked,
+				userId: user.id,
+			});
 			await genericDone();
 			return;
 		}
@@ -207,6 +233,13 @@ export class UserChallengeService {
 			challengeId,
 			userId: user.id,
 			expiresAt,
+		});
+		logPasswordReset({
+			step: "challenge_created",
+			userId: user.id,
+			challengeId,
+			emailMasked,
+			expiresAt: expiresAt.toISOString(),
 		});
 
 		const base = resolveIssuerBaseUrl(this.env);
@@ -232,25 +265,47 @@ export class UserChallengeService {
 			footerLine: `Sent by ${logoAlt}. If you did not request a password reset, you can ignore this email.`,
 		});
 
-		await this.mail.send({
-			from,
-			to: user.email.trim(),
-			subject: `Reset your password — ${displayTitle}`,
-			html,
-			text: `Reset your password: ${resetUrl}\n\nIf you did not request this, cancel the reset (invalidates the link): ${cancelUrl}`,
-		});
+		try {
+			await this.mail.send({
+				from,
+				to: user.email.trim(),
+				subject: `Reset your password — ${displayTitle}`,
+				html,
+				text: `Reset your password: ${resetUrl}\n\nIf you did not request this, cancel the reset (invalidates the link): ${cancelUrl}`,
+			});
+			logPasswordReset({
+				step: "email_sent",
+				userId: user.id,
+				challengeId,
+				emailMasked,
+			});
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			logPasswordReset({
+				step: "email_send_failed",
+				userId: user.id,
+				challengeId,
+				emailMasked,
+				error: message,
+			});
+			throw error;
+		}
 	}
 
 	async completePasswordReset(token: string, newPassword: string): Promise<void> {
+		logPasswordReset({ step: "complete_start" });
 		const { challengeId, userId } = await verifyPasswordResetJwt(this.env, token);
 		const row = await this.challengeRepo.getById(challengeId);
 		if (!row || row.kind !== "password_reset" || row.userId !== userId) {
+			logPasswordReset({ step: "complete_rejected", reason: "missing_or_mismatch", challengeId, userId });
 			throw new Error("Invalid or expired reset link.");
 		}
 		if (row.consumedAt) {
+			logPasswordReset({ step: "complete_rejected", reason: "already_used", challengeId, userId });
 			throw new Error("This reset link has already been used.");
 		}
 		if (row.expiresAt <= new Date().toISOString()) {
+			logPasswordReset({ step: "complete_rejected", reason: "expired", challengeId, userId });
 			throw new Error("This reset link has expired.");
 		}
 		const hash = await hashPassword(newPassword, {
@@ -259,6 +314,7 @@ export class UserChallengeService {
 		});
 		await this.userRepo.update(userId, { passwordHash: hash });
 		await this.challengeRepo.markConsumed(challengeId, new Date().toISOString());
+		logPasswordReset({ step: "complete_success", challengeId, userId });
 	}
 
 	/**
@@ -266,17 +322,22 @@ export class UserChallengeService {
 	 * Uses the same JWT as the reset link.
 	 */
 	async cancelPasswordReset(token: string): Promise<void> {
+		logPasswordReset({ step: "cancel_start" });
 		const { challengeId, userId } = await verifyPasswordResetJwt(this.env, token);
 		const row = await this.challengeRepo.getById(challengeId);
 		if (!row) {
+			logPasswordReset({ step: "cancel_noop", reason: "challenge_not_found", challengeId, userId });
 			return;
 		}
 		if (row.kind !== "password_reset" || row.userId !== userId) {
+			logPasswordReset({ step: "cancel_rejected", reason: "missing_or_mismatch", challengeId, userId });
 			throw new Error("Invalid or expired reset link.");
 		}
 		if (row.consumedAt) {
+			logPasswordReset({ step: "cancel_rejected", reason: "already_invalid", challengeId, userId });
 			throw new Error("This reset link is no longer valid.");
 		}
 		await this.challengeRepo.deleteById(challengeId);
+		logPasswordReset({ step: "cancel_success", challengeId, userId });
 	}
 }
