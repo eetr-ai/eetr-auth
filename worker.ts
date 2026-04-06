@@ -3,6 +3,11 @@
 import openNextWorker from "./.open-next/worker.js";
 import { OauthTokenService } from "./src/lib/services/oauth-token.service";
 import { getDb } from "./src/lib/db";
+import { ClientRepositoryD1 } from "./src/lib/repositories/client.repository.d1";
+import { AuthorizationCodeRepositoryD1 } from "./src/lib/repositories/authorization-code.repository.d1";
+import { TokenRepositoryD1 } from "./src/lib/repositories/token.repository.d1";
+import { RefreshTokenRepositoryD1 } from "./src/lib/repositories/refresh-token.repository.d1";
+import { EnvironmentRepositoryD1 } from "./src/lib/repositories/environment.repository.d1";
 import { TokenActivityLogRepositoryD1 } from "./src/lib/repositories/token-activity-log.repository.d1";
 
 type CronMetadata = {
@@ -51,17 +56,22 @@ const worker = {
 		const startedAt = new Date(startedAtMs).toISOString();
 		const requestId = crypto.randomUUID();
 		const cronMetadata = getCronMetadata(controller);
+		const db = getDb(env);
 
 		try {
 			const oauthTokenService = new OauthTokenService({
 				env,
-				requestId,
+				clientRepo: new ClientRepositoryD1(db),
+				authorizationCodeRepo: new AuthorizationCodeRepositoryD1(db),
+				tokenRepo: new TokenRepositoryD1(db),
+				refreshTokenRepo: new RefreshTokenRepositoryD1(db),
+				envRepo: new EnvironmentRepositoryD1(db),
 			});
 			const result = await oauthTokenService.cleanupTokenArtifacts(false);
 
 			const retentionDays = 7;
 			const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
-			const activityLogRepo = new TokenActivityLogRepositoryD1(getDb(env));
+			const activityLogRepo = new TokenActivityLogRepositoryD1(db);
 			const tokenActivityLogDeleted = await activityLogRepo.deleteOlderThan(cutoff);
 
 			const endedAtMs = Date.now();

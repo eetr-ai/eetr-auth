@@ -6,6 +6,8 @@ import { AuthorizationCodeRepositoryD1 } from "@/lib/repositories/authorization-
 import { UserRepositoryD1 } from "@/lib/repositories/admin.repository.d1";
 import { UserChallengeRepositoryD1 } from "@/lib/repositories/user-challenge.repository.d1";
 import { SiteSettingsRepositoryD1 } from "@/lib/repositories/site-settings.repository.d1";
+import { RefreshTokenRepositoryD1 } from "@/lib/repositories/refresh-token.repository.d1";
+import { EnvironmentRepositoryD1 } from "@/lib/repositories/environment.repository.d1";
 import { UserService } from "./user.service";
 import { EnvironmentService } from "./environment.service";
 import { ScopeService } from "./scope.service";
@@ -39,6 +41,8 @@ export function getServices(ctx: RequestContext): Services {
 	const clientRepo = new ClientRepositoryD1(db);
 	const tokenRepo = new TokenRepositoryD1(db);
 	const authorizationCodeRepo = new AuthorizationCodeRepositoryD1(db);
+	const refreshTokenRepo = new RefreshTokenRepositoryD1(db);
+	const envRepo = new EnvironmentRepositoryD1(db);
 	const userRepo = new UserRepositoryD1(db);
 	const challengeRepo = new UserChallengeRepositoryD1(db);
 	const siteRepo = new SiteSettingsRepositoryD1(db);
@@ -56,7 +60,14 @@ export function getServices(ctx: RequestContext): Services {
 			tokenRepo,
 			authorizationCodeRepo,
 		}),
-		oauthTokenService: new OauthTokenService(ctx),
+		oauthTokenService: new OauthTokenService({
+			clientRepo,
+			authorizationCodeRepo,
+			tokenRepo,
+			refreshTokenRepo,
+			envRepo,
+			env: ctx.env,
+		}),
 		tokenActivityLogService: new TokenActivityLogService(ctx),
 		userChallengeService: new UserChallengeService({
 			userRepo,

@@ -1,12 +1,10 @@
 import { SignJWT, importPKCS8, jwtVerify, createLocalJWKSet, decodeJwt } from "jose";
 import { resolveIssuerBaseUrl } from "@/lib/config/issuer-base-url";
-import { getDb } from "@/lib/db";
-import type { RequestContext } from "@/lib/context/types";
-import { ClientRepositoryD1 } from "@/lib/repositories/client.repository.d1";
-import { AuthorizationCodeRepositoryD1 } from "@/lib/repositories/authorization-code.repository.d1";
-import { TokenRepositoryD1 } from "@/lib/repositories/token.repository.d1";
-import { RefreshTokenRepositoryD1 } from "@/lib/repositories/refresh-token.repository.d1";
-import { EnvironmentRepositoryD1 } from "@/lib/repositories/environment.repository.d1";
+import type { ClientRepository } from "@/lib/repositories/client.repository";
+import type { AuthorizationCodeRepository } from "@/lib/repositories/authorization-code.repository";
+import type { TokenRepository } from "@/lib/repositories/token.repository";
+import type { RefreshTokenRepository } from "@/lib/repositories/refresh-token.repository";
+import type { EnvironmentRepository } from "@/lib/repositories/environment.repository";
 import type { ClientScopeGrant } from "@/lib/repositories/token.repository";
 import type {
 	RefreshTokenActivity,
@@ -126,22 +124,30 @@ export interface CleanupTokenArtifactsResult {
 	totalDeleted: number;
 }
 
-export class OauthTokenService {
-	private readonly ctx: RequestContext;
-	private readonly clientRepo: ClientRepositoryD1;
-	private readonly authorizationCodeRepo: AuthorizationCodeRepositoryD1;
-	private readonly tokenRepo: TokenRepositoryD1;
-	private readonly refreshTokenRepo: RefreshTokenRepositoryD1;
-	private readonly envRepo: EnvironmentRepositoryD1;
+export interface OauthTokenServiceDeps {
+	clientRepo: ClientRepository;
+	authorizationCodeRepo: AuthorizationCodeRepository;
+	tokenRepo: TokenRepository;
+	refreshTokenRepo: RefreshTokenRepository;
+	envRepo: EnvironmentRepository;
+	env: CloudflareEnv;
+}
 
-	constructor(ctx: RequestContext) {
-		this.ctx = ctx;
-		const db = getDb(ctx.env);
-		this.clientRepo = new ClientRepositoryD1(db);
-		this.authorizationCodeRepo = new AuthorizationCodeRepositoryD1(db);
-		this.tokenRepo = new TokenRepositoryD1(db);
-		this.refreshTokenRepo = new RefreshTokenRepositoryD1(db);
-		this.envRepo = new EnvironmentRepositoryD1(db);
+export class OauthTokenService {
+	private readonly env: CloudflareEnv;
+	private readonly clientRepo: ClientRepository;
+	private readonly authorizationCodeRepo: AuthorizationCodeRepository;
+	private readonly tokenRepo: TokenRepository;
+	private readonly refreshTokenRepo: RefreshTokenRepository;
+	private readonly envRepo: EnvironmentRepository;
+
+	constructor({ clientRepo, authorizationCodeRepo, tokenRepo, refreshTokenRepo, envRepo, env }: OauthTokenServiceDeps) {
+		this.clientRepo = clientRepo;
+		this.authorizationCodeRepo = authorizationCodeRepo;
+		this.tokenRepo = tokenRepo;
+		this.refreshTokenRepo = refreshTokenRepo;
+		this.envRepo = envRepo;
+		this.env = env;
 	}
 
 	private async authenticateClient(clientId: string | null, clientSecret: string | null) {
@@ -154,7 +160,7 @@ export class OauthTokenService {
 		if (!client) {
 			throw new OAuthServiceError("invalid_client", "Invalid client credentials.", 401);
 		}
-		const env = this.ctx.env as unknown as Record<string, unknown>;
+		const env = this.env as unknown as Record<string, unknown>;
 		const hmacKey = resolveHmacKey(env);
 		const v = await verifyClientSecretAgainstStored(clientSecret, client.clientSecret, hmacKey);
 		if (!v.ok) {
@@ -199,7 +205,7 @@ export class OauthTokenService {
 		rotatedFromRefreshTokenId?: string | null;
 		clientIdentifier?: string;
 	}): Promise<OAuthTokenResponse> {
-		const env = this.ctx.env as unknown as Record<string, unknown>;
+		const env = this.env as unknown as Record<string, unknown>;
 		// Prefer ctx.env; in next dev, .env.local is in process.env but may not be merged into ctx.env
 		const privateKeyPem =
 			(typeof env.JWT_PRIVATE_KEY === "string" ? env.JWT_PRIVATE_KEY : null) ??
@@ -297,7 +303,7 @@ export class OauthTokenService {
 		const accessExpiresAt = new Date(now.getTime() + ACCESS_TOKEN_TTL_SECONDS * 1000);
 		const refreshExpiresAt = new Date(now.getTime() + REFRESH_TOKEN_TTL_SECONDS * 1000);
 
-		const env = this.ctx.env as unknown as Record<string, unknown>;
+		const env = this.env as unknown as Record<string, unknown>;
 		// Prefer ctx.env; in next dev, .env.local is in process.env but may not be merged into ctx.env
 		const envKid =
 			(typeof env.JWT_KID === "string" ? env.JWT_KID : null) ??
@@ -784,7 +790,7 @@ export class OauthTokenService {
 		requiredScopes: string[],
 		expectedEnvironmentName: string | null
 	): Promise<ValidateTokenResult> {
-		const env = this.ctx.env as unknown as Record<string, unknown>;
+		const env = this.env as unknown as Record<string, unknown>;
 		const blogImages = env.BLOG_IMAGES as { get(key: string): Promise<{ body: ReadableStream } | null> } | undefined;
 		const jwksR2Key = (typeof env.JWKS_R2_KEY === "string" ? env.JWKS_R2_KEY : null) ?? JWKS_R2_KEY_DEFAULT;
 		// Prefer ctx.env; in next dev, JWT_JWKS_JSON may only be in process.env (.env.local)
