@@ -1,8 +1,6 @@
-import { getDb } from "@/lib/db";
-import type { RequestContext } from "@/lib/context/types";
-import { ClientRepositoryD1 } from "@/lib/repositories/client.repository.d1";
-import { TokenRepositoryD1 } from "@/lib/repositories/token.repository.d1";
-import { AuthorizationCodeRepositoryD1 } from "@/lib/repositories/authorization-code.repository.d1";
+import type { ClientRepository } from "@/lib/repositories/client.repository";
+import type { TokenRepository } from "@/lib/repositories/token.repository";
+import type { AuthorizationCodeRepository } from "@/lib/repositories/authorization-code.repository";
 import { OAuthServiceError } from "./oauth.types";
 
 const AUTHORIZATION_CODE_TTL_SECONDS = 300;
@@ -30,16 +28,25 @@ export interface AuthorizeRequestParams {
 	subject: string;
 }
 
-export class OauthAuthorizationService {
-	private readonly clientRepo: ClientRepositoryD1;
-	private readonly tokenRepo: TokenRepositoryD1;
-	private readonly authorizationCodeRepo: AuthorizationCodeRepositoryD1;
+export interface OauthAuthorizationServiceDeps {
+	clientRepo: ClientRepository;
+	tokenRepo: TokenRepository;
+	authorizationCodeRepo: AuthorizationCodeRepository;
+}
 
-	constructor(ctx: RequestContext) {
-		const db = getDb(ctx.env);
-		this.clientRepo = new ClientRepositoryD1(db);
-		this.tokenRepo = new TokenRepositoryD1(db);
-		this.authorizationCodeRepo = new AuthorizationCodeRepositoryD1(db);
+export class OauthAuthorizationService {
+	private readonly clientRepo: ClientRepository;
+	private readonly tokenRepo: TokenRepository;
+	private readonly authorizationCodeRepo: AuthorizationCodeRepository;
+
+	constructor({
+		clientRepo,
+		tokenRepo,
+		authorizationCodeRepo,
+	}: OauthAuthorizationServiceDeps) {
+		this.clientRepo = clientRepo;
+		this.tokenRepo = tokenRepo;
+		this.authorizationCodeRepo = authorizationCodeRepo;
 	}
 
 	async authorize(params: AuthorizeRequestParams): Promise<{ redirectTo: string }> {

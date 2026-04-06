@@ -1,4 +1,8 @@
 import type { RequestContext } from "@/lib/context/types";
+import { getDb } from "@/lib/db";
+import { ClientRepositoryD1 } from "@/lib/repositories/client.repository.d1";
+import { TokenRepositoryD1 } from "@/lib/repositories/token.repository.d1";
+import { AuthorizationCodeRepositoryD1 } from "@/lib/repositories/authorization-code.repository.d1";
 import { UserService } from "./user.service";
 import { EnvironmentService } from "./environment.service";
 import { ScopeService } from "./scope.service";
@@ -27,12 +31,21 @@ export interface Services {
  * Returns per-request service instances. Call only from onServerAction or withApiContext.
  */
 export function getServices(ctx: RequestContext): Services {
+	const db = getDb(ctx.env);
+	const clientRepo = new ClientRepositoryD1(db);
+	const tokenRepo = new TokenRepositoryD1(db);
+	const authorizationCodeRepo = new AuthorizationCodeRepositoryD1(db);
+
 	return {
 		userService: new UserService(ctx),
 		environmentService: new EnvironmentService(ctx),
 		scopeService: new ScopeService(ctx),
 		clientService: new ClientService(ctx),
-		oauthAuthorizationService: new OauthAuthorizationService(ctx),
+		oauthAuthorizationService: new OauthAuthorizationService({
+			clientRepo,
+			tokenRepo,
+			authorizationCodeRepo,
+		}),
 		oauthTokenService: new OauthTokenService(ctx),
 		tokenActivityLogService: new TokenActivityLogService(ctx),
 		siteSettingsService: new SiteSettingsService(ctx),
