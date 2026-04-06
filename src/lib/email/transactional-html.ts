@@ -74,6 +74,13 @@ export function mfaOtpBodyHtml(code: string): string {
 <p style="margin:0;color:${TEXT_MUTED};font-size:14px;">This code expires in 10 minutes.</p>`;
 }
 
+export function emailVerificationBodyHtml(code: string): string {
+  return `<p style="margin:0 0 16px;">Use this code to verify your email address:</p>
+<p style="margin:0 0 20px;font-size:32px;letter-spacing:0.25em;font-weight:700;color:${BRAND};font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;">${escapeHtml(code)}</p>
+<p style="margin:0 0 12px;color:${TEXT_MUTED};font-size:14px;">This code expires in 10 minutes.</p>
+<p style="margin:0;color:${TEXT_MUTED};font-size:14px;">Once verified, you can keep using this address for sign-in and account notifications.</p>`;
+}
+
 export function passwordResetBodyHtml(
 	resetUrl: string,
 	cancelUrl: string,

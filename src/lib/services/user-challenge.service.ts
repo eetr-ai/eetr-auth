@@ -14,6 +14,7 @@ import { resolveMfaOtpMaxAttempts } from "@/lib/config/mfa-otp-max-attempts";
 import { timingSafeEqualHex } from "@/lib/crypto/hmac-sha256";
 import {
 	buildTransactionalEmailHtml,
+	emailVerificationBodyHtml,
 	mfaOtpBodyHtml,
 	passwordResetBodyHtml,
 } from "@/lib/email/transactional-html";
@@ -21,6 +22,7 @@ import { TransactionalEmailService } from "./transactional-email.service";
 import { SiteSettingsService } from "./site-settings.service";
 
 const MFA_OTP_TTL_MS = 10 * 60 * 1000;
+const EMAIL_VERIFICATION_TTL_MS = 10 * 60 * 1000;
 
 export type MfaOtpFailureReason =
 	| "challenge_missing_or_mismatch"
@@ -30,6 +32,17 @@ export type MfaOtpFailureReason =
 	| "otp_max_attempts_exceeded";
 
 export type MfaOtpVerifyResult = { ok: true } | { ok: false; reason: MfaOtpFailureReason };
+
+export type EmailVerificationFailureReason =
+	| "challenge_missing_or_mismatch"
+	| "challenge_consumed"
+	| "challenge_expired"
+	| "otp_incorrect"
+	| "otp_max_attempts_exceeded";
+
+export type EmailVerificationVerifyResult =
+	| { ok: true }
+	| { ok: false; reason: EmailVerificationFailureReason };
 
 export interface UserChallengeServiceMail {
 	getResendApiKey(): string | null;
@@ -73,6 +86,10 @@ function logPasswordReset(payload: Record<string, unknown>): void {
 	console.info(JSON.stringify({ event: "password_reset", ...payload }));
 }
 
+function logEmailVerification(payload: Record<string, unknown>): void {
+	console.info(JSON.stringify({ event: "email_verification", ...payload }));
+}
+
 function randomSixDigitCode(): string {
 	const buf = new Uint32Array(1);
 	crypto.getRandomValues(buf);
@@ -84,6 +101,11 @@ async function hashMfaOtp(challengeId: string, code: string): Promise<string> {
 	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(raw));
 	return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
+
+type EmailChallengeUser = Pick<
+	UserWithPassword,
+	"id" | "username" | "name" | "email" | "emailVerifiedAt" | "avatarKey" | "isAdmin"
+>;
 
 export class UserChallengeService {
 	private readonly userRepo: UserRepository;
@@ -172,6 +194,63 @@ export class UserChallengeService {
 		return challengeId;
 	}
 
+	async createEmailVerificationOtpAndSendEmail(user: EmailChallengeUser): Promise<string> {
+		const site = await this.siteRepo.get();
+		const siteUrl = site?.siteUrl?.trim();
+		if (!siteUrl) {
+			throw new Error("Site URL is not configured.");
+		}
+		if (!user.email?.trim()) {
+			throw new Error("Your account has no email address; email verification cannot be used.");
+		}
+
+		await this.challengeRepo.deleteByUserIdAndKind(user.id, "email_verification");
+
+		const code = randomSixDigitCode();
+		const challengeId = crypto.randomUUID();
+		const now = new Date();
+		const expiresAt = new Date(now.getTime() + EMAIL_VERIFICATION_TTL_MS);
+		const codeHash = await hashMfaOtp(challengeId, code);
+
+		await this.challengeRepo.insert({
+			id: challengeId,
+			userId: user.id,
+			kind: "email_verification",
+			codeHash,
+			expiresAt: expiresAt.toISOString(),
+			createdAt: now.toISOString(),
+		});
+
+		const displayTitle = site?.siteTitle?.trim() || "Verify your email";
+		const siteUrlHttp = siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`;
+		const logoUrl = this.siteSettings.getEmailLogoAbsoluteUrl(
+			siteUrlHttp,
+			site?.logoKey ?? null,
+			site?.cdnUrl ?? null
+		);
+		const logoAlt = this.siteSettings.getDisplaySiteTitle(site?.siteTitle);
+
+		const from = this.mail.fromAddress(siteUrlHttp);
+		const html = buildTransactionalEmailHtml({
+			heading: displayTitle,
+			logoUrl,
+			logoAlt,
+			bodyHtml: emailVerificationBodyHtml(code),
+			footerLine: `Sent by ${logoAlt}. If you did not request this verification email, you can ignore it.`,
+		});
+
+		await this.mail.send({
+			from,
+			to: user.email.trim(),
+			subject: `Verify your email — ${displayTitle}`,
+			html,
+			text: `Your email verification code is: ${code} (expires in 10 minutes).`,
+		});
+
+		logEmailVerification({ step: "challenge_created", userId: user.id, challengeId });
+		return challengeId;
+	}
+
 	async verifyMfaOtpAndConsume(
 		challengeId: string,
 		userId: string,
@@ -200,6 +279,63 @@ export class UserChallengeService {
 		}
 		await this.challengeRepo.deleteById(challengeId);
 		return { ok: true };
+	}
+
+	async verifyEmailVerificationOtpAndConsume(
+		challengeId: string,
+		userId: string,
+		code: string
+	): Promise<EmailVerificationVerifyResult> {
+		const row = await this.challengeRepo.getById(challengeId);
+		if (!row || row.kind !== "email_verification" || row.userId !== userId) {
+			return { ok: false, reason: "challenge_missing_or_mismatch" };
+		}
+		if (row.consumedAt) {
+			return { ok: false, reason: "challenge_consumed" };
+		}
+		if (row.expiresAt <= new Date().toISOString()) {
+			await this.challengeRepo.deleteById(challengeId);
+			return { ok: false, reason: "challenge_expired" };
+		}
+		const expected = await hashMfaOtp(challengeId, code.trim());
+		if (!timingSafeEqualHex(expected, row.codeHash ?? "")) {
+			const maxAttempts = resolveMfaOtpMaxAttempts(this.env);
+			const newCount = await this.challengeRepo.incrementOtpFailedAttempts(challengeId);
+			if (newCount != null && newCount >= maxAttempts) {
+				await this.challengeRepo.deleteById(challengeId);
+				return { ok: false, reason: "otp_max_attempts_exceeded" };
+			}
+			return { ok: false, reason: "otp_incorrect" };
+		}
+		await this.challengeRepo.deleteById(challengeId);
+		await this.markEmailVerified(userId);
+		logEmailVerification({ step: "challenge_verified", userId, challengeId });
+		return { ok: true };
+	}
+
+	async markEmailVerified(userId: string): Promise<void> {
+		const user = await this.userRepo.getById(userId);
+		if (!user || user.isAdmin || !user.email?.trim() || user.emailVerifiedAt) {
+			return;
+		}
+		await this.userRepo.update(userId, { emailVerifiedAt: new Date().toISOString() });
+	}
+
+	async requestEmailVerification(userId: string): Promise<string | null> {
+		const targetUser = await this.userRepo.getById(userId);
+		if (!targetUser) {
+			throw new Error("User not found");
+		}
+		if (targetUser.isAdmin) {
+			return null;
+		}
+		if (!targetUser.email?.trim()) {
+			throw new Error("Your account has no email address; email verification cannot be used.");
+		}
+		if (targetUser.emailVerifiedAt) {
+			return null;
+		}
+		return this.createEmailVerificationOtpAndSendEmail(targetUser);
 	}
 
 	/**

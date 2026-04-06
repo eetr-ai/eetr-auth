@@ -114,11 +114,13 @@ function escapeSql(value) {
 
 const id = randomUUID();
 const passwordHash = `reset-required:${randomBytes(32).toString("hex")}`;
+const emailVerifiedAt = new Date().toISOString();
 const escapedUsername = escapeSql(username.trim());
 const escapedEmail = escapeSql(email);
+const escapedEmailVerifiedAt = escapeSql(emailVerifiedAt);
 const escapedHash = escapeSql(passwordHash);
 
-const sql = `INSERT INTO users (id, username, email, password_hash, is_admin) VALUES ('${id}', '${escapedUsername}', '${escapedEmail}', '${escapedHash}', 1);`;
+const sql = `INSERT INTO users (id, username, email, email_verified_at, password_hash, is_admin) VALUES ('${id}', '${escapedUsername}', '${escapedEmail}', '${escapedEmailVerifiedAt}', '${escapedHash}', 1);`;
 
 const tmpDir = join(process.cwd(), ".tmp");
 const sqlPath = join(tmpDir, `create-admin-${Date.now()}.sql`);

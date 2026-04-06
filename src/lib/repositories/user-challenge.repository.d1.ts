@@ -62,6 +62,13 @@ export class UserChallengeRepositoryD1 implements UserChallengeRepository {
 		await this.db.prepare("DELETE FROM user_challenges WHERE id = ?").bind(id).run();
 	}
 
+	async deleteByUserIdAndKind(userId: string, kind: UserChallengeKind): Promise<void> {
+		await this.db
+			.prepare("DELETE FROM user_challenges WHERE user_id = ? AND kind = ?")
+			.bind(userId, kind)
+			.run();
+	}
+
 	async markConsumed(id: string, consumedAtIso: string): Promise<void> {
 		await this.db
 			.prepare("UPDATE user_challenges SET consumed_at = ? WHERE id = ?")
@@ -81,7 +88,7 @@ export class UserChallengeRepositoryD1 implements UserChallengeRepository {
 		const r = await this.db
 			.prepare(
 				`UPDATE user_challenges SET otp_failed_attempts = otp_failed_attempts + 1
-         WHERE id = ? AND kind = 'mfa_otp'
+         WHERE id = ? AND kind IN ('mfa_otp', 'email_verification')
          RETURNING otp_failed_attempts as otpFailedAttempts`
 			)
 			.bind(id)

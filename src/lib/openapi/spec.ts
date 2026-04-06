@@ -264,11 +264,12 @@ export function getOpenApiDocument(serverUrl?: string) {
 								"application/json": {
 									schema: {
 										type: "object",
-										required: ["sub", "email", "preferred_username"],
+										required: ["sub", "email", "email_verified", "preferred_username"],
 										properties: {
 											sub: { type: "string" },
 											name: { type: "string" },
 											email: { type: "string", format: "email" },
+											email_verified: { type: "boolean" },
 											picture: { type: "string", format: "uri" },
 											preferred_username: { type: "string" },
 										},
@@ -278,6 +279,92 @@ export function getOpenApiDocument(serverUrl?: string) {
 						},
 						"401": {
 							description: "Invalid or missing access token",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+					},
+				},
+			},
+			"/api/users/email-verification/request": {
+				post: {
+					tags: ["Users"],
+					summary: "Send an email verification code to the authenticated user",
+					security: [{ bearerAuth: [] }],
+					responses: {
+						"200": {
+							description: "Request accepted",
+							content: {
+								"application/json": {
+									schema: {
+										type: "object",
+										required: ["ok"],
+										properties: {
+											ok: { type: "boolean" },
+											challengeId: { type: ["string", "null"] },
+										},
+									},
+								},
+							},
+						},
+						"400": {
+							description: "Verification cannot be started for the current user",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"401": {
+							description: "Invalid or missing access token/session",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+					},
+				},
+			},
+			"/api/users/email-verification/verify": {
+				post: {
+					tags: ["Users"],
+					summary: "Verify the authenticated user's email with an OTP challenge",
+					security: [{ bearerAuth: [] }],
+					requestBody: {
+						required: true,
+						content: {
+							"application/json": {
+								schema: {
+									type: "object",
+									required: ["challengeId", "code"],
+									properties: {
+										challengeId: { type: "string" },
+										code: { type: "string" },
+									},
+								},
+							},
+						},
+					},
+					responses: {
+						"200": {
+							description: "Email verified",
+							content: {
+								"application/json": {
+									schema: {
+										type: "object",
+										required: ["ok"],
+										properties: {
+											ok: { type: "boolean" },
+										},
+									},
+								},
+							},
+						},
+						"400": {
+							description: "Challenge is invalid, expired, or the code does not match",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"401": {
+							description: "Invalid or missing access token/session",
 							content: {
 								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
 							},
@@ -880,12 +967,22 @@ export function getOpenApiDocument(serverUrl?: string) {
 				},
 				UserRecord: {
 					type: "object",
-					required: ["id", "username", "name", "email", "avatarKey", "isAdmin", "avatarUrl"],
+					required: [
+						"id",
+						"username",
+						"name",
+						"email",
+						"emailVerifiedAt",
+						"avatarKey",
+						"isAdmin",
+						"avatarUrl",
+					],
 					properties: {
 						id: { type: "string" },
 						username: { type: "string" },
 						name: { type: ["string", "null"] },
 						email: { type: ["string", "null"], format: "email" },
+						emailVerifiedAt: { type: ["string", "null"], format: "date-time" },
 						avatarKey: { type: ["string", "null"] },
 						isAdmin: { type: "boolean" },
 						avatarUrl: { type: ["string", "null"], format: "uri" },

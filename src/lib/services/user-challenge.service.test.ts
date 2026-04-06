@@ -44,6 +44,7 @@ function createChallengeRepoMock() {
 		insert: vi.fn(),
 		getById: vi.fn(),
 		deleteById: vi.fn(),
+		deleteByUserIdAndKind: vi.fn(),
 		markConsumed: vi.fn(),
 		deleteExpiredBefore: vi.fn(),
 		incrementOtpFailedAttempts: vi.fn(),
@@ -102,6 +103,7 @@ function makeUser(overrides?: Partial<UserWithPassword>): UserWithPassword {
 		username: "alice",
 		name: "Alice",
 		email: "alice@example.com",
+		emailVerifiedAt: null,
 		avatarKey: null,
 		passwordHash: "stored-hash",
 		isAdmin: false,
@@ -266,6 +268,96 @@ describe("UserChallengeService", () => {
 				ok: true,
 			});
 			expect(challengeRepo.deleteById).toHaveBeenCalledWith("challenge-1");
+		});
+	});
+
+	describe("email verification", () => {
+		it("creates a dedicated email verification challenge and sends the email", async () => {
+			const challengeRepo = createChallengeRepoMock();
+			const siteRepo = createSiteRepoMock();
+			const mail = createMailMock();
+			siteRepo.get.mockResolvedValue({
+				siteTitle: "Test Auth",
+				siteUrl: "https://auth.example.com",
+				cdnUrl: null,
+				logoKey: null,
+				mfaEnabled: false,
+			});
+			const service = createService({ challengeRepo, siteRepo, mail });
+
+			const challengeId = await service.createEmailVerificationOtpAndSendEmail(makeUser());
+
+			expect(challengeRepo.deleteByUserIdAndKind).toHaveBeenCalledWith("user-1", "email_verification");
+			expect(challengeRepo.insert).toHaveBeenCalledWith(
+				expect.objectContaining({
+					id: challengeId,
+					userId: "user-1",
+					kind: "email_verification",
+				})
+			);
+			expect(mail.send).toHaveBeenCalledWith(
+				expect.objectContaining({
+					to: "alice@example.com",
+					subject: expect.stringContaining("Verify your email"),
+				})
+			);
+		});
+
+		it("marks the user verified after a valid verification code", async () => {
+			const challengeRepo = createChallengeRepoMock();
+			const userRepo = createUserRepoMock();
+			challengeRepo.getById.mockResolvedValue(
+				makeChallenge({ kind: "email_verification", codeHash: await hashOtpForTest("challenge-1", "123456") })
+			);
+			userRepo.getById.mockResolvedValue({
+				id: "user-1",
+				username: "alice",
+				name: "Alice",
+				email: "alice@example.com",
+				emailVerifiedAt: null,
+				avatarKey: null,
+				isAdmin: false,
+			});
+			const service = createService({ challengeRepo, userRepo });
+
+			await expect(
+				service.verifyEmailVerificationOtpAndConsume("challenge-1", "user-1", "123456")
+			).resolves.toEqual({ ok: true });
+
+			expect(challengeRepo.deleteById).toHaveBeenCalledWith("challenge-1");
+			expect(userRepo.update).toHaveBeenCalledWith(
+				"user-1",
+				expect.objectContaining({ emailVerifiedAt: "2026-04-06T13:10:00.000Z" })
+			);
+		});
+
+		it("returns a challenge id when requesting email verification for an unverified user", async () => {
+			const userRepo = createUserRepoMock();
+			const challengeRepo = createChallengeRepoMock();
+			const siteRepo = createSiteRepoMock();
+			const mail = createMailMock();
+			userRepo.getById.mockResolvedValue({
+				id: "user-1",
+				username: "alice",
+				name: "Alice",
+				email: "alice@example.com",
+				emailVerifiedAt: null,
+				avatarKey: null,
+				isAdmin: false,
+			});
+			siteRepo.get.mockResolvedValue({
+				siteTitle: "Test Auth",
+				siteUrl: "https://auth.example.com",
+				cdnUrl: null,
+				logoKey: null,
+				mfaEnabled: false,
+			});
+			const service = createService({ userRepo, challengeRepo, siteRepo, mail });
+
+			const challengeId = await service.requestEmailVerification("user-1");
+
+			expect(typeof challengeId).toBe("string");
+			expect(mail.send).toHaveBeenCalled();
 		});
 	});
 

@@ -13,24 +13,38 @@ export class UserRepositoryD1 implements UserRepository {
 		username: string,
 		name: string | null,
 		email: string | null,
+		emailVerifiedAt: string | null,
 		passwordHash: string,
 		isAdmin: boolean
 	): Promise<void> {
 		await this.db
-			.prepare("INSERT INTO users (id, username, name, email, password_hash, is_admin) VALUES (?, ?, ?, ?, ?, ?)")
-			.bind(id, username, name, email, passwordHash, isAdmin ? 1 : 0)
+			.prepare(
+				"INSERT INTO users (id, username, name, email, email_verified_at, password_hash, is_admin) VALUES (?, ?, ?, ?, ?, ?, ?)"
+			)
+			.bind(id, username, name, email, emailVerifiedAt, passwordHash, isAdmin ? 1 : 0)
 			.run();
 	}
 
 	async list(): Promise<UserRecord[]> {
 		const result = await this.db
-			.prepare("SELECT id, username, name, email, avatar_key as avatarKey, is_admin as isAdmin FROM users ORDER BY username")
-			.all<{ id: string; username: string; name: string | null; email: string | null; avatarKey: string | null; isAdmin: number }>();
+			.prepare(
+				"SELECT id, username, name, email, email_verified_at as emailVerifiedAt, avatar_key as avatarKey, is_admin as isAdmin FROM users ORDER BY username"
+			)
+			.all<{
+				id: string;
+				username: string;
+				name: string | null;
+				email: string | null;
+				emailVerifiedAt: string | null;
+				avatarKey: string | null;
+				isAdmin: number;
+			}>();
 		return (result.results ?? []).map((row) => ({
 			id: row.id,
 			username: row.username,
 			name: row.name,
 			email: row.email,
+			emailVerifiedAt: row.emailVerifiedAt,
 			avatarKey: row.avatarKey,
 			isAdmin: !!row.isAdmin,
 		}));
@@ -39,16 +53,26 @@ export class UserRepositoryD1 implements UserRepository {
 	async findByUsername(username: string): Promise<UserWithPassword | null> {
 		const result = await this.db
 			.prepare(
-				"SELECT id, username, name, email, avatar_key as avatarKey, password_hash as passwordHash, is_admin as isAdmin FROM users WHERE username = ?"
+				"SELECT id, username, name, email, email_verified_at as emailVerifiedAt, avatar_key as avatarKey, password_hash as passwordHash, is_admin as isAdmin FROM users WHERE username = ?"
 			)
 			.bind(username)
-			.first<{ id: string; username: string; name: string | null; email: string | null; avatarKey: string | null; passwordHash: string; isAdmin: number }>();
+			.first<{
+				id: string;
+				username: string;
+				name: string | null;
+				email: string | null;
+				emailVerifiedAt: string | null;
+				avatarKey: string | null;
+				passwordHash: string;
+				isAdmin: number;
+			}>();
 		return result
 			? {
 					id: result.id,
 					username: result.username,
 					name: result.name,
 					email: result.email,
+					emailVerifiedAt: result.emailVerifiedAt,
 					avatarKey: result.avatarKey,
 					passwordHash: result.passwordHash,
 					isAdmin: !!result.isAdmin,
@@ -61,16 +85,26 @@ export class UserRepositoryD1 implements UserRepository {
 		if (!normalized) return null;
 		const result = await this.db
 			.prepare(
-				"SELECT id, username, name, email, avatar_key as avatarKey, password_hash as passwordHash, is_admin as isAdmin FROM users WHERE lower(trim(email)) = ?"
+				"SELECT id, username, name, email, email_verified_at as emailVerifiedAt, avatar_key as avatarKey, password_hash as passwordHash, is_admin as isAdmin FROM users WHERE lower(trim(email)) = ?"
 			)
 			.bind(normalized)
-			.first<{ id: string; username: string; name: string | null; email: string | null; avatarKey: string | null; passwordHash: string; isAdmin: number }>();
+			.first<{
+				id: string;
+				username: string;
+				name: string | null;
+				email: string | null;
+				emailVerifiedAt: string | null;
+				avatarKey: string | null;
+				passwordHash: string;
+				isAdmin: number;
+			}>();
 		return result
 			? {
 					id: result.id,
 					username: result.username,
 					name: result.name,
 					email: result.email,
+					emailVerifiedAt: result.emailVerifiedAt,
 					avatarKey: result.avatarKey,
 					passwordHash: result.passwordHash,
 					isAdmin: !!result.isAdmin,
@@ -80,15 +114,26 @@ export class UserRepositoryD1 implements UserRepository {
 
 	async getById(id: string): Promise<UserRecord | null> {
 		const result = await this.db
-			.prepare("SELECT id, username, name, email, avatar_key as avatarKey, is_admin as isAdmin FROM users WHERE id = ?")
+			.prepare(
+				"SELECT id, username, name, email, email_verified_at as emailVerifiedAt, avatar_key as avatarKey, is_admin as isAdmin FROM users WHERE id = ?"
+			)
 			.bind(id)
-			.first<{ id: string; username: string; name: string | null; email: string | null; avatarKey: string | null; isAdmin: number }>();
+			.first<{
+				id: string;
+				username: string;
+				name: string | null;
+				email: string | null;
+				emailVerifiedAt: string | null;
+				avatarKey: string | null;
+				isAdmin: number;
+			}>();
 		return result
 			? {
 					id: result.id,
 					username: result.username,
 					name: result.name,
 					email: result.email,
+					emailVerifiedAt: result.emailVerifiedAt,
 					avatarKey: result.avatarKey,
 					isAdmin: !!result.isAdmin,
 				}
@@ -110,6 +155,10 @@ export class UserRepositoryD1 implements UserRepository {
 		if (updates.email !== undefined) {
 			sets.push("email = ?");
 			binds.push(updates.email);
+		}
+		if (updates.emailVerifiedAt !== undefined) {
+			sets.push("email_verified_at = ?");
+			binds.push(updates.emailVerifiedAt);
 		}
 		if (updates.avatarKey !== undefined) {
 			sets.push("avatar_key = ?");

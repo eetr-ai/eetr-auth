@@ -3,6 +3,7 @@ export interface UserWithPassword {
 	username: string;
 	name: string | null;
 	email: string | null;
+	emailVerifiedAt: string | null;
 	avatarKey: string | null;
 	passwordHash: string;
 	isAdmin: boolean;
@@ -13,6 +14,7 @@ export interface UserRecord {
 	username: string;
 	name: string | null;
 	email: string | null;
+	emailVerifiedAt: string | null;
 	avatarKey: string | null;
 	avatarUrl?: string | null;
 	isAdmin: boolean;
@@ -22,6 +24,7 @@ export interface UserUpdateInput {
 	username?: string;
 	name?: string | null;
 	email?: string | null;
+	emailVerifiedAt?: string | null;
 	avatarKey?: string | null;
 	passwordHash?: string;
 	isAdmin?: boolean;
@@ -33,6 +36,7 @@ export interface UserRepository {
 		username: string,
 		name: string | null,
 		email: string | null,
+		emailVerifiedAt: string | null,
 		passwordHash: string,
 		isAdmin: boolean
 	): Promise<void>;

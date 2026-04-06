@@ -1,4 +1,4 @@
-export type UserChallengeKind = "mfa_otp" | "password_reset";
+export type UserChallengeKind = "mfa_otp" | "password_reset" | "email_verification";
 
 export interface UserChallengeRow {
 	id: string;
@@ -17,6 +17,7 @@ export interface UserChallengeRepository {
 	): Promise<void>;
 	getById(id: string): Promise<UserChallengeRow | null>;
 	deleteById(id: string): Promise<void>;
+	deleteByUserIdAndKind(userId: string, kind: UserChallengeKind): Promise<void>;
 	markConsumed(id: string, consumedAtIso: string): Promise<void>;
 	deleteExpiredBefore(iso: string): Promise<number>;
 	/** Increments MFA OTP failure count; returns new total or null if row missing. */

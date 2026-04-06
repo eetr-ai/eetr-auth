@@ -12,6 +12,7 @@ import { getAvatarUrl } from "@/lib/users/profile";
 import type { RequestContext } from "@/lib/context/types";
 import { PasskeyService } from "@/lib/services/passkey.service";
 import { getServices } from "@/lib/services/registry";
+import { EMAIL_VERIFICATION_CHALLENGE_COOKIE } from "@/lib/auth/email-verification-cookie";
 import { MFA_CHALLENGE_COOKIE } from "@/lib/auth/mfa-cookie";
 
 /** Structured sign-in logs (grep `sign_in_authorize`). Never includes password or OTP. */
@@ -101,6 +102,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 				const mfaEnabled = siteRow?.mfaEnabled ?? false;
 				const siteUrl = siteRow?.siteUrl?.trim();
 				const mfaActive = mfaEnabled && !!siteUrl;
+				const requiresEmailVerification = !user.isAdmin && !user.emailVerifiedAt;
 
 				if (mfaActive) {
 					if (!user.email?.trim()) {
@@ -129,7 +131,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 							reason: "mfa_challenge_cookie_missing",
 							userId: user.id,
 							username: user.username,
-							hint: "Call beginMfaSignIn first so the MFA cookie is set",
+							hint: "Call beginSignInChallenge first so the MFA cookie is set",
 						});
 						return null;
 					}
@@ -148,6 +150,60 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 						return null;
 					}
 					jar.delete(MFA_CHALLENGE_COOKIE);
+					if (requiresEmailVerification) {
+						await challengeSvc.markEmailVerified(user.id);
+						user.emailVerifiedAt = new Date().toISOString();
+					}
+				} else if (requiresEmailVerification) {
+					if (!user.email?.trim()) {
+						signInAuthorizeLog({
+							outcome: "failure",
+							reason: "email_verification_no_user_email",
+							userId: user.id,
+							username: user.username,
+						});
+						return null;
+					}
+					if (!otp) {
+						signInAuthorizeLog({
+							outcome: "failure",
+							reason: "email_verification_required_submit_code",
+							userId: user.id,
+							username: user.username,
+						});
+						return null;
+					}
+					const jar = await cookies();
+					const challengeId = jar.get(EMAIL_VERIFICATION_CHALLENGE_COOKIE)?.value;
+					if (!challengeId) {
+						signInAuthorizeLog({
+							outcome: "failure",
+							reason: "email_verification_challenge_cookie_missing",
+							userId: user.id,
+							username: user.username,
+						});
+						return null;
+					}
+					const requestCtx: RequestContext = { env, cf, ctx };
+					const { userChallengeService: challengeSvc } = getServices(requestCtx);
+					const verificationResult = await challengeSvc.verifyEmailVerificationOtpAndConsume(
+						challengeId,
+						user.id,
+						otp
+					);
+					if (!verificationResult.ok) {
+						signInAuthorizeLog({
+							outcome: "failure",
+							reason: "email_verification_verify_failed",
+							verificationFailure: verificationResult.reason,
+							userId: user.id,
+							username: user.username,
+							challengeIdPrefix: challengeId.slice(0, 8),
+						});
+						return null;
+					}
+					jar.delete(EMAIL_VERIFICATION_CHALLENGE_COOKIE);
+					user.emailVerifiedAt = new Date().toISOString();
 				}
 
 				signInAuthorizeLog({
@@ -209,6 +265,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 							outcome: "failure",
 							provider: "passkey",
 							reason: "user_not_found",
+							userId,
+						})
+					);
+					return null;
+				}
+				if (!user.isAdmin && !user.emailVerifiedAt) {
+					console.info(
+						JSON.stringify({
+							event: "sign_in_authorize",
+							ts: new Date().toISOString(),
+							outcome: "failure",
+							provider: "passkey",
+							reason: "email_unverified",
 							userId,
 						})
 					);

@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { startAuthentication } from "@simplewebauthn/browser";
 import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/types";
-import { beginMfaSignIn } from "@/app/actions/mfa-actions";
+import { beginSignInChallenge } from "@/app/actions/mfa-actions";
 import { submitSignIn, submitPasskeySignIn } from "@/app/actions/sign-in-actions";
 
 type Props = {
@@ -14,6 +14,7 @@ type Props = {
 
 export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
 	const [step, setStep] = useState<"password" | "otp">("password");
+	const [otpPurpose, setOtpPurpose] = useState<"mfa" | "email_verification">("mfa");
 	const [username, setUsername] = useState("");
 	const [password, setPassword] = useState("");
 	const [otp, setOtp] = useState("");
@@ -83,17 +84,18 @@ export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
 		e.preventDefault();
 		setError(null);
 		startTransition(async () => {
-			if (!mfaEnabled) {
+			const r = await beginSignInChallenge(username, password);
+			if (!r.ok) {
+				setError(r.error);
+				return;
+			}
+			if (r.challenge === "none") {
 				await submitSignIn({ username, password, callbackUrl });
 				return;
 			}
-			const r = await beginMfaSignIn(username, password);
-			if (r.ok) {
-				setStep("otp");
-				setOtp("");
-				return;
-			}
-			setError(r.error);
+			setOtpPurpose(r.challenge);
+			setStep("otp");
+			setOtp("");
 		});
 	};
 
@@ -109,7 +111,9 @@ export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
 		return (
 			<form onSubmit={onOtpSubmit} className="space-y-6">
 				<p className="rounded-xl bg-brand-muted/30 px-3 py-2 text-sm text-foreground">
-					Enter the 6-digit code sent to your email.
+					{otpPurpose === "mfa"
+						? "Enter the 6-digit sign-in code sent to your email."
+						: "Enter the 6-digit email verification code sent to your email."}
 				</p>
 				<div className="space-y-2">
 					<label htmlFor="otp" className="block text-sm font-medium text-foreground">
@@ -145,6 +149,7 @@ export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
 					disabled={pending}
 					onClick={() => {
 						setStep("password");
+						setOtpPurpose("mfa");
 						setOtp("");
 						setError(null);
 					}}

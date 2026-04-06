@@ -31,6 +31,16 @@ npm run db:set-site-url:local -- https://auth.example.com
 
 If you pass arguments to npm scripts, prefer `--` before script args.
 
+## Email Verification
+
+- Non-admin users now start with `email_verified_at = NULL`.
+- If site MFA is enabled, a successful email OTP sign-in also marks the user email as verified.
+- If site MFA is disabled, unverified non-admin users must complete a one-time email verification OTP during sign-in.
+- If a non-admin user changes email, verification is cleared and a new verification code can be requested through:
+  - `POST /api/users/email-verification/request`
+  - `POST /api/users/email-verification/verify`
+- OpenID Connect `GET /api/userinfo` now includes the standard `email_verified` claim.
+
 ## Preview
 
 Preview the application locally on the Cloudflare runtime:
@@ -145,7 +155,7 @@ This project now exposes OAuth authorization server endpoints for:
 ### User model and admin access
 
 - Dashboard authentication uses the `users` table with:
-  - `id`, `username`, `email`, `password_hash`, `is_admin`
+  - `id`, `username`, `email`, `email_verified_at`, `password_hash`, `is_admin`
 - Only users with `is_admin = 1` can sign in and access `/dashboard`.
 - User management (create, update, delete) is available at `/dashboard/users`.
 - For existing deployments with `admins`, run the one-time migration:

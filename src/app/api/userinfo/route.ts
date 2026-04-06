@@ -66,6 +66,7 @@ export const GET = withApiContext(async (req, ctx, getServices) => {
 			sub: user.id,
 			name: user.name ?? user.username,
 			email: user.email,
+			email_verified: Boolean(user.emailVerifiedAt),
 			picture: getAvatarUrl(user.avatarKey, env),
 			preferred_username: user.username,
 		},

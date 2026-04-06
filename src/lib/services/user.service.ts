@@ -13,6 +13,7 @@ interface UpdateUserInput {
 	password?: string;
 	isAdmin?: boolean;
 	avatarKey?: string | null;
+	emailVerifiedAt?: string | null;
 }
 
 export class UserService {
@@ -62,11 +63,13 @@ export class UserService {
 		});
 		const normalizedName = normalizeOptionalProfileField(name);
 		const normalizedEmail = normalizeOptionalProfileField(email);
+		const emailVerifiedAt = isAdmin ? new Date().toISOString() : null;
 		await this.userRepository.create(
 			id,
 			normalizedUsername,
 			normalizedName,
 			normalizedEmail,
+			emailVerifiedAt,
 			passwordHash,
 			isAdmin
 		);
@@ -75,6 +78,7 @@ export class UserService {
 			username: normalizedUsername,
 			name: normalizedName,
 			email: normalizedEmail,
+			emailVerifiedAt,
 			avatarKey: null,
 			isAdmin,
 		});
@@ -90,6 +94,7 @@ export class UserService {
 			username?: string;
 			name?: string | null;
 			email?: string | null;
+			emailVerifiedAt?: string | null;
 			passwordHash?: string;
 			isAdmin?: boolean;
 			avatarKey?: string | null;
@@ -105,7 +110,18 @@ export class UserService {
 			patch.name = normalizeOptionalProfileField(updates.name);
 		}
 		if (updates.email !== undefined) {
-			patch.email = normalizeOptionalProfileField(updates.email);
+			const nextEmail = normalizeOptionalProfileField(updates.email);
+			patch.email = nextEmail;
+			if (!current.isAdmin) {
+				const currentEmail = current.email?.trim().toLowerCase() ?? null;
+				const normalizedNextEmail = nextEmail?.trim().toLowerCase() ?? null;
+				if (currentEmail !== normalizedNextEmail) {
+					patch.emailVerifiedAt = null;
+				}
+			}
+		}
+		if (updates.emailVerifiedAt !== undefined) {
+			patch.emailVerifiedAt = updates.emailVerifiedAt;
 		}
 		if (updates.password !== undefined && updates.password.trim()) {
 			patch.passwordHash = await hashPassword(updates.password, {
