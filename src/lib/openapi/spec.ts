@@ -289,7 +289,9 @@ export function getOpenApiDocument(serverUrl?: string) {
 				post: {
 					tags: ["Users"],
 					summary: "Upload user avatar",
-					description: "Requires authenticated session. Non-admin users may only upload their own avatar.",
+					description:
+						"Accepts either an authenticated session or a bearer JWT access token. Session admins may upload avatars for other users. When using a bearer token, the token subject may only upload its own avatar.",
+					security: [{ bearerAuth: [] }],
 					requestBody: {
 						required: true,
 						content: {
@@ -328,8 +330,18 @@ export function getOpenApiDocument(serverUrl?: string) {
 								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
 							},
 						},
-						"401": { description: "Unauthorized" },
-						"403": { description: "Forbidden" },
+						"401": {
+							description: "Missing session or invalid JWT access token",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"403": {
+							description: "Bearer token subject mismatch or non-admin session user targeting another user",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
 						"404": { description: "User not found" },
 						"500": { description: "Storage not configured" },
 					},
@@ -601,7 +613,7 @@ export function getOpenApiDocument(serverUrl?: string) {
 					tags: ["Users"],
 					summary: "Create passkey registration challenge",
 					description:
-						"Generates a WebAuthn registration challenge for the authenticated user. The returned `options` must be passed to `startRegistration()` on the client. The `challengeId` must be submitted with the registration response to `/api/users/passkey/register`.",
+						"Generates a WebAuthn registration challenge for the authenticated user. Accepts either an authenticated session or a bearer JWT access token. The returned `options` must be passed to `startRegistration()` on the client. The `challengeId` must be submitted with the registration response to `/api/users/passkey/register`.",
 					security: [{ bearerAuth: [] }],
 					responses: {
 						"200": {
@@ -623,7 +635,7 @@ export function getOpenApiDocument(serverUrl?: string) {
 							},
 						},
 						"401": {
-							description: "Missing or invalid JWT access token",
+							description: "Missing session or invalid JWT access token",
 							content: {
 								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
 							},
@@ -642,7 +654,7 @@ export function getOpenApiDocument(serverUrl?: string) {
 					tags: ["Users"],
 					summary: "Register a passkey",
 					description:
-						"Verifies the browser's WebAuthn registration response and stores the passkey credential for the authenticated user. The `challengeId` must match the one returned by `/api/users/passkey/challenge`.",
+						"Verifies the browser's WebAuthn registration response and stores the passkey credential for the authenticated user. Accepts either an authenticated session or a bearer JWT access token. The `challengeId` must match the one returned by `/api/users/passkey/challenge`.",
 					security: [{ bearerAuth: [] }],
 					requestBody: {
 						required: true,
@@ -678,7 +690,7 @@ export function getOpenApiDocument(serverUrl?: string) {
 							},
 						},
 						"401": {
-							description: "Missing or invalid JWT access token",
+							description: "Missing session or invalid JWT access token",
 							content: {
 								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
 							},
@@ -702,8 +714,9 @@ export function getOpenApiDocument(serverUrl?: string) {
 				get: {
 					tags: ["Users"],
 					summary: "Check if current user has a passkey",
-					description: "Returns whether the authenticated user has at least one passkey enrolled. Requires an active session cookie.",
-					security: [],
+					description:
+						"Returns whether the authenticated user has at least one passkey enrolled. Accepts either an authenticated session or a bearer JWT access token and always evaluates the current authenticated user.",
+					security: [{ bearerAuth: [] }],
 					responses: {
 						"200": {
 							description: "Passkey presence check",
@@ -719,7 +732,12 @@ export function getOpenApiDocument(serverUrl?: string) {
 								},
 							},
 						},
-						"401": { description: "Not authenticated" },
+						"401": {
+							description: "Missing session or invalid JWT access token",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
 					},
 				},
 			},

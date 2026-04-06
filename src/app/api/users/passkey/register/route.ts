@@ -1,27 +1,7 @@
 import { NextResponse } from "next/server";
 import { withApiContext } from "@/lib/context/with-api-context";
-import { auth } from "@/auth";
+import { authenticateSessionOrBearerUser } from "@/lib/auth/authenticate-session-or-bearer-user";
 import type { RegistrationResponseJSON } from "@simplewebauthn/types";
-
-function parseBearerToken(authorizationHeader: string | null): string | null {
-	if (!authorizationHeader) return null;
-	const [scheme, value] = authorizationHeader.split(" ");
-	if (!scheme || !value) return null;
-	if (scheme.toLowerCase() !== "bearer") return null;
-	const token = value.trim();
-	return token.length > 0 ? token : null;
-}
-
-function isLikelyJwt(token: string): boolean {
-	const parts = token.split(".");
-	return parts.length === 3 && parts.every((part) => /^[A-Za-z0-9_-]+$/.test(part));
-}
-
-const UNAUTHORIZED = (description: string) =>
-	NextResponse.json(
-		{ error: "invalid_token", error_description: description },
-		{ status: 401, headers: { "Cache-Control": "no-store" } }
-	);
 
 function toErrorResponse(error: unknown) {
 	const message = error instanceof Error ? error.message : "Unexpected error.";
@@ -48,25 +28,9 @@ function toErrorResponse(error: unknown) {
 }
 
 export const POST = withApiContext(async (req, _ctx, getServices) => {
-	let userId: string | null = null;
-
-	const bearerToken = parseBearerToken(req.headers.get("authorization"));
-	if (bearerToken && isLikelyJwt(bearerToken)) {
-		const { oauthTokenService } = getServices();
-		const validation = await oauthTokenService.validateAccessToken(bearerToken, [], null);
-		if (!validation.valid || !validation.subject) {
-			return UNAUTHORIZED("Invalid or expired access token.");
-		}
-		userId = validation.subject;
-	} else {
-		const session = await auth();
-		if (session?.user?.id) {
-			userId = session.user.id;
-		}
-	}
-
-	if (!userId) {
-		return UNAUTHORIZED("A valid access token or session is required.");
+	const authResult = await authenticateSessionOrBearerUser(req, getServices);
+	if ("response" in authResult) {
+		return authResult.response;
 	}
 
 	let payload: unknown;
@@ -97,7 +61,7 @@ export const POST = withApiContext(async (req, _ctx, getServices) => {
 	try {
 		const { passkeyService } = getServices();
 		const credential = await passkeyService.verifyAndStoreRegistration(
-			userId,
+			authResult.user.userId,
 			body.challengeId.trim(),
 			body.registrationResponse as RegistrationResponseJSON
 		);

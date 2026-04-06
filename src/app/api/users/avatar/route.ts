@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { authenticateSessionOrBearerUser } from "@/lib/auth/authenticate-session-or-bearer-user";
 import { withApiContext } from "@/lib/context/with-api-context";
 import { getAvatarUrl } from "@/lib/users/profile";
 
@@ -14,9 +14,9 @@ function extensionForMimeType(contentType: string): string {
 }
 
 export const POST = withApiContext(async (req, ctx, getServices) => {
-	const session = await auth();
-	if (!session?.user?.id) {
-		return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+	const authResult = await authenticateSessionOrBearerUser(req, getServices);
+	if ("response" in authResult) {
+		return authResult.response;
 	}
 
 	const body = await req.formData();
@@ -54,10 +54,27 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 	}
 
 	const { userService } = getServices();
-	const actorUserId = session.user.id;
+	const {
+		user: { userId: actorUserId, isAdmin, authMethod },
+	} = authResult;
 	const isSelfUpdate = userId === actorUserId;
-	if (!isSelfUpdate && !session.user.isAdmin) {
-		return NextResponse.json({ error: "forbidden" }, { status: 403 });
+	if (authMethod === "bearer" && !isSelfUpdate) {
+		return NextResponse.json(
+			{
+				error: "forbidden",
+				error_description: "Bearer tokens may only update the current user's avatar.",
+			},
+			{ status: 403 }
+		);
+	}
+	if (authMethod === "session" && !isSelfUpdate && !isAdmin) {
+		return NextResponse.json(
+			{
+				error: "forbidden",
+				error_description: "You may only update your own avatar unless you are an admin.",
+			},
+			{ status: 403 }
+		);
 	}
 
 	const targetUser = await userService.getById(userId);
