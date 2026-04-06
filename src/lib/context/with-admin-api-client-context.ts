@@ -24,6 +24,13 @@ function parseBearerToken(authorizationHeader: string | null): string | null {
 	return token.length > 0 ? token : null;
 }
 
+function scheduleActivityLog(
+	ctx: { waitUntil?: (p: Promise<unknown>) => void } | undefined,
+	logPromise: Promise<void>
+) {
+	ctx?.waitUntil?.(logPromise.catch((err) => console.error("[token_activity_log]", err)));
+}
+
 export interface AdminApiClientAuthContext {
 	adminClientRowId: string;
 	subjectUserId: string | null;
@@ -38,8 +45,18 @@ export type AdminApiClientContextHandler = (
 
 export function withAdminApiClientContext(handler: AdminApiClientContextHandler) {
 	return withApiContext(async (req, ctx, getServices) => {
+		const startMs = Date.now();
+		const ip = req.headers.get("CF-Connecting-IP") ?? null;
+		const { oauthTokenService, siteSettingsService, tokenActivityLogService } = getServices();
+
 		const token = parseBearerToken(req.headers.get("authorization"));
 		if (!token) {
+			scheduleActivityLog(ctx.ctx, tokenActivityLogService.logActivity({
+				ip,
+				requestType: "admin_api",
+				succeeded: false,
+				durationMs: Date.now() - startMs,
+			}));
 			return NextResponse.json(
 				{
 					error: "invalid_token",
@@ -49,9 +66,14 @@ export function withAdminApiClientContext(handler: AdminApiClientContextHandler)
 			);
 		}
 
-		const { oauthTokenService, siteSettingsService } = getServices();
 		const validation = await oauthTokenService.validateAccessToken(token, [], null);
 		if (!validation.valid || !validation.clientId) {
+			scheduleActivityLog(ctx.ctx, tokenActivityLogService.logActivity({
+				ip,
+				requestType: "admin_api",
+				succeeded: false,
+				durationMs: Date.now() - startMs,
+			}));
 			return NextResponse.json(
 				{
 					error: "invalid_token",
@@ -63,6 +85,13 @@ export function withAdminApiClientContext(handler: AdminApiClientContextHandler)
 
 		const adminClientRowIds = await siteSettingsService.getAdminApiClientRowIds();
 		if (!adminClientRowIds.includes(validation.clientId)) {
+			scheduleActivityLog(ctx.ctx, tokenActivityLogService.logActivity({
+				ip,
+				requestType: "admin_api",
+				succeeded: false,
+				clientId: validation.clientId,
+				durationMs: Date.now() - startMs,
+			}));
 			return NextResponse.json(
 				{
 					error: "forbidden",
@@ -72,9 +101,31 @@ export function withAdminApiClientContext(handler: AdminApiClientContextHandler)
 			);
 		}
 
-		return handler(req, ctx, getServices, {
+		const authContext = {
 			adminClientRowId: validation.clientId,
 			subjectUserId: validation.subject,
-		});
+		};
+
+		try {
+			const response = await handler(req, ctx, getServices, authContext);
+			scheduleActivityLog(ctx.ctx, tokenActivityLogService.logActivity({
+				ip,
+				requestType: "admin_api",
+				succeeded: response.status < 400,
+				clientId: validation.clientId,
+				durationMs: Date.now() - startMs,
+			}));
+			return response;
+		} catch (error) {
+			scheduleActivityLog(ctx.ctx, tokenActivityLogService.logActivity({
+				ip,
+				requestType: "admin_api",
+				succeeded: false,
+				clientId: validation.clientId,
+				durationMs: Date.now() - startMs,
+			}));
+			throw error;
+		}
+
 	});
 }

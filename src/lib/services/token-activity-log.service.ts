@@ -35,7 +35,10 @@ export class TokenActivityLogService {
 	async logActivity(params: LogActivityParams): Promise<void> {
 		let environmentName: string | null = params.environmentName ?? null;
 		if (environmentName == null && params.clientId?.trim()) {
-			const client = await this.clientRepo.getByClientIdentifier(params.clientId.trim());
+			const clientId = params.clientId.trim();
+			const client =
+				(await this.clientRepo.getByClientIdentifier(clientId)) ??
+				(await this.clientRepo.getById(clientId));
 			if (client) {
 				const env = await this.envRepo.getById(client.environmentId);
 				environmentName = env?.name ?? null;
