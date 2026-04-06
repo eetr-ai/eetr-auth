@@ -6,6 +6,7 @@ declare namespace Cloudflare {
 		JWT_KID?: string;
 		JWT_JWKS_JSON?: string;
 		AUTH_SECRET?: string;
+		CLIENT_KEY_PREFIX?: string;
 		/** HMAC key for at-rest secrets (OAuth client_secret `h1:` prefix, future uses). `wrangler secret put HMAC_KEY` or `.dev.vars`. */
 		HMAC_KEY?: string;
 	}
@@ -13,6 +14,7 @@ declare namespace Cloudflare {
 
 declare namespace NodeJS {
 	interface ProcessEnv {
+		CLIENT_KEY_PREFIX?: string;
 		HMAC_KEY?: string;
 	}
 }

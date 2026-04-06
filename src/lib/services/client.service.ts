@@ -1,15 +1,16 @@
 import { getDb } from "@/lib/db";
 import type { RequestContext } from "@/lib/context/types";
 import { hashClientSecretForStorage, resolveHmacKey } from "@/lib/auth/secret-at-rest";
+import { resolveClientKeyPrefix } from "@/lib/config/client-key-prefix";
 import { ClientRepositoryD1 } from "@/lib/repositories/client.repository.d1";
 import type {
 	Client,
 	ClientWithDetails,
 } from "@/lib/repositories/client.repository";
 
-function generateClientId(): string {
+function generateClientId(prefix: string): string {
 	const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-	let s = "progression_";
+	let s = `${prefix}_`;
 	for (let i = 0; i < 24; i++) {
 		s += chars[Math.floor(Math.random() * chars.length)];
 	}
@@ -78,7 +79,7 @@ export class ClientService {
 			throw new Error("HMAC_KEY is required to create OAuth clients (set in Wrangler secrets or .dev.vars).");
 		}
 		const id = crypto.randomUUID();
-		const clientId = generateClientId();
+		const clientId = generateClientId(resolveClientKeyPrefix(this.env));
 		const clientSecret = generateClientSecret();
 		const clientSecretStored = await hashClientSecretForStorage(clientSecret, hmacKey);
 		await this.clientRepo.create({

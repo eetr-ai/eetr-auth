@@ -82,6 +82,7 @@
 		"ISSUER_BASE_URL": "https://auth.progression-ai.com",
 		"JWKS_CDN_BASE_URL": "https://cdn.progression-ai.com",
 		"JWKS_R2_KEY": "jwks.json",
+		"CLIENT_KEY_PREFIX": "progression",
 		// Optional sender override for transactional emails (fallback: no-reply@<site hostname>)
 		"HASH_METHOD": "argon",
 		"MFA_OTP_MAX_ATTEMPTS": "5"
