@@ -8,6 +8,7 @@ import { UserChallengeRepositoryD1 } from "@/lib/repositories/user-challenge.rep
 import { SiteSettingsRepositoryD1 } from "@/lib/repositories/site-settings.repository.d1";
 import { RefreshTokenRepositoryD1 } from "@/lib/repositories/refresh-token.repository.d1";
 import { EnvironmentRepositoryD1 } from "@/lib/repositories/environment.repository.d1";
+import { PasskeyRepositoryD1 } from "@/lib/repositories/passkey.repository.d1";
 import { UserService } from "./user.service";
 import { EnvironmentService } from "./environment.service";
 import { ScopeService } from "./scope.service";
@@ -46,6 +47,7 @@ export function getServices(ctx: RequestContext): Services {
 	const userRepo = new UserRepositoryD1(db);
 	const challengeRepo = new UserChallengeRepositoryD1(db);
 	const siteRepo = new SiteSettingsRepositoryD1(db);
+	const passkeyRepo = new PasskeyRepositoryD1(db);
 	const siteSettingsService = new SiteSettingsService(ctx);
 	const transactionalEmailService = new TransactionalEmailService(ctx);
 
@@ -77,6 +79,11 @@ export function getServices(ctx: RequestContext): Services {
 			mail: transactionalEmailService,
 			env: ctx.env,
 		}),
-		passkeyService: new PasskeyService(ctx),
+		passkeyService: new PasskeyService({
+			repo: passkeyRepo,
+			userRepo,
+			siteRepo,
+			env: ctx.env,
+		}),
 	};
 }

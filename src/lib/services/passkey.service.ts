@@ -13,13 +13,10 @@ import type {
 	PublicKeyCredentialCreationOptionsJSON,
 	PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/types";
-import { getDb } from "@/lib/db";
-import type { RequestContext } from "@/lib/context/types";
-import { PasskeyRepositoryD1 } from "@/lib/repositories/passkey.repository.d1";
-import { UserRepositoryD1 } from "@/lib/repositories/admin.repository.d1";
-import { SiteSettingsRepositoryD1 } from "@/lib/repositories/site-settings.repository.d1";
+import type { UserRepository } from "@/lib/repositories/admin.repository";
+import type { PasskeyRepository, PasskeyCredentialRow } from "@/lib/repositories/passkey.repository";
+import type { SiteSettingsRepository } from "@/lib/repositories/site-settings.repository";
 import { resolveIssuerBaseUrl } from "@/lib/config/issuer-base-url";
-import type { PasskeyCredentialRow } from "@/lib/repositories/passkey.repository";
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const EXCHANGE_TOKEN_TTL_MS = 2 * 60 * 1000; // 2 minutes
@@ -29,15 +26,15 @@ function log(payload: Record<string, unknown>): void {
 }
 
 /** Strips the protocol and any trailing slashes to get a valid WebAuthn RP ID. */
-function rpIdFromOrigin(origin: string): string {
+export function rpIdFromOrigin(origin: string): string {
 	return new URL(origin).hostname.toLowerCase();
 }
 
-function isIpAddress(hostname: string): boolean {
+export function isIpAddress(hostname: string): boolean {
 	return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname) || hostname.includes(":");
 }
 
-function fallbackRpIdFromRpId(rpId: string): string | null {
+export function fallbackRpIdFromRpId(rpId: string): string | null {
 	if (rpId === "localhost" || isIpAddress(rpId)) {
 		return null;
 	}
@@ -50,18 +47,24 @@ function fallbackRpIdFromRpId(rpId: string): string | null {
 	return labels.slice(-2).join(".");
 }
 
+export interface PasskeyServiceDeps {
+	repo: PasskeyRepository;
+	userRepo: UserRepository;
+	siteRepo: SiteSettingsRepository;
+	env: CloudflareEnv;
+}
+
 export class PasskeyService {
-	private readonly repo: PasskeyRepositoryD1;
-	private readonly userRepo: UserRepositoryD1;
-	private readonly siteRepo: SiteSettingsRepositoryD1;
+	private readonly repo: PasskeyRepository;
+	private readonly userRepo: UserRepository;
+	private readonly siteRepo: SiteSettingsRepository;
 	private readonly env: Record<string, unknown>;
 
-	constructor(ctx: RequestContext) {
-		const db = getDb(ctx.env);
-		this.repo = new PasskeyRepositoryD1(db);
-		this.userRepo = new UserRepositoryD1(db);
-		this.siteRepo = new SiteSettingsRepositoryD1(db);
-		this.env = ctx.env as unknown as Record<string, unknown>;
+	constructor({ repo, userRepo, siteRepo, env }: PasskeyServiceDeps) {
+		this.repo = repo;
+		this.userRepo = userRepo;
+		this.siteRepo = siteRepo;
+		this.env = env as unknown as Record<string, unknown>;
 	}
 
 	// ── Helpers ───────────────────────────────────────────────────────────────

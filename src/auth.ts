@@ -3,6 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import { cookies } from "next/headers";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { getDb } from "@/lib/db";
+import { PasskeyRepositoryD1 } from "@/lib/repositories/passkey.repository.d1";
 import { UserRepositoryD1 } from "@/lib/repositories/admin.repository.d1";
 import { SiteSettingsRepositoryD1 } from "@/lib/repositories/site-settings.repository.d1";
 import { verifyPassword } from "@/lib/auth/password-hash";
@@ -178,7 +179,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 				const requestCtx: RequestContext = { env, cf, ctx };
 				const db = getDb(env);
 				const repo = new UserRepositoryD1(db);
-				const passkeySvc = new PasskeyService(requestCtx);
+				const passkeySvc = new PasskeyService({
+					repo: new PasskeyRepositoryD1(db),
+					userRepo: repo,
+					siteRepo: new SiteSettingsRepositoryD1(db),
+					env,
+				});
 
 				const userId = await passkeySvc.consumeExchangeToken(exchangeToken);
 				if (!userId) {
