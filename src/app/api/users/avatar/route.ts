@@ -24,12 +24,19 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 	const fileValue = body.get("file");
 	const userId = typeof userIdValue === "string" ? userIdValue.trim() : "";
 	const file = fileValue instanceof File ? fileValue : null;
+	const {
+		user: { userId: actorUserId, isAdmin, authMethod },
+	} = authResult;
+	const targetUserId = authMethod === "bearer" ? actorUserId : userId;
 
-	if (!userId || !file) {
+	if (!file || (authMethod === "session" && !userId)) {
 		return NextResponse.json(
 			{
 				error: "invalid_request",
-				error_description: "Both userId and file are required.",
+				error_description:
+					authMethod === "bearer"
+						? "file is required."
+						: "Both userId and file are required.",
 			},
 			{ status: 400 }
 		);
@@ -54,19 +61,7 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 	}
 
 	const { userService } = getServices();
-	const {
-		user: { userId: actorUserId, isAdmin, authMethod },
-	} = authResult;
-	const isSelfUpdate = userId === actorUserId;
-	if (authMethod === "bearer" && !isSelfUpdate) {
-		return NextResponse.json(
-			{
-				error: "forbidden",
-				error_description: "Bearer tokens may only update the current user's avatar.",
-			},
-			{ status: 403 }
-		);
-	}
+	const isSelfUpdate = targetUserId === actorUserId;
 	if (authMethod === "session" && !isSelfUpdate && !isAdmin) {
 		return NextResponse.json(
 			{
@@ -77,13 +72,13 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 		);
 	}
 
-	const targetUser = await userService.getById(userId);
+	const targetUser = await userService.getById(targetUserId);
 	if (!targetUser) {
 		return NextResponse.json({ error: "not_found" }, { status: 404 });
 	}
 
 	const extension = extensionForMimeType(file.type);
-	const avatarKey = `avatars/${userId}.${extension}`;
+	const avatarKey = `avatars/${targetUserId}.${extension}`;
 	const env = ctx.env as unknown as { BLOG_IMAGES?: R2Bucket };
 	const bucket = env.BLOG_IMAGES;
 	if (!bucket) {
@@ -102,7 +97,7 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 	});
 
 	const updated = await userService.updateUser(
-		userId,
+		targetUserId,
 		{ avatarKey },
 		actorUserId
 	);

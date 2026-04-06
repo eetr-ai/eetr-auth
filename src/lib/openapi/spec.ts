@@ -290,7 +290,7 @@ export function getOpenApiDocument(serverUrl?: string) {
 					tags: ["Users"],
 					summary: "Upload user avatar",
 					description:
-						"Accepts either an authenticated session or a bearer JWT access token. Session admins may upload avatars for other users. When using a bearer token, the token subject may only upload its own avatar.",
+						"Accepts either an authenticated session or a bearer JWT access token. Session admins may upload avatars for other users. When using a bearer token, the request always targets the token subject; `userId` is optional and ignored if provided.",
 					security: [{ bearerAuth: [] }],
 					requestBody: {
 						required: true,
@@ -298,9 +298,12 @@ export function getOpenApiDocument(serverUrl?: string) {
 							"multipart/form-data": {
 								schema: {
 									type: "object",
-									required: ["userId", "file"],
+									required: ["file"],
 									properties: {
-										userId: { type: "string" },
+										userId: {
+											type: "string",
+											description: "Required for session-authenticated requests unless the caller is updating the current user. Ignored for bearer-token requests.",
+										},
 										file: { type: "string", format: "binary" },
 									},
 								},
