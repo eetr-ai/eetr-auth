@@ -1,8 +1,6 @@
-import { getDb } from "@/lib/db";
-import type { RequestContext } from "@/lib/context/types";
-import { UserRepositoryD1 } from "@/lib/repositories/admin.repository.d1";
-import { UserChallengeRepositoryD1 } from "@/lib/repositories/user-challenge.repository.d1";
-import { SiteSettingsRepositoryD1 } from "@/lib/repositories/site-settings.repository.d1";
+import type { UserRepository, UserWithPassword } from "@/lib/repositories/admin.repository";
+import type { UserChallengeRepository } from "@/lib/repositories/user-challenge.repository";
+import type { SiteSettingsRepository } from "@/lib/repositories/site-settings.repository";
 import { getAuthSecret } from "@/lib/auth/auth-secret";
 import { hashPassword, verifyPassword } from "@/lib/auth/password-hash";
 import {
@@ -21,7 +19,6 @@ import {
 } from "@/lib/email/transactional-html";
 import { TransactionalEmailService } from "./transactional-email.service";
 import { SiteSettingsService } from "./site-settings.service";
-import type { UserWithPassword } from "@/lib/repositories/admin.repository";
 
 const MFA_OTP_TTL_MS = 10 * 60 * 1000;
 
@@ -33,6 +30,32 @@ export type MfaOtpFailureReason =
 	| "otp_max_attempts_exceeded";
 
 export type MfaOtpVerifyResult = { ok: true } | { ok: false; reason: MfaOtpFailureReason };
+
+export interface UserChallengeServiceMail {
+	getResendApiKey(): string | null;
+	fromAddress(siteUrlHttp: string): string;
+	send(params: {
+		from: string;
+		to: string;
+		subject: string;
+		html: string;
+		text?: string;
+	}): Promise<void>;
+}
+
+export interface UserChallengeServiceSiteSettings {
+	getEmailLogoAbsoluteUrl(siteUrlHttp: string, logoKey: string | null, cdnUrlOverride: string | null): string;
+	getDisplaySiteTitle(siteTitle: string | null | undefined): string;
+}
+
+export interface UserChallengeServiceDeps {
+	userRepo: UserRepository;
+	challengeRepo: UserChallengeRepository;
+	siteRepo: SiteSettingsRepository;
+	siteSettings: UserChallengeServiceSiteSettings;
+	mail: UserChallengeServiceMail;
+	env: CloudflareEnv;
+}
 
 function maskEmailForLogs(email: string): string {
 	const trimmed = email.trim().toLowerCase();
@@ -63,23 +86,22 @@ async function hashMfaOtp(challengeId: string, code: string): Promise<string> {
 }
 
 export class UserChallengeService {
-	private readonly userRepo: UserRepositoryD1;
-	private readonly challengeRepo: UserChallengeRepositoryD1;
-	private readonly siteRepo: SiteSettingsRepositoryD1;
-	private readonly siteSettings: SiteSettingsService;
-	private readonly mail: TransactionalEmailService;
+	private readonly userRepo: UserRepository;
+	private readonly challengeRepo: UserChallengeRepository;
+	private readonly siteRepo: SiteSettingsRepository;
+	private readonly siteSettings: UserChallengeServiceSiteSettings;
+	private readonly mail: UserChallengeServiceMail;
 	private readonly env: Record<string, unknown>;
 	private readonly cfEnv: CloudflareEnv;
 
-	constructor(ctx: RequestContext) {
-		const db = getDb(ctx.env);
-		this.userRepo = new UserRepositoryD1(db);
-		this.challengeRepo = new UserChallengeRepositoryD1(db);
-		this.siteRepo = new SiteSettingsRepositoryD1(db);
-		this.siteSettings = new SiteSettingsService(ctx);
-		this.mail = new TransactionalEmailService(ctx);
-		this.cfEnv = ctx.env;
-		this.env = ctx.env as unknown as Record<string, unknown>;
+	constructor({ userRepo, challengeRepo, siteRepo, siteSettings, mail, env }: UserChallengeServiceDeps) {
+		this.userRepo = userRepo;
+		this.challengeRepo = challengeRepo;
+		this.siteRepo = siteRepo;
+		this.siteSettings = siteSettings;
+		this.mail = mail;
+		this.cfEnv = env;
+		this.env = env as unknown as Record<string, unknown>;
 	}
 
 	async verifyUsernamePassword(username: string, password: string): Promise<UserWithPassword | null> {

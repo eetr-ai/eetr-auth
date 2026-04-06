@@ -9,8 +9,8 @@ import { verifyPassword } from "@/lib/auth/password-hash";
 import { resolveHashMethod } from "@/lib/config/hash-method";
 import { getAvatarUrl } from "@/lib/users/profile";
 import type { RequestContext } from "@/lib/context/types";
-import { UserChallengeService } from "@/lib/services/user-challenge.service";
 import { PasskeyService } from "@/lib/services/passkey.service";
+import { getServices } from "@/lib/services/registry";
 import { MFA_CHALLENGE_COOKIE } from "@/lib/auth/mfa-cookie";
 
 /** Structured sign-in logs (grep `sign_in_authorize`). Never includes password or OTP. */
@@ -133,7 +133,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 						return null;
 					}
 					const requestCtx: RequestContext = { env, cf, ctx };
-					const challengeSvc = new UserChallengeService(requestCtx);
+					const { userChallengeService: challengeSvc } = getServices(requestCtx);
 					const mfaResult = await challengeSvc.verifyMfaOtpAndConsume(challengeId, user.id, otp);
 					if (!mfaResult.ok) {
 						signInAuthorizeLog({

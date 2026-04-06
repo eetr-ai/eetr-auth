@@ -3,6 +3,9 @@ import { getDb } from "@/lib/db";
 import { ClientRepositoryD1 } from "@/lib/repositories/client.repository.d1";
 import { TokenRepositoryD1 } from "@/lib/repositories/token.repository.d1";
 import { AuthorizationCodeRepositoryD1 } from "@/lib/repositories/authorization-code.repository.d1";
+import { UserRepositoryD1 } from "@/lib/repositories/admin.repository.d1";
+import { UserChallengeRepositoryD1 } from "@/lib/repositories/user-challenge.repository.d1";
+import { SiteSettingsRepositoryD1 } from "@/lib/repositories/site-settings.repository.d1";
 import { UserService } from "./user.service";
 import { EnvironmentService } from "./environment.service";
 import { ScopeService } from "./scope.service";
@@ -13,6 +16,7 @@ import { TokenActivityLogService } from "./token-activity-log.service";
 import { SiteSettingsService } from "./site-settings.service";
 import { UserChallengeService } from "./user-challenge.service";
 import { PasskeyService } from "./passkey.service";
+import { TransactionalEmailService } from "./transactional-email.service";
 
 export interface Services {
 	userService: UserService;
@@ -35,12 +39,18 @@ export function getServices(ctx: RequestContext): Services {
 	const clientRepo = new ClientRepositoryD1(db);
 	const tokenRepo = new TokenRepositoryD1(db);
 	const authorizationCodeRepo = new AuthorizationCodeRepositoryD1(db);
+	const userRepo = new UserRepositoryD1(db);
+	const challengeRepo = new UserChallengeRepositoryD1(db);
+	const siteRepo = new SiteSettingsRepositoryD1(db);
+	const siteSettingsService = new SiteSettingsService(ctx);
+	const transactionalEmailService = new TransactionalEmailService(ctx);
 
 	return {
 		userService: new UserService(ctx),
 		environmentService: new EnvironmentService(ctx),
 		scopeService: new ScopeService(ctx),
 		clientService: new ClientService(ctx),
+		siteSettingsService,
 		oauthAuthorizationService: new OauthAuthorizationService({
 			clientRepo,
 			tokenRepo,
@@ -48,8 +58,14 @@ export function getServices(ctx: RequestContext): Services {
 		}),
 		oauthTokenService: new OauthTokenService(ctx),
 		tokenActivityLogService: new TokenActivityLogService(ctx),
-		siteSettingsService: new SiteSettingsService(ctx),
-		userChallengeService: new UserChallengeService(ctx),
+		userChallengeService: new UserChallengeService({
+			userRepo,
+			challengeRepo,
+			siteRepo,
+			siteSettings: siteSettingsService,
+			mail: transactionalEmailService,
+			env: ctx.env,
+		}),
 		passkeyService: new PasskeyService(ctx),
 	};
 }
