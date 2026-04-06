@@ -2,11 +2,10 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { signIn } from "next-auth/react";
 import { startAuthentication } from "@simplewebauthn/browser";
 import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/types";
 import { beginMfaSignIn } from "@/app/actions/mfa-actions";
-import { submitSignIn } from "@/app/actions/sign-in-actions";
+import { submitSignIn, submitPasskeySignIn } from "@/app/actions/sign-in-actions";
 
 type Props = {
 	mfaEnabled: boolean;
@@ -46,9 +45,7 @@ export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
 			}
 			const { exchangeToken } = (await verifyRes.json()) as { exchangeToken: string };
 
-			const result = await signIn("passkey", { exchangeToken, redirect: false });
-			if (result?.error) throw new Error("Sign-in failed. Please try again.");
-			window.location.href = callbackUrl || "/dashboard";
+			await submitPasskeySignIn(exchangeToken, callbackUrl);
 		} catch (err) {
 			if (err instanceof Error && err.name === "NotAllowedError") {
 				// User cancelled or timed out — silent
