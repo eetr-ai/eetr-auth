@@ -10,12 +10,12 @@ declare namespace Cloudflare {
 		DB: D1Database;
 		IMAGES: ImagesBinding;
 		ASSETS: Fetcher;
-		AUTH_URL: "https://auth.progression-ai.com/api/auth/session";
-		ISSUER_BASE_URL: "https://auth.progression-ai.com";
-		JWKS_CDN_BASE_URL: "https://cdn.progression-ai.com";
-		JWKS_R2_KEY: "jwks.json";
-		HASH_METHOD: "md5";
-		MFA_OTP_MAX_ATTEMPTS: "5";
+        AUTH_URL: string;
+        ISSUER_BASE_URL: string;
+        JWKS_CDN_BASE_URL: string;
+        JWKS_R2_KEY: string;
+        HASH_METHOD: string;
+        MFA_OTP_MAX_ATTEMPTS: string;
 		NEXTJS_ENV: string;
 		WORKER_SELF_REFERENCE: Service<typeof import("./worker").default>;
 		ARGON_HASHER: Fetcher /* argon-hasher */;
