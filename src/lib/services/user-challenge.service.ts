@@ -130,7 +130,7 @@ export class UserChallengeService {
 		);
 		const logoAlt = this.siteSettings.getDisplaySiteTitle(site?.siteTitle);
 
-		const from = this.mail.noReplyFromAddress(siteUrlHttp);
+		const from = this.mail.fromAddress(siteUrlHttp);
 		const html = buildTransactionalEmailHtml({
 			heading: displayTitle,
 			logoUrl,
@@ -255,7 +255,7 @@ export class UserChallengeService {
 		);
 		const logoAlt = this.siteSettings.getDisplaySiteTitle(site?.siteTitle);
 
-		const from = this.mail.noReplyFromAddress(siteUrlHttp);
+		const from = this.mail.fromAddress(siteUrlHttp);
 		const validMinutes = Math.floor(PASSWORD_RESET_JWT_TTL_SECONDS / 60);
 		const html = buildTransactionalEmailHtml({
 			heading: displayTitle,
