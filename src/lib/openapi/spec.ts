@@ -335,6 +335,180 @@ export function getOpenApiDocument(serverUrl?: string) {
 					},
 				},
 			},
+			"/api/admin/users": {
+				post: {
+					tags: ["Admin"],
+					summary: "Create user",
+					description:
+						"Admin API endpoint. Requires a bearer JWT whose client is configured in Setup > Admin API.",
+					security: [{ bearerAuth: [] }],
+					requestBody: {
+						required: true,
+						content: {
+							"application/json": {
+								schema: {
+									type: "object",
+									required: ["username", "password"],
+									properties: {
+										username: { type: "string" },
+										password: { type: "string" },
+										isAdmin: { type: "boolean", default: true },
+										name: { type: ["string", "null"] },
+										email: { type: ["string", "null"], format: "email" },
+									},
+								},
+							},
+						},
+					},
+					responses: {
+						"201": {
+							description: "User created",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/UserRecord" } },
+							},
+						},
+						"400": {
+							description: "Validation error",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"401": {
+							description: "Invalid token",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"403": {
+							description: "Token client is not configured as an admin API client",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"409": {
+							description: "Username or email conflict",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+					},
+				},
+			},
+			"/api/admin/users/{id}": {
+				put: {
+					tags: ["Admin"],
+					summary: "Update user",
+					description:
+						"Admin API endpoint. Requires a bearer JWT whose client is configured in Setup > Admin API.",
+					security: [{ bearerAuth: [] }],
+					parameters: [
+						{ name: "id", in: "path", required: true, schema: { type: "string" } },
+					],
+					requestBody: {
+						required: true,
+						content: {
+							"application/json": {
+								schema: {
+									type: "object",
+									properties: {
+										username: { type: "string" },
+										password: { type: "string" },
+										isAdmin: { type: "boolean" },
+										name: { type: ["string", "null"] },
+										email: { type: ["string", "null"], format: "email" },
+									},
+								},
+							},
+						},
+					},
+					responses: {
+						"200": {
+							description: "User updated",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/UserRecord" } },
+							},
+						},
+						"400": {
+							description: "Validation/business-rule error",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"401": {
+							description: "Invalid token",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"403": {
+							description: "Token client is not configured as an admin API client",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"404": {
+							description: "User not found",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"409": {
+							description: "Username or email conflict",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+					},
+				},
+				delete: {
+					tags: ["Admin"],
+					summary: "Delete user",
+					description:
+						"Admin API endpoint. Requires a bearer JWT whose client is configured in Setup > Admin API.",
+					security: [{ bearerAuth: [] }],
+					parameters: [
+						{ name: "id", in: "path", required: true, schema: { type: "string" } },
+					],
+					responses: {
+						"200": {
+							description: "User deleted",
+							content: {
+								"application/json": {
+									schema: {
+										type: "object",
+										required: ["ok"],
+										properties: { ok: { type: "boolean", example: true } },
+									},
+								},
+							},
+						},
+						"400": {
+							description: "Validation/business-rule error",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"401": {
+							description: "Invalid token",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"403": {
+							description: "Token client is not configured as an admin API client",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"404": {
+							description: "User not found",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+					},
+				},
+			},
 			"/api/admin/site-logo": {
 				post: {
 					tags: ["Admin"],
@@ -403,6 +577,19 @@ export function getOpenApiDocument(serverUrl?: string) {
 						active: { type: "boolean" },
 						client_id: { type: ["string", "null"] },
 						expires_at: { type: ["string", "null"], format: "date-time" },
+					},
+				},
+				UserRecord: {
+					type: "object",
+					required: ["id", "username", "name", "email", "avatarKey", "isAdmin", "avatarUrl"],
+					properties: {
+						id: { type: "string" },
+						username: { type: "string" },
+						name: { type: ["string", "null"] },
+						email: { type: ["string", "null"], format: "email" },
+						avatarKey: { type: ["string", "null"] },
+						isAdmin: { type: "boolean" },
+						avatarUrl: { type: ["string", "null"], format: "uri" },
 					},
 				},
 			},

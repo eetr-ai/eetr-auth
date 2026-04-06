@@ -1,0 +1,153 @@
+import { NextResponse } from "next/server";
+import { withAdminApiClientContext } from "@/lib/context/with-admin-api-client-context";
+
+function getUserIdFromPath(pathname: string): string | null {
+	const parts = pathname.split("/").filter(Boolean);
+	if (parts.length < 4) {
+		return null;
+	}
+	const userId = decodeURIComponent(parts[3] ?? "").trim();
+	return userId.length > 0 ? userId : null;
+}
+
+function toErrorResponse(error: unknown) {
+	const message = error instanceof Error ? error.message : "Unexpected error.";
+	if (message === "User not found") {
+		return NextResponse.json(
+			{ error: "not_found", error_description: message },
+			{ status: 404 }
+		);
+	}
+	if (
+		message === "Username is required" ||
+		message === "You cannot remove your own admin access" ||
+		message === "Cannot remove the last admin" ||
+		message === "You cannot delete your own user" ||
+		message === "Cannot delete the last admin"
+	) {
+		return NextResponse.json(
+			{ error: "invalid_request", error_description: message },
+			{ status: 400 }
+		);
+	}
+	if (/unique constraint/i.test(message)) {
+		return NextResponse.json(
+			{ error: "conflict", error_description: "Username or email already exists." },
+			{ status: 409 }
+		);
+	}
+	return NextResponse.json(
+		{ error: "server_error", error_description: message },
+		{ status: 500 }
+	);
+}
+
+export const PUT = withAdminApiClientContext(async (req, _ctx, getServices, auth) => {
+	const userId = getUserIdFromPath(req.nextUrl.pathname);
+	if (!userId) {
+		return NextResponse.json(
+			{ error: "invalid_request", error_description: "User id path parameter is required." },
+			{ status: 400 }
+		);
+	}
+
+	let payload: unknown;
+	try {
+		payload = await req.json();
+	} catch {
+		return NextResponse.json(
+			{ error: "invalid_request", error_description: "Request body must be valid JSON." },
+			{ status: 400 }
+		);
+	}
+
+	const body = payload as {
+		username?: unknown;
+		password?: unknown;
+		isAdmin?: unknown;
+		name?: unknown;
+		email?: unknown;
+	};
+
+	if (body.username !== undefined && typeof body.username !== "string") {
+		return NextResponse.json(
+			{ error: "invalid_request", error_description: "username must be a string when provided." },
+			{ status: 400 }
+		);
+	}
+	if (body.password !== undefined && typeof body.password !== "string") {
+		return NextResponse.json(
+			{ error: "invalid_request", error_description: "password must be a string when provided." },
+			{ status: 400 }
+		);
+	}
+	if (body.isAdmin !== undefined && typeof body.isAdmin !== "boolean") {
+		return NextResponse.json(
+			{ error: "invalid_request", error_description: "isAdmin must be a boolean when provided." },
+			{ status: 400 }
+		);
+	}
+	if (body.name !== undefined && body.name !== null && typeof body.name !== "string") {
+		return NextResponse.json(
+			{ error: "invalid_request", error_description: "name must be a string or null when provided." },
+			{ status: 400 }
+		);
+	}
+	if (body.email !== undefined && body.email !== null && typeof body.email !== "string") {
+		return NextResponse.json(
+			{ error: "invalid_request", error_description: "email must be a string or null when provided." },
+			{ status: 400 }
+		);
+	}
+
+	if (
+		body.username === undefined &&
+		body.password === undefined &&
+		body.isAdmin === undefined &&
+		body.name === undefined &&
+		body.email === undefined
+	) {
+		return NextResponse.json(
+			{ error: "invalid_request", error_description: "At least one updatable field is required." },
+			{ status: 400 }
+		);
+	}
+
+	try {
+		const { userService } = getServices();
+		const actorUserId = auth.subjectUserId ?? `client:${auth.adminClientRowId}`;
+		const user = await userService.updateUser(
+			userId,
+			{
+				...(body.username !== undefined ? { username: body.username } : {}),
+				...(body.password !== undefined ? { password: body.password } : {}),
+				...(body.isAdmin !== undefined ? { isAdmin: body.isAdmin } : {}),
+				...(body.name !== undefined ? { name: body.name } : {}),
+				...(body.email !== undefined ? { email: body.email } : {}),
+			},
+			actorUserId
+		);
+		return NextResponse.json(user, { status: 200 });
+	} catch (error) {
+		return toErrorResponse(error);
+	}
+});
+
+export const DELETE = withAdminApiClientContext(async (req, _ctx, getServices, auth) => {
+	const userId = getUserIdFromPath(req.nextUrl.pathname);
+	if (!userId) {
+		return NextResponse.json(
+			{ error: "invalid_request", error_description: "User id path parameter is required." },
+			{ status: 400 }
+		);
+	}
+
+	try {
+		const { userService } = getServices();
+		const actorUserId = auth.subjectUserId ?? `client:${auth.adminClientRowId}`;
+		await userService.deleteUser(userId, actorUserId);
+		return NextResponse.json({ ok: true }, { status: 200 });
+	} catch (error) {
+		return toErrorResponse(error);
+	}
+});

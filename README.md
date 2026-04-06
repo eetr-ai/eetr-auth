@@ -157,6 +157,20 @@ This project now exposes OAuth authorization server endpoints for:
   - `npm run db:create-user:remote -- --config wrangler.generated.jsonc <username> <email>`
   - the script stores a random placeholder password hash; users should complete setup through the password reset flow
 
+### Admin users API (client-credential JWT)
+
+- Endpoints:
+  - `POST /api/admin/users`
+  - `PUT /api/admin/users/{id}`
+  - `DELETE /api/admin/users/{id}`
+- Auth model:
+  - requires `Authorization: Bearer <access_token>`
+  - token must be valid and the token client must be selected in Setup > Admin API clients
+  - requests from valid but non-selected clients return `403`
+- Avatar behavior:
+  - these admin endpoints do not handle avatar uploads
+  - avatar upload remains on `POST /api/users/avatar` using the existing user JWT/session flow
+
 ### Site URL setup (required for password reset emails)
 
 - Set in both local + remote D1:
