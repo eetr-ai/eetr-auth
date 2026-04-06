@@ -20,30 +20,52 @@ export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
 	const [error, setError] = useState<string | null>(null);
 	const [pending, startTransition] = useTransition();
 	const [passkeyPending, setPasskeyPending] = useState(false);
+	const hasFallbackRpIdCandidate =
+		typeof window !== "undefined" &&
+		window.location.hostname !== "localhost" &&
+		!window.location.hostname.includes(":") &&
+		window.location.hostname.split(".").length >= 3;
+
+	const runPasskeySignInAttempt = async (useFallbackRpId: boolean): Promise<string> => {
+		const challengePath = useFallbackRpId
+			? "/api/auth/passkey/challenge?rpId=fallback"
+			: "/api/auth/passkey/challenge";
+		const challengeRes = await fetch(challengePath, { method: "POST" });
+		if (!challengeRes.ok) throw new Error("Failed to get passkey challenge.");
+		const { challengeId, options } = (await challengeRes.json()) as {
+			challengeId: string;
+			options: PublicKeyCredentialRequestOptionsJSON;
+		};
+
+		const authResponse = await startAuthentication(options);
+
+		const verifyRes = await fetch("/api/auth/passkey/verify", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ challengeId, authenticationResponse: authResponse }),
+		});
+		if (!verifyRes.ok) {
+			const body = await verifyRes.json().catch(() => ({}));
+			throw new Error((body as { error_description?: string }).error_description ?? "Passkey verification failed.");
+		}
+
+		const { exchangeToken } = (await verifyRes.json()) as { exchangeToken: string };
+		return exchangeToken;
+	};
 
 	const onPasskeySignIn = async () => {
 		setError(null);
 		setPasskeyPending(true);
 		try {
-			const challengeRes = await fetch("/api/auth/passkey/challenge", { method: "POST" });
-			if (!challengeRes.ok) throw new Error("Failed to get passkey challenge.");
-			const { challengeId, options } = (await challengeRes.json()) as {
-				challengeId: string;
-				options: PublicKeyCredentialRequestOptionsJSON;
-			};
-
-			const authResponse = await startAuthentication(options);
-
-			const verifyRes = await fetch("/api/auth/passkey/verify", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ challengeId, authenticationResponse: authResponse }),
-			});
-			if (!verifyRes.ok) {
-				const body = await verifyRes.json().catch(() => ({}));
-				throw new Error((body as { error_description?: string }).error_description ?? "Passkey verification failed.");
+			let exchangeToken: string;
+			try {
+				exchangeToken = await runPasskeySignInAttempt(false);
+			} catch (err) {
+				if (!hasFallbackRpIdCandidate) {
+					throw err;
+				}
+				exchangeToken = await runPasskeySignInAttempt(true);
 			}
-			const { exchangeToken } = (await verifyRes.json()) as { exchangeToken: string };
 
 			await submitPasskeySignIn(exchangeToken, callbackUrl);
 		} catch (err) {

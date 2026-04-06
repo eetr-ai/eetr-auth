@@ -30,7 +30,24 @@ function log(payload: Record<string, unknown>): void {
 
 /** Strips the protocol and any trailing slashes to get a valid WebAuthn RP ID. */
 function rpIdFromOrigin(origin: string): string {
-	return origin.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+	return new URL(origin).hostname.toLowerCase();
+}
+
+function isIpAddress(hostname: string): boolean {
+	return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname) || hostname.includes(":");
+}
+
+function fallbackRpIdFromRpId(rpId: string): string | null {
+	if (rpId === "localhost" || isIpAddress(rpId)) {
+		return null;
+	}
+
+	const labels = rpId.split(".");
+	if (labels.length < 3) {
+		return null;
+	}
+
+	return labels.slice(-2).join(".");
 }
 
 export class PasskeyService {
@@ -49,12 +66,18 @@ export class PasskeyService {
 
 	// ── Helpers ───────────────────────────────────────────────────────────────
 
-	private async getRpDetails(): Promise<{ rpId: string; rpName: string; origin: string }> {
+	private async getRpDetails(): Promise<{
+		rpId: string;
+		fallbackRpId: string | null;
+		rpName: string;
+		origin: string;
+	}> {
 		const issuer = resolveIssuerBaseUrl(this.env);
 		const rpId = rpIdFromOrigin(issuer);
+		const fallbackRpId = fallbackRpIdFromRpId(rpId);
 		const site = await this.siteRepo.get();
 		const rpName = site?.siteTitle?.trim() || rpId;
-		return { rpId, rpName, origin: issuer };
+		return { rpId, fallbackRpId, rpName, origin: issuer };
 	}
 
 	// ── Registration ──────────────────────────────────────────────────────────
@@ -184,11 +207,20 @@ export class PasskeyService {
 	async generateAuthenticationChallenge(): Promise<{
 		challengeId: string;
 		options: PublicKeyCredentialRequestOptionsJSON;
+	}>;
+	async generateAuthenticationChallenge(useFallbackRpId: boolean): Promise<{
+		challengeId: string;
+		options: PublicKeyCredentialRequestOptionsJSON;
+	}>;
+	async generateAuthenticationChallenge(useFallbackRpId = false): Promise<{
+		challengeId: string;
+		options: PublicKeyCredentialRequestOptionsJSON;
 	}> {
-		const { rpId } = await this.getRpDetails();
+		const { rpId, fallbackRpId } = await this.getRpDetails();
+		const selectedRpId = useFallbackRpId && fallbackRpId ? fallbackRpId : rpId;
 
 		const options = await generateAuthenticationOptions({
-			rpID: rpId,
+			rpID: selectedRpId,
 			userVerification: "preferred",
 			allowCredentials: [], // discoverable: let the platform pick
 		});
@@ -204,7 +236,13 @@ export class PasskeyService {
 			expiresAt,
 		});
 
-		log({ action: "authentication_challenge_created", challengeId, rpId });
+		log({
+			action: "authentication_challenge_created",
+			challengeId,
+			rpId: selectedRpId,
+			primaryRpId: rpId,
+			fallbackRpId,
+		});
 		return { challengeId, options };
 	}
 
@@ -230,7 +268,8 @@ export class PasskeyService {
 			throw new Error("Passkey not found.");
 		}
 
-		const { rpId, origin } = await this.getRpDetails();
+		const { rpId, fallbackRpId, origin } = await this.getRpDetails();
+		const expectedRpIds = fallbackRpId ? [rpId, fallbackRpId] : rpId;
 
 		const authenticator: AuthenticatorDevice = {
 			credentialID: Buffer.from(credentialRow.credentialId, "base64url"),
@@ -245,7 +284,7 @@ export class PasskeyService {
 			response,
 			expectedChallenge: challengeRow.challenge,
 			expectedOrigin: origin,
-			expectedRPID: rpId,
+			expectedRPID: expectedRpIds,
 			requireUserVerification: false,
 			authenticator,
 		};
@@ -253,7 +292,12 @@ export class PasskeyService {
 		const { verified, authenticationInfo } = await verifyAuthenticationResponse(opts);
 
 		if (!verified) {
-			log({ action: "authentication_verify_failed", challengeId, credentialId: response.id });
+			log({
+				action: "authentication_verify_failed",
+				challengeId,
+				credentialId: response.id,
+				expectedRpIds: Array.isArray(expectedRpIds) ? expectedRpIds : [expectedRpIds],
+			});
 			throw new Error("Passkey authentication could not be verified.");
 		}
 
