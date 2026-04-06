@@ -7,7 +7,7 @@ End-to-end steps to provision D1 + R2 with Terraform, render Wrangler config, up
 - **Node.js** and npm (see repo `package.json`).
 - **Terraform** `>= 1.5` ([install](https://developer.hashicorp.com/terraform/install)).
 - A **Cloudflare** account with Workers, D1, and R2. See [terraform/README.md](./terraform/README.md) for API token permissions.
-- **`CLOUDFLARE_API_TOKEN`** exported (or `wrangler login`) for Terraform and Wrangler.
+- **Auth:** Terraform **requires** an API token (`CLOUDFLARE_API_TOKEN`) with D1 + R2 permissions. **Wrangler** (`infra:provision`, deploy) can use **`npx wrangler login`** (OAuth) **or** a token that includes **Workers Scripts → Edit**. If `CLOUDFLARE_API_TOKEN` is set, Wrangler uses it and it must include **Workers Scripts → Edit** for `wrangler secret put`; otherwise run `unset CLOUDFLARE_API_TOKEN` and rely on `wrangler login`, or use a separate shell for Terraform vs Wrangler (see [terraform/README.md](./terraform/README.md)).
 - **Argon hasher** Worker deployed in the same account, bound as in `wrangler.jsonc` (`service: "argon-hasher"`). Required when `HASH_METHOD` is `argon` (default in `wrangler.jsonc` `vars`).
 - Optional: **Resend** API key if you use transactional email (`resend_api_key` in tfvars or `RESEND_API_KEY` when provisioning).
 
@@ -65,6 +65,8 @@ node scripts/render-wrangler-config.mjs \
 ## 5. Provision Worker secrets and JWKS
 
 Uses `wrangler.generated.jsonc` by default (`WRANGLER_CONFIG` overrides).
+
+Ensure Wrangler can authenticate: **`npx wrangler login`**, or a `CLOUDFLARE_API_TOKEN` with **Workers Scripts → Edit** (see [terraform/README.md](./terraform/README.md)). If Terraform left a narrow token in your shell, run `unset CLOUDFLARE_API_TOKEN` before this step so Wrangler uses OAuth.
 
 ```bash
 npm run infra:provision
