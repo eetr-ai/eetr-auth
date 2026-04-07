@@ -9,6 +9,11 @@ import { SiteSettingsRepositoryD1 } from "@/lib/repositories/site-settings.repos
 import { RefreshTokenRepositoryD1 } from "@/lib/repositories/refresh-token.repository.d1";
 import { EnvironmentRepositoryD1 } from "@/lib/repositories/environment.repository.d1";
 import { PasskeyRepositoryD1 } from "@/lib/repositories/passkey.repository.d1";
+import { ScopeRepositoryD1 } from "@/lib/repositories/scope.repository.d1";
+import { TokenActivityLogRepositoryD1 } from "@/lib/repositories/token-activity-log.repository.d1";
+import { SiteAdminApiClientsRepositoryD1 } from "@/lib/repositories/site-admin-api-clients.repository.d1";
+import { resolveHashMethod } from "@/lib/config/hash-method";
+import { getAvatarCdnBaseUrl } from "@/lib/users/profile";
 import { UserService } from "./user.service";
 import { EnvironmentService } from "./environment.service";
 import { ScopeService } from "./scope.service";
@@ -34,11 +39,21 @@ export interface Services {
 	passkeyService: PasskeyService;
 }
 
+function resolveOptionalEnvString(env: Record<string, unknown>, key: string): string | null {
+	const value = env[key];
+	if (typeof value !== "string") {
+		return null;
+	}
+	const trimmed = value.trim();
+	return trimmed.length > 0 ? trimmed : null;
+}
+
 /**
  * Returns per-request service instances. Call only from onServerAction or withApiContext.
  */
 export function getServices(ctx: RequestContext): Services {
 	const db = getDb(ctx.env);
+	const resolvedEnv = ctx.env as unknown as Record<string, unknown>;
 	const clientRepo = new ClientRepositoryD1(db);
 	const tokenRepo = new TokenRepositoryD1(db);
 	const authorizationCodeRepo = new AuthorizationCodeRepositoryD1(db);
@@ -48,13 +63,29 @@ export function getServices(ctx: RequestContext): Services {
 	const challengeRepo = new UserChallengeRepositoryD1(db);
 	const siteRepo = new SiteSettingsRepositoryD1(db);
 	const passkeyRepo = new PasskeyRepositoryD1(db);
-	const siteSettingsService = new SiteSettingsService(ctx);
+	const scopeRepo = new ScopeRepositoryD1(db);
+	const tokenActivityLogRepo = new TokenActivityLogRepositoryD1(db);
+	const adminClientsRepo = new SiteAdminApiClientsRepositoryD1(db);
+	const avatarCdnBaseUrl = getAvatarCdnBaseUrl(resolvedEnv);
+	const hashMethod = resolveHashMethod(resolvedEnv);
+	const siteSettingsService = new SiteSettingsService({
+		siteRepo,
+		adminClientsRepo,
+		clientRepo,
+		avatarCdnBaseUrl,
+		resendApiKey: resolveOptionalEnvString(resolvedEnv, "RESEND_API_KEY"),
+	});
 	const transactionalEmailService = new TransactionalEmailService(ctx);
 
 	return {
-		userService: new UserService(ctx),
-		environmentService: new EnvironmentService(ctx),
-		scopeService: new ScopeService(ctx),
+		userService: new UserService({
+			userRepository: userRepo,
+			avatarCdnBaseUrl,
+			argonHasher: ctx.env.ARGON_HASHER,
+			hashMethod,
+		}),
+		environmentService: new EnvironmentService({ envRepo }),
+		scopeService: new ScopeService({ scopeRepo }),
 		clientService: new ClientService({
 			clientRepo,
 			env: ctx.env,
@@ -73,7 +104,11 @@ export function getServices(ctx: RequestContext): Services {
 			envRepo,
 			env: ctx.env,
 		}),
-		tokenActivityLogService: new TokenActivityLogService(ctx),
+		tokenActivityLogService: new TokenActivityLogService({
+			logRepo: tokenActivityLogRepo,
+			clientRepo,
+			envRepo,
+		}),
 		userChallengeService: new UserChallengeService({
 			userRepo,
 			challengeRepo,

@@ -1,14 +1,12 @@
-import { getDb } from "@/lib/db";
-import type { RequestContext } from "@/lib/context/types";
-import { TokenActivityLogRepositoryD1 } from "@/lib/repositories/token-activity-log.repository.d1";
-import { ClientRepositoryD1 } from "@/lib/repositories/client.repository.d1";
-import { EnvironmentRepositoryD1 } from "@/lib/repositories/environment.repository.d1";
+import type { ClientRepository } from "@/lib/repositories/client.repository";
+import type { EnvironmentRepository } from "@/lib/repositories/environment.repository";
 import type {
 	TokenActivityLogRow,
 	TokenActivityMetrics,
 	TokenActivityRequestType,
 	ListLogsParams,
 	ListLogsResult,
+	TokenActivityLogRepository,
 } from "@/lib/repositories/token-activity-log.repository";
 
 export interface LogActivityParams {
@@ -20,16 +18,21 @@ export interface LogActivityParams {
 	durationMs?: number | null;
 }
 
-export class TokenActivityLogService {
-	private readonly logRepo: TokenActivityLogRepositoryD1;
-	private readonly clientRepo: ClientRepositoryD1;
-	private readonly envRepo: EnvironmentRepositoryD1;
+export interface TokenActivityLogServiceDependencies {
+	logRepo: TokenActivityLogRepository;
+	clientRepo: ClientRepository;
+	envRepo: EnvironmentRepository;
+}
 
-	constructor(ctx: RequestContext) {
-		const db = getDb(ctx.env);
-		this.logRepo = new TokenActivityLogRepositoryD1(db);
-		this.clientRepo = new ClientRepositoryD1(db);
-		this.envRepo = new EnvironmentRepositoryD1(db);
+export class TokenActivityLogService {
+	private readonly logRepo: TokenActivityLogRepository;
+	private readonly clientRepo: ClientRepository;
+	private readonly envRepo: EnvironmentRepository;
+
+	constructor({ logRepo, clientRepo, envRepo }: TokenActivityLogServiceDependencies) {
+		this.logRepo = logRepo;
+		this.clientRepo = clientRepo;
+		this.envRepo = envRepo;
 	}
 
 	async logActivity(params: LogActivityParams): Promise<void> {

@@ -1,9 +1,6 @@
-import { getDb } from "@/lib/db";
-import type { RequestContext } from "@/lib/context/types";
-import { SiteSettingsRepositoryD1 } from "@/lib/repositories/site-settings.repository.d1";
-import { SiteAdminApiClientsRepositoryD1 } from "@/lib/repositories/site-admin-api-clients.repository.d1";
-import { ClientRepositoryD1 } from "@/lib/repositories/client.repository.d1";
-import { getAvatarCdnBaseUrl } from "@/lib/users/profile";
+import type { ClientRepository } from "@/lib/repositories/client.repository";
+import type { SiteAdminApiClientsRepository } from "@/lib/repositories/site-admin-api-clients.repository";
+import type { SiteSettingsRepository } from "@/lib/repositories/site-settings.repository";
 
 export const DEFAULT_SITE_TITLE = "Eetr Auth";
 export const DEFAULT_LOGO_PATH = "/eetr-auth-logo.png";
@@ -41,23 +38,37 @@ function assertOptionalHttpUrl(label: string, value: string | null): void {
 	}
 }
 
-export class SiteSettingsService {
-	private readonly siteRepo: SiteSettingsRepositoryD1;
-	private readonly adminClientsRepo: SiteAdminApiClientsRepositoryD1;
-	private readonly clientRepo: ClientRepositoryD1;
-	private readonly env: Record<string, unknown>;
+export interface SiteSettingsServiceDependencies {
+	siteRepo: SiteSettingsRepository;
+	adminClientsRepo: SiteAdminApiClientsRepository;
+	clientRepo: ClientRepository;
+	avatarCdnBaseUrl: string;
+	resendApiKey: string | null;
+}
 
-	constructor(ctx: RequestContext) {
-		const db = getDb(ctx.env);
-		this.siteRepo = new SiteSettingsRepositoryD1(db);
-		this.adminClientsRepo = new SiteAdminApiClientsRepositoryD1(db);
-		this.clientRepo = new ClientRepositoryD1(db);
-		this.env = ctx.env as unknown as Record<string, unknown>;
+export class SiteSettingsService {
+	private readonly siteRepo: SiteSettingsRepository;
+	private readonly adminClientsRepo: SiteAdminApiClientsRepository;
+	private readonly clientRepo: ClientRepository;
+	private readonly avatarCdnBaseUrl: string;
+	private readonly resendApiKey: string | null;
+
+	constructor({
+		siteRepo,
+		adminClientsRepo,
+		clientRepo,
+		avatarCdnBaseUrl,
+		resendApiKey,
+	}: SiteSettingsServiceDependencies) {
+		this.siteRepo = siteRepo;
+		this.adminClientsRepo = adminClientsRepo;
+		this.clientRepo = clientRepo;
+		this.avatarCdnBaseUrl = avatarCdnBaseUrl.replace(/\/+$/, "");
+		this.resendApiKey = resendApiKey;
 	}
 
 	getLogoPublicUrlForKey(logoKey: string, cdnUrlOverride: string | null): string {
-		const baseSource =
-			normalizeOptional(cdnUrlOverride) ?? getAvatarCdnBaseUrl(this.env);
+		const baseSource = normalizeOptional(cdnUrlOverride) ?? this.avatarCdnBaseUrl;
 		const base = baseSource.replace(/\/+$/, "");
 		const key = logoKey.replace(/^\/+/, "");
 		return `${base}/${key}`;
@@ -85,20 +96,8 @@ export class SiteSettingsService {
 		return this.getLogoPublicUrlForKey(key, cdnUrlOverride);
 	}
 
-	private getResendApiKey(): string | null {
-		const e = this.env;
-		const v =
-			(typeof e.RESEND_API_KEY === "string" && e.RESEND_API_KEY.trim().length > 0
-				? e.RESEND_API_KEY
-				: null) ??
-			(typeof process.env.RESEND_API_KEY === "string" && process.env.RESEND_API_KEY.trim().length > 0
-				? process.env.RESEND_API_KEY
-				: null);
-		return v;
-	}
-
 	private computeMfaCanEnable(siteUrl: string | null): boolean {
-		return !!(normalizeOptional(siteUrl) && this.getResendApiKey());
+		return !!(normalizeOptional(siteUrl) && this.resendApiKey);
 	}
 
 	async get(): Promise<SiteSettingsDto> {
@@ -143,7 +142,7 @@ export class SiteSettingsService {
 			if (!normalizeOptional(nextSiteUrl)) {
 				throw new Error("Configure Site URL before enabling MFA.");
 			}
-			if (!this.getResendApiKey()) {
+			if (!this.resendApiKey) {
 				throw new Error("RESEND_API_KEY is not configured; cannot enable MFA.");
 			}
 		}

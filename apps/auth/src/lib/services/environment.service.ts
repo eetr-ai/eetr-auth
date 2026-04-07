@@ -1,14 +1,14 @@
-import { getDb } from "@/lib/db";
-import type { RequestContext } from "@/lib/context/types";
-import { EnvironmentRepositoryD1 } from "@/lib/repositories/environment.repository.d1";
-import type { Environment } from "@/lib/repositories/environment.repository";
+import type { Environment, EnvironmentRepository } from "@/lib/repositories/environment.repository";
+
+export interface EnvironmentServiceDependencies {
+	envRepo: EnvironmentRepository;
+}
 
 export class EnvironmentService {
-	private readonly envRepo: EnvironmentRepositoryD1;
+	private readonly envRepo: EnvironmentRepository;
 
-	constructor(ctx: RequestContext) {
-		const db = getDb(ctx.env);
-		this.envRepo = new EnvironmentRepositoryD1(db);
+	constructor({ envRepo }: EnvironmentServiceDependencies) {
+		this.envRepo = envRepo;
 	}
 
 	async list(): Promise<Environment[]> {

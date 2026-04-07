@@ -5,24 +5,6 @@ import type { ClientRepository } from "@/lib/repositories/client.repository";
 import type { EnvironmentRepository } from "@/lib/repositories/environment.repository";
 import { TokenActivityLogService } from "@/lib/services/token-activity-log.service";
 
-vi.mock("@/lib/db", () => ({ getDb: vi.fn().mockReturnValue({}) }));
-
-vi.mock("@/lib/repositories/token-activity-log.repository.d1", () => ({
-	TokenActivityLogRepositoryD1: vi.fn(),
-}));
-
-vi.mock("@/lib/repositories/client.repository.d1", () => ({
-	ClientRepositoryD1: vi.fn(),
-}));
-
-vi.mock("@/lib/repositories/environment.repository.d1", () => ({
-	EnvironmentRepositoryD1: vi.fn(),
-}));
-
-import { TokenActivityLogRepositoryD1 } from "@/lib/repositories/token-activity-log.repository.d1";
-import { ClientRepositoryD1 } from "@/lib/repositories/client.repository.d1";
-import { EnvironmentRepositoryD1 } from "@/lib/repositories/environment.repository.d1";
-
 function createLogRepoMock(): TokenActivityLogRepository {
 	return {
 		insert: vi.fn(),
@@ -59,8 +41,12 @@ function createEnvRepoMock(): EnvironmentRepository {
 	};
 }
 
-function makeCtx() {
-	return { env: {} as unknown as CloudflareEnv };
+function createService(
+	logRepo: TokenActivityLogRepository,
+	clientRepo: ClientRepository,
+	envRepo: EnvironmentRepository
+): TokenActivityLogService {
+	return new TokenActivityLogService({ logRepo, clientRepo, envRepo });
 }
 
 describe("TokenActivityLogService", () => {
@@ -72,16 +58,6 @@ describe("TokenActivityLogService", () => {
 		logRepo = createLogRepoMock();
 		clientRepo = createClientRepoMock();
 		envRepo = createEnvRepoMock();
-
-		vi.mocked(TokenActivityLogRepositoryD1).mockImplementation(function () {
-			return logRepo;
-		} as unknown as typeof TokenActivityLogRepositoryD1);
-		vi.mocked(ClientRepositoryD1).mockImplementation(function () {
-			return clientRepo;
-		} as unknown as typeof ClientRepositoryD1);
-		vi.mocked(EnvironmentRepositoryD1).mockImplementation(function () {
-			return envRepo;
-		} as unknown as typeof EnvironmentRepositoryD1);
 
 		vi.useFakeTimers();
 		vi.setSystemTime(new Date("2026-04-07T12:00:00.000Z"));
@@ -95,7 +71,7 @@ describe("TokenActivityLogService", () => {
 
 	describe("logActivity", () => {
 		it("inserts a row with the provided environmentName", async () => {
-			const service = new TokenActivityLogService(makeCtx());
+			const service = createService(logRepo, clientRepo, envRepo);
 			await service.logActivity({
 				ip: "1.2.3.4",
 				requestType: "token",
@@ -115,7 +91,7 @@ describe("TokenActivityLogService", () => {
 		});
 
 		it("records succeeded as 0 for failed requests", async () => {
-			const service = new TokenActivityLogService(makeCtx());
+			const service = createService(logRepo, clientRepo, envRepo);
 			await service.logActivity({ ip: null, requestType: "authorize", succeeded: false });
 			expect(logRepo.insert).toHaveBeenCalledWith(
 				expect.objectContaining({ succeeded: 0, ip_address: null })
@@ -134,7 +110,7 @@ describe("TokenActivityLogService", () => {
 			});
 			vi.mocked(envRepo.getById).mockResolvedValue({ id: "env-1", name: "staging" });
 
-			const service = new TokenActivityLogService(makeCtx());
+			const service = createService(logRepo, clientRepo, envRepo);
 			await service.logActivity({
 				ip: null,
 				requestType: "validate",
@@ -160,7 +136,7 @@ describe("TokenActivityLogService", () => {
 			});
 			vi.mocked(envRepo.getById).mockResolvedValue({ id: "env-2", name: "dev" });
 
-			const service = new TokenActivityLogService(makeCtx());
+			const service = createService(logRepo, clientRepo, envRepo);
 			await service.logActivity({
 				ip: null,
 				requestType: "token",
@@ -177,7 +153,7 @@ describe("TokenActivityLogService", () => {
 			vi.mocked(clientRepo.getByClientIdentifier).mockResolvedValue(null);
 			vi.mocked(clientRepo.getById).mockResolvedValue(null);
 
-			const service = new TokenActivityLogService(makeCtx());
+			const service = createService(logRepo, clientRepo, envRepo);
 			await service.logActivity({
 				ip: null,
 				requestType: "token",
@@ -191,7 +167,7 @@ describe("TokenActivityLogService", () => {
 		});
 
 		it("skips client lookup when clientId is blank", async () => {
-			const service = new TokenActivityLogService(makeCtx());
+			const service = createService(logRepo, clientRepo, envRepo);
 			await service.logActivity({
 				ip: null,
 				requestType: "cleanup",
@@ -205,7 +181,7 @@ describe("TokenActivityLogService", () => {
 		});
 
 		it("stores the durationMs when provided", async () => {
-			const service = new TokenActivityLogService(makeCtx());
+			const service = createService(logRepo, clientRepo, envRepo);
 			await service.logActivity({
 				ip: null,
 				requestType: "token",
@@ -230,7 +206,7 @@ describe("TokenActivityLogService", () => {
 			};
 			vi.mocked(logRepo.getMetricsSince).mockResolvedValue(metrics);
 
-			const service = new TokenActivityLogService(makeCtx());
+			const service = createService(logRepo, clientRepo, envRepo);
 			const result = await service.getMetricsSince("2026-04-01T00:00:00.000Z");
 			expect(result).toBe(metrics);
 			expect(logRepo.getMetricsSince).toHaveBeenCalledWith("2026-04-01T00:00:00.000Z");
@@ -242,7 +218,7 @@ describe("TokenActivityLogService", () => {
 			const listResult: ListLogsResult = { rows: [], total: 0 };
 			vi.mocked(logRepo.listLogs).mockResolvedValue(listResult);
 
-			const service = new TokenActivityLogService(makeCtx());
+			const service = createService(logRepo, clientRepo, envRepo);
 			const result = await service.listLogs({ limit: 10, offset: 0 });
 			expect(result).toBe(listResult);
 			expect(logRepo.listLogs).toHaveBeenCalledWith({ limit: 10, offset: 0 });

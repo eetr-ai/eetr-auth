@@ -1,14 +1,14 @@
-import { getDb } from "@/lib/db";
-import type { RequestContext } from "@/lib/context/types";
-import { ScopeRepositoryD1 } from "@/lib/repositories/scope.repository.d1";
-import type { Scope } from "@/lib/repositories/scope.repository";
+import type { Scope, ScopeRepository } from "@/lib/repositories/scope.repository";
+
+export interface ScopeServiceDependencies {
+	scopeRepo: ScopeRepository;
+}
 
 export class ScopeService {
-	private readonly scopeRepo: ScopeRepositoryD1;
+	private readonly scopeRepo: ScopeRepository;
 
-	constructor(ctx: RequestContext) {
-		const db = getDb(ctx.env);
-		this.scopeRepo = new ScopeRepositoryD1(db);
+	constructor({ scopeRepo }: ScopeServiceDependencies) {
+		this.scopeRepo = scopeRepo;
 	}
 
 	async list(): Promise<Scope[]> {

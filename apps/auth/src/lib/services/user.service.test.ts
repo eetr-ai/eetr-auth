@@ -3,32 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UserRecord, UserRepository } from "@/lib/repositories/admin.repository";
 import { UserService } from "@/lib/services/user.service";
 
-vi.mock("@/lib/db", () => ({ getDb: vi.fn().mockReturnValue({}) }));
-
-vi.mock("@/lib/repositories/admin.repository.d1", () => ({
-	UserRepositoryD1: vi.fn(),
-}));
-
 vi.mock("@/lib/auth/password-hash", () => ({
 	hashPassword: vi.fn().mockResolvedValue("hashed-password"),
 }));
 
-vi.mock("@/lib/config/hash-method", () => ({
-	resolveHashMethod: vi.fn().mockReturnValue("argon"),
-}));
-
 vi.mock("@/lib/users/profile", () => ({
-	getAvatarUrl: vi.fn().mockImplementation((avatarKey: string | null) =>
-		avatarKey ? `https://cdn.example.com/${avatarKey}` : null
-	),
 	normalizeOptionalProfileField: vi.fn().mockImplementation((v: string | null | undefined) => {
 		if (v == null) return null;
 		const t = v.trim();
 		return t.length > 0 ? t : null;
 	}),
 }));
-
-import { UserRepositoryD1 } from "@/lib/repositories/admin.repository.d1";
 
 function createUserRepoMock(): UserRepository {
 	return {
@@ -42,8 +27,13 @@ function createUserRepoMock(): UserRepository {
 	};
 }
 
-function makeCtx(env: Record<string, unknown> = {}) {
-	return { env: { ARGON_HASHER: { fetch: vi.fn() }, ...env } as unknown as CloudflareEnv };
+function createService(userRepository: UserRepository): UserService {
+	return new UserService({
+		userRepository,
+		avatarCdnBaseUrl: "https://cdn.example.com",
+		argonHasher: { fetch: vi.fn() } as unknown as Fetcher,
+		hashMethod: "argon",
+	});
 }
 
 function makeUserRecord(overrides?: Partial<UserRecord>): UserRecord {
@@ -64,9 +54,6 @@ describe("UserService", () => {
 
 	beforeEach(() => {
 		mockRepo = createUserRepoMock();
-		vi.mocked(UserRepositoryD1).mockImplementation(function () {
-			return mockRepo;
-		} as unknown as typeof UserRepositoryD1);
 		vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue("new-user-id");
 	});
 
@@ -77,7 +64,7 @@ describe("UserService", () => {
 	describe("listUsers", () => {
 		it("returns an empty array when there are no users", async () => {
 			vi.mocked(mockRepo.list).mockResolvedValue([]);
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			await expect(service.listUsers()).resolves.toEqual([]);
 		});
 
@@ -86,7 +73,7 @@ describe("UserService", () => {
 				makeUserRecord({ avatarKey: "avatar.png" }),
 				makeUserRecord({ id: "user-2", username: "bob" }),
 			]);
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			const result = await service.listUsers();
 			expect(result[0].avatarUrl).toBe("https://cdn.example.com/avatar.png");
 			expect(result[1].avatarUrl).toBeNull();
@@ -96,13 +83,13 @@ describe("UserService", () => {
 	describe("getById", () => {
 		it("returns null when the user does not exist", async () => {
 			vi.mocked(mockRepo.getById).mockResolvedValue(null);
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			await expect(service.getById("missing")).resolves.toBeNull();
 		});
 
 		it("returns the user with an avatar URL when found", async () => {
 			vi.mocked(mockRepo.getById).mockResolvedValue(makeUserRecord({ avatarKey: "pic.jpg" }));
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			const result = await service.getById("user-1");
 			expect(result?.id).toBe("user-1");
 			expect(result?.avatarUrl).toBe("https://cdn.example.com/pic.jpg");
@@ -111,14 +98,14 @@ describe("UserService", () => {
 
 	describe("createUser", () => {
 		it("throws when username is empty", async () => {
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			await expect(service.createUser("   ", "password")).rejects.toThrow("Username is required");
 		});
 
 		it("creates an admin user with emailVerifiedAt set", async () => {
 			vi.useFakeTimers();
 			vi.setSystemTime(new Date("2026-04-07T12:00:00.000Z"));
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			const result = await service.createUser("alice", "secret", true, "Alice", "alice@example.com");
 			expect(mockRepo.create).toHaveBeenCalledWith(
 				"new-user-id",
@@ -135,14 +122,14 @@ describe("UserService", () => {
 		});
 
 		it("creates a non-admin user with emailVerifiedAt as null", async () => {
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			const result = await service.createUser("bob", "secret", false);
 			expect(result.emailVerifiedAt).toBeNull();
 			expect(result.isAdmin).toBe(false);
 		});
 
 		it("trims the username before creating", async () => {
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			await service.createUser("  alice  ", "secret");
 			// Verify the second argument (username) is trimmed
 			const calledUsername = vi.mocked(mockRepo.create).mock.calls[0]?.[1];
@@ -153,13 +140,13 @@ describe("UserService", () => {
 	describe("updateUser", () => {
 		it("throws when the user is not found", async () => {
 			vi.mocked(mockRepo.getById).mockResolvedValue(null);
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			await expect(service.updateUser("missing", {}, "actor-1")).rejects.toThrow("User not found");
 		});
 
 		it("throws when updating username to an empty string", async () => {
 			vi.mocked(mockRepo.getById).mockResolvedValue(makeUserRecord());
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			await expect(service.updateUser("user-1", { username: "   " }, "actor-1")).rejects.toThrow(
 				"Username is required"
 			);
@@ -167,7 +154,7 @@ describe("UserService", () => {
 
 		it("throws when an actor tries to remove their own admin access", async () => {
 			vi.mocked(mockRepo.getById).mockResolvedValue(makeUserRecord({ id: "actor-1", isAdmin: true }));
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			await expect(
 				service.updateUser("actor-1", { isAdmin: false }, "actor-1")
 			).rejects.toThrow("You cannot remove your own admin access");
@@ -176,7 +163,7 @@ describe("UserService", () => {
 		it("throws when removing the last admin", async () => {
 			vi.mocked(mockRepo.getById).mockResolvedValue(makeUserRecord({ id: "user-1", isAdmin: true }));
 			vi.mocked(mockRepo.list).mockResolvedValue([makeUserRecord({ id: "user-1", isAdmin: true })]);
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			await expect(
 				service.updateUser("user-1", { isAdmin: false }, "actor-2")
 			).rejects.toThrow("Cannot remove the last admin");
@@ -191,7 +178,7 @@ describe("UserService", () => {
 				makeUserRecord({ id: "user-1", isAdmin: true }),
 				makeUserRecord({ id: "user-2", isAdmin: true }),
 			]);
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			const result = await service.updateUser("user-1", { isAdmin: false }, "actor-2");
 			expect(mockRepo.update).toHaveBeenCalledWith("user-1", expect.objectContaining({ isAdmin: false }));
 			expect(result.isAdmin).toBe(false);
@@ -202,7 +189,7 @@ describe("UserService", () => {
 			vi.mocked(mockRepo.getById)
 				.mockResolvedValueOnce(user)
 				.mockResolvedValueOnce({ ...user, email: "new@example.com", emailVerifiedAt: null });
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			await service.updateUser("user-1", { email: "new@example.com" }, "actor-1");
 			expect(mockRepo.update).toHaveBeenCalledWith(
 				"user-1",
@@ -215,7 +202,7 @@ describe("UserService", () => {
 			vi.mocked(mockRepo.getById)
 				.mockResolvedValueOnce(user)
 				.mockResolvedValueOnce(user);
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			await service.updateUser("user-1", { email: "new@example.com" }, "actor-2");
 			const patch = vi.mocked(mockRepo.update).mock.calls[0]?.[1];
 			expect(patch?.emailVerifiedAt).toBeUndefined();
@@ -226,7 +213,7 @@ describe("UserService", () => {
 			vi.mocked(mockRepo.getById)
 				.mockResolvedValueOnce(user)
 				.mockResolvedValueOnce(user);
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			await service.updateUser("user-1", { password: "new-password" }, "actor-1");
 			expect(mockRepo.update).toHaveBeenCalledWith(
 				"user-1",
@@ -239,7 +226,7 @@ describe("UserService", () => {
 			vi.mocked(mockRepo.getById)
 				.mockResolvedValueOnce(user)
 				.mockResolvedValueOnce(user);
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			await service.updateUser("user-1", { password: "   " }, "actor-1");
 			const patch = vi.mocked(mockRepo.update).mock.calls[0]?.[1];
 			expect(patch?.passwordHash).toBeUndefined();
@@ -249,7 +236,7 @@ describe("UserService", () => {
 			vi.mocked(mockRepo.getById)
 				.mockResolvedValueOnce(makeUserRecord())
 				.mockResolvedValueOnce(null);
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			await expect(service.updateUser("user-1", { name: "New Name" }, "actor-1")).rejects.toThrow(
 				"User not found"
 			);
@@ -258,7 +245,7 @@ describe("UserService", () => {
 
 	describe("deleteUser", () => {
 		it("throws when the actor tries to delete themselves", async () => {
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			await expect(service.deleteUser("actor-1", "actor-1")).rejects.toThrow(
 				"You cannot delete your own user"
 			);
@@ -266,14 +253,14 @@ describe("UserService", () => {
 
 		it("throws when the target user is not found", async () => {
 			vi.mocked(mockRepo.getById).mockResolvedValue(null);
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			await expect(service.deleteUser("user-1", "actor-2")).rejects.toThrow("User not found");
 		});
 
 		it("throws when deleting the last admin", async () => {
 			vi.mocked(mockRepo.getById).mockResolvedValue(makeUserRecord({ id: "user-1", isAdmin: true }));
 			vi.mocked(mockRepo.list).mockResolvedValue([makeUserRecord({ id: "user-1", isAdmin: true })]);
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			await expect(service.deleteUser("user-1", "actor-2")).rejects.toThrow(
 				"Cannot delete the last admin"
 			);
@@ -281,7 +268,7 @@ describe("UserService", () => {
 
 		it("deletes a non-admin user without checking admin count", async () => {
 			vi.mocked(mockRepo.getById).mockResolvedValue(makeUserRecord({ isAdmin: false }));
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			await service.deleteUser("user-1", "actor-2");
 			expect(mockRepo.delete).toHaveBeenCalledWith("user-1");
 			expect(mockRepo.list).not.toHaveBeenCalled();
@@ -293,7 +280,7 @@ describe("UserService", () => {
 				makeUserRecord({ id: "user-1", isAdmin: true }),
 				makeUserRecord({ id: "user-2", isAdmin: true }),
 			]);
-			const service = new UserService(makeCtx());
+			const service = createService(mockRepo);
 			await service.deleteUser("user-1", "actor-2");
 			expect(mockRepo.delete).toHaveBeenCalledWith("user-1");
 		});

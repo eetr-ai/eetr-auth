@@ -5,29 +5,6 @@ import type { SiteAdminApiClientsRepository } from "@/lib/repositories/site-admi
 import type { ClientRepository } from "@/lib/repositories/client.repository";
 import { DEFAULT_LOGO_PATH, DEFAULT_SITE_TITLE, SiteSettingsService } from "@/lib/services/site-settings.service";
 
-vi.mock("@/lib/db", () => ({ getDb: vi.fn().mockReturnValue({}) }));
-
-vi.mock("@/lib/repositories/site-settings.repository.d1", () => ({
-	SiteSettingsRepositoryD1: vi.fn(),
-}));
-
-vi.mock("@/lib/repositories/site-admin-api-clients.repository.d1", () => ({
-	SiteAdminApiClientsRepositoryD1: vi.fn(),
-}));
-
-vi.mock("@/lib/repositories/client.repository.d1", () => ({
-	ClientRepositoryD1: vi.fn(),
-}));
-
-vi.mock("@/lib/users/profile", () => ({
-	getAvatarCdnBaseUrl: vi.fn().mockReturnValue("https://cdn.example.com"),
-	getAvatarUrl: vi.fn().mockReturnValue(null),
-}));
-
-import { SiteSettingsRepositoryD1 } from "@/lib/repositories/site-settings.repository.d1";
-import { SiteAdminApiClientsRepositoryD1 } from "@/lib/repositories/site-admin-api-clients.repository.d1";
-import { ClientRepositoryD1 } from "@/lib/repositories/client.repository.d1";
-
 function createSiteRepoMock(): SiteSettingsRepository {
 	return { get: vi.fn(), update: vi.fn() };
 }
@@ -52,32 +29,24 @@ function createClientRepoMock(): ClientRepository {
 	};
 }
 
-function makeCtx(env: Record<string, unknown> = {}) {
-	return { env: env as unknown as CloudflareEnv };
-}
-
 function createService(
 	siteRepo: SiteSettingsRepository,
 	adminClientsRepo: SiteAdminApiClientsRepository,
 	clientRepo: ClientRepository,
-	env: Record<string, unknown> = {}
+	options: { avatarCdnBaseUrl?: string; resendApiKey?: string | null } = {}
 ): SiteSettingsService {
-	vi.mocked(SiteSettingsRepositoryD1).mockImplementation(function () {
-		return siteRepo;
-	} as unknown as typeof SiteSettingsRepositoryD1);
-	vi.mocked(SiteAdminApiClientsRepositoryD1).mockImplementation(function () {
-		return adminClientsRepo;
-	} as unknown as typeof SiteAdminApiClientsRepositoryD1);
-	vi.mocked(ClientRepositoryD1).mockImplementation(function () {
-		return clientRepo;
-	} as unknown as typeof ClientRepositoryD1);
-	return new SiteSettingsService(makeCtx(env));
+	return new SiteSettingsService({
+		siteRepo,
+		adminClientsRepo,
+		clientRepo,
+		avatarCdnBaseUrl: options.avatarCdnBaseUrl ?? "https://cdn.example.com",
+		resendApiKey: options.resendApiKey ?? null,
+	});
 }
 
 describe("SiteSettingsService", () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
-		vi.unstubAllEnvs();
 	});
 
 	describe("getDisplaySiteTitle", () => {
@@ -163,7 +132,7 @@ describe("SiteSettingsService", () => {
 				mfaEnabled: false,
 			});
 			const service = createService(siteRepo, createAdminClientsRepoMock(), createClientRepoMock(), {
-				RESEND_API_KEY: "re_key_123",
+				resendApiKey: "re_key_123",
 			});
 
 			const result = await service.get();
@@ -196,7 +165,7 @@ describe("SiteSettingsService", () => {
 			const siteRepo = createSiteRepoMock();
 			vi.mocked(siteRepo.get).mockResolvedValue(null);
 			const service = createService(siteRepo, createAdminClientsRepoMock(), createClientRepoMock(), {
-				RESEND_API_KEY: "re_key",
+				resendApiKey: "re_key",
 			});
 
 			await expect(service.updateSiteFields({ mfaEnabled: true })).rejects.toThrow(

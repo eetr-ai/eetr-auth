@@ -155,6 +155,11 @@ function makeAccessTokenRecord(overrides?: Partial<AccessTokenRecord>): AccessTo
 	};
 }
 
+function decodeJwtPart(token: string, index: number): Record<string, unknown> {
+	const part = token.split(".")[index] ?? "";
+	return JSON.parse(Buffer.from(part, "base64url").toString("utf8")) as Record<string, unknown>;
+}
+
 async function toS256Challenge(value: string): Promise<string> {
 	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
 	return Buffer.from(digest).toString("base64url");
@@ -428,6 +433,182 @@ describe("OauthTokenService", () => {
 			);
 			expect(result.access_token).toMatch(/^at_[0-9a-f]{64}$/);
 			expect(result.refresh_token).toMatch(/^rt_[0-9a-f]{64}$/);
+		});
+	});
+
+	describe("JWT issuance", () => {
+		let privateKeyPem: string;
+
+		beforeAll(async () => {
+			const { privateKey } = await generateKeyPair("RS256", { extractable: true });
+			privateKeyPem = await exportPKCS8(privateKey);
+		});
+
+		afterEach(() => {
+			vi.unstubAllEnvs();
+		});
+
+		it("issues JWT access tokens when JWT_PRIVATE_KEY and JWT_KID are configured", async () => {
+			const clientRepo = createClientRepoMock();
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			const envRepo = createEnvRepoMock();
+
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient());
+			clientRepo.getById.mockResolvedValue(makeClient());
+			envRepo.getById.mockResolvedValue({ id: "env-1", name: "production" });
+			tokenRepo.getClientScopeGrants.mockResolvedValue([
+				makeGrant({ clientScopeId: "client-scope-read", scopeName: "read:users" }),
+			]);
+
+			const service = createService({
+				clientRepo,
+				tokenRepo,
+				refreshTokenRepo,
+				envRepo,
+				env: {
+					ISSUER_BASE_URL: "https://auth.example.com",
+					JWT_PRIVATE_KEY: privateKeyPem,
+					JWT_KID: "kid-from-env",
+				} as unknown as CloudflareEnv,
+			});
+
+			const result = await service.exchange({
+				grantType: "client_credentials",
+				clientId: "client-app-id",
+				clientSecret: "plain-secret",
+				scope: "read:users",
+			});
+
+			expect(result.access_token.split(".")).toHaveLength(3);
+			const header = decodeJwtPart(result.access_token, 0);
+			const payload = decodeJwtPart(result.access_token, 1);
+			expect(header.kid).toBe("kid-from-env");
+			expect(payload.client_id).toBe("client-app-id");
+			expect(payload.environment).toBe("production");
+			expect(tokenRepo.createAccessToken).toHaveBeenCalledWith(
+				expect.objectContaining({
+					token_id: expect.any(String),
+					client_id: "client-row-1",
+				}),
+				["client-scope-read"]
+			);
+		});
+
+		it("uses kid from R2 JWKS when AUTH_ASSETS is available", async () => {
+			const clientRepo = createClientRepoMock();
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			const envRepo = createEnvRepoMock();
+
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient());
+			clientRepo.getById.mockResolvedValue(makeClient());
+			envRepo.getById.mockResolvedValue({ id: "env-1", name: "production" });
+			tokenRepo.getClientScopeGrants.mockResolvedValue([
+				makeGrant({ clientScopeId: "client-scope-read", scopeName: "read:users" }),
+			]);
+
+			const authAssets = {
+				get: vi.fn(async () => ({
+					body: new Response(JSON.stringify({ keys: [{ kid: "kid-from-r2" }] })).body as ReadableStream,
+				})),
+			};
+
+			const service = createService({
+				clientRepo,
+				tokenRepo,
+				refreshTokenRepo,
+				envRepo,
+				env: {
+					ISSUER_BASE_URL: "https://auth.example.com",
+					JWT_PRIVATE_KEY: privateKeyPem,
+					AUTH_ASSETS: authAssets,
+				} as unknown as CloudflareEnv,
+			});
+
+			const result = await service.exchange({
+				grantType: "client_credentials",
+				clientId: "client-app-id",
+				clientSecret: "plain-secret",
+				scope: "read:users",
+			});
+
+			const header = decodeJwtPart(result.access_token, 0);
+			expect(header.kid).toBe("kid-from-r2");
+			expect(authAssets.get).toHaveBeenCalled();
+		});
+
+		it("throws server_error when AUTH_ASSETS exists but no kid source is available", async () => {
+			const clientRepo = createClientRepoMock();
+			const tokenRepo = createTokenRepoMock();
+			const envRepo = createEnvRepoMock();
+
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient());
+			clientRepo.getById.mockResolvedValue(makeClient());
+			envRepo.getById.mockResolvedValue({ id: "env-1", name: "production" });
+			tokenRepo.getClientScopeGrants.mockResolvedValue([
+				makeGrant({ clientScopeId: "client-scope-read", scopeName: "read:users" }),
+			]);
+
+			const authAssets = {
+				get: vi.fn(async () => null),
+			};
+
+			const service = createService({
+				clientRepo,
+				tokenRepo,
+				envRepo,
+				env: {
+					ISSUER_BASE_URL: "https://auth.example.com",
+					JWT_PRIVATE_KEY: privateKeyPem,
+					AUTH_ASSETS: authAssets,
+				} as unknown as CloudflareEnv,
+			});
+
+			await expect(
+				service.exchange({
+					grantType: "client_credentials",
+					clientId: "client-app-id",
+					clientSecret: "plain-secret",
+					scope: "read:users",
+				})
+			).rejects.toMatchObject({ code: "server_error", message: "JWKS not available.", status: 500 });
+		});
+
+		it("omits environment claim when environment name is empty", async () => {
+			const clientRepo = createClientRepoMock();
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			const envRepo = createEnvRepoMock();
+
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient());
+			clientRepo.getById.mockResolvedValue(makeClient());
+			envRepo.getById.mockResolvedValue({ id: "env-1", name: "" });
+			tokenRepo.getClientScopeGrants.mockResolvedValue([
+				makeGrant({ clientScopeId: "client-scope-read", scopeName: "read:users" }),
+			]);
+
+			const service = createService({
+				clientRepo,
+				tokenRepo,
+				refreshTokenRepo,
+				envRepo,
+				env: {
+					ISSUER_BASE_URL: "https://auth.example.com",
+					JWT_PRIVATE_KEY: privateKeyPem,
+					JWT_KID: "kid-from-env",
+				} as unknown as CloudflareEnv,
+			});
+
+			const result = await service.exchange({
+				grantType: "client_credentials",
+				clientId: "client-app-id",
+				clientSecret: "plain-secret",
+				scope: "read:users",
+			});
+
+			const payload = decodeJwtPart(result.access_token, 1);
+			expect(payload.environment).toBeUndefined();
 		});
 	});
 

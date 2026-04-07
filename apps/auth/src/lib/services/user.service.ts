@@ -1,10 +1,7 @@
-import { getDb } from "@/lib/db";
-import type { RequestContext } from "@/lib/context/types";
-import { UserRepositoryD1 } from "@/lib/repositories/admin.repository.d1";
-import type { UserRecord } from "@/lib/repositories/admin.repository";
+import type { HashMethod } from "@/lib/config/hash-method";
+import type { UserRecord, UserRepository } from "@/lib/repositories/admin.repository";
 import { hashPassword } from "@/lib/auth/password-hash";
-import { resolveHashMethod } from "@/lib/config/hash-method";
-import { getAvatarUrl, normalizeOptionalProfileField } from "@/lib/users/profile";
+import { normalizeOptionalProfileField } from "@/lib/users/profile";
 
 interface UpdateUserInput {
 	username?: string;
@@ -16,22 +13,34 @@ interface UpdateUserInput {
 	emailVerifiedAt?: string | null;
 }
 
-export class UserService {
-	private readonly userRepository: UserRepositoryD1;
-	private readonly env: Record<string, unknown>;
-	private readonly cfEnv: CloudflareEnv;
+export interface UserServiceDependencies {
+	userRepository: UserRepository;
+	avatarCdnBaseUrl: string;
+	argonHasher?: Fetcher;
+	hashMethod: HashMethod;
+}
 
-	constructor(ctx: RequestContext) {
-		const db = getDb(ctx.env);
-		this.userRepository = new UserRepositoryD1(db);
-		this.cfEnv = ctx.env;
-		this.env = ctx.env as unknown as Record<string, unknown>;
+export class UserService {
+	private readonly userRepository: UserRepository;
+	private readonly avatarCdnBaseUrl: string;
+	private readonly argonHasher?: Fetcher;
+	private readonly hashMethod: HashMethod;
+
+	constructor({ userRepository, avatarCdnBaseUrl, argonHasher, hashMethod }: UserServiceDependencies) {
+		this.userRepository = userRepository;
+		this.avatarCdnBaseUrl = avatarCdnBaseUrl.replace(/\/+$/, "");
+		this.argonHasher = argonHasher;
+		this.hashMethod = hashMethod;
 	}
 
 	private withAvatarUrl(user: UserRecord): UserRecord {
+		const avatarUrl = user.avatarKey
+			? `${this.avatarCdnBaseUrl}/${user.avatarKey.replace(/^\/+/, "")}`
+			: null;
+
 		return {
 			...user,
-			avatarUrl: getAvatarUrl(user.avatarKey, this.env),
+			avatarUrl,
 		};
 	}
 
@@ -58,8 +67,8 @@ export class UserService {
 		}
 		const id = crypto.randomUUID();
 		const passwordHash = await hashPassword(password, {
-			argonHasher: this.cfEnv.ARGON_HASHER,
-			hashMethod: resolveHashMethod(this.env),
+			argonHasher: this.argonHasher,
+			hashMethod: this.hashMethod,
 		});
 		const normalizedName = normalizeOptionalProfileField(name);
 		const normalizedEmail = normalizeOptionalProfileField(email);
@@ -125,8 +134,8 @@ export class UserService {
 		}
 		if (updates.password !== undefined && updates.password.trim()) {
 			patch.passwordHash = await hashPassword(updates.password, {
-				argonHasher: this.cfEnv.ARGON_HASHER,
-				hashMethod: resolveHashMethod(this.env),
+				argonHasher: this.argonHasher,
+				hashMethod: this.hashMethod,
 			});
 		}
 		if (updates.avatarKey !== undefined) {

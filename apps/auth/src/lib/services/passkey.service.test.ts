@@ -212,6 +212,23 @@ describe("PasskeyService", () => {
 		).rejects.toThrow("Invalid or expired registration challenge.");
 	});
 
+	it("verifyAndStoreRegistration rejects expired challenges and deletes them", async () => {
+		const repo = createRepoMock();
+		repo.getChallengeById.mockResolvedValue({
+			id: "challenge-1",
+			userId: "user-1",
+			challenge: "registration-challenge",
+			kind: "registration",
+			expiresAt: "2026-04-06T13:19:59.000Z",
+		});
+		const service = createService({ repo });
+
+		await expect(
+			service.verifyAndStoreRegistration("user-1", "challenge-1", {} as RegistrationResponseJSON)
+		).rejects.toThrow("Registration challenge has expired.");
+		expect(repo.deleteChallenge).toHaveBeenCalledWith("challenge-1");
+	});
+
 	it("verifyAndStoreRegistration verifies with the correct rpId and persists the credential", async () => {
 		const repo = createRepoMock();
 		const siteRepo = createSiteRepoMock();
@@ -267,6 +284,27 @@ describe("PasskeyService", () => {
 		expect(credential.userId).toBe("user-1");
 	});
 
+	it("verifyAndStoreRegistration throws when WebAuthn verification fails", async () => {
+		const repo = createRepoMock();
+		repo.getChallengeById.mockResolvedValue({
+			id: "challenge-1",
+			userId: "user-1",
+			challenge: "registration-challenge",
+			kind: "registration",
+			expiresAt: "2026-04-06T13:25:00.000Z",
+		});
+		verifyRegistrationResponseMock.mockResolvedValue({
+			verified: false,
+			registrationInfo: null,
+		} as never);
+		const service = createService({ repo, env: { ISSUER_BASE_URL: "https://auth.example.com" } as CloudflareEnv });
+
+		await expect(
+			service.verifyAndStoreRegistration("user-1", "challenge-1", {} as RegistrationResponseJSON)
+		).rejects.toThrow("Passkey registration could not be verified.");
+		expect(repo.insertCredential).not.toHaveBeenCalled();
+	});
+
 	it("generateAuthenticationChallenge stores a challenge with the expected ttl", async () => {
 		const repo = createRepoMock();
 		const siteRepo = createSiteRepoMock();
@@ -308,6 +346,23 @@ describe("PasskeyService", () => {
 		await expect(
 			service.verifyAuthentication("missing", {} as AuthenticationResponseJSON)
 		).rejects.toThrow("Invalid or expired authentication challenge.");
+	});
+
+	it("verifyAuthentication rejects expired challenges and deletes them", async () => {
+		const repo = createRepoMock();
+		repo.getChallengeById.mockResolvedValue({
+			id: "challenge-2",
+			userId: null,
+			challenge: "authentication-challenge",
+			kind: "authentication",
+			expiresAt: "2026-04-06T13:19:59.000Z",
+		});
+		const service = createService({ repo });
+
+		await expect(
+			service.verifyAuthentication("challenge-2", {} as AuthenticationResponseJSON)
+		).rejects.toThrow("Authentication challenge has expired.");
+		expect(repo.deleteChallenge).toHaveBeenCalledWith("challenge-2");
 	});
 
 	it("verifyAuthentication verifies the response and returns an exchange token", async () => {
@@ -357,6 +412,30 @@ describe("PasskeyService", () => {
 			usedAt: null,
 		});
 		expect(result).toEqual({ exchangeToken: "challenge-1", userId: "user-1" });
+	});
+
+	it("verifyAuthentication throws when WebAuthn authentication verification fails", async () => {
+		const repo = createRepoMock();
+		repo.getChallengeById.mockResolvedValue({
+			id: "challenge-2",
+			userId: null,
+			challenge: "authentication-challenge",
+			kind: "authentication",
+			expiresAt: "2026-04-06T13:25:00.000Z",
+		});
+		repo.findCredentialById.mockResolvedValue(
+			makeCredentialRow({ credentialId: "credential-base64url", publicKey: "BAUG" })
+		);
+		verifyAuthenticationResponseMock.mockResolvedValue({
+			verified: false,
+			authenticationInfo: { newCounter: 9 },
+		} as never);
+		const service = createService({ repo, env: { ISSUER_BASE_URL: "https://auth.example.com" } as CloudflareEnv });
+
+		await expect(
+			service.verifyAuthentication("challenge-2", { id: "credential-base64url" } as AuthenticationResponseJSON)
+		).rejects.toThrow("Passkey authentication could not be verified.");
+		expect(repo.updateCredentialCounter).not.toHaveBeenCalled();
 	});
 
 	it("consumeExchangeToken returns the user id when present", async () => {
