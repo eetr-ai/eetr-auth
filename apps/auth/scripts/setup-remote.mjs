@@ -77,13 +77,13 @@ function main() {
 		"clean-install",
 		"--tf-json",
 		args.tfJson,
-		"--wrangler-config",
+		"--config",
 		args.wranglerConfig,
 	]);
 	runNodeScript("scripts/provision-env.mjs", [
 		"--tf-json",
 		args.tfJson,
-		"--wrangler-config",
+		"--config",
 		args.wranglerConfig,
 		args.forceRotate ? "--force-rotate" : "--skip-existing",
 	]);

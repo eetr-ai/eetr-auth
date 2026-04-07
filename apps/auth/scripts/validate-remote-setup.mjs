@@ -17,7 +17,7 @@ function parseArgs(argv) {
 			out.mode = argv[++index];
 		} else if (arg === "--tf-json" && argv[index + 1]) {
 			out.tfJson = argv[++index];
-		} else if (arg === "--wrangler-config" && argv[index + 1]) {
+		} else if ((arg === "--config" || arg === "--wrangler-config") && argv[index + 1]) {
 			out.wranglerConfig = argv[++index];
 		}
 	}

@@ -6,7 +6,7 @@
  * Requires wrangler login / CLOUDFLARE_API_TOKEN for Wrangler.
  *
  * Usage:
- *   node scripts/provision-env.mjs [--tf-json infra/out/terraform.tf.json] [--wrangler-config wrangler.generated.jsonc]
+ *   node scripts/provision-env.mjs [--tf-json infra/out/terraform.tf.json] [--config wrangler.generated.jsonc]
  *
  * RESEND_API_KEY: Terraform output resend_api_key if non-empty, else env RESEND_API_KEY / .env.provision (not loaded here).
  */
@@ -26,7 +26,7 @@ function parseArgs(argv) {
 		const a = argv[i];
 		if (a === "--tf-json" && argv[i + 1]) {
 			out.tfJson = argv[++i];
-		} else if (a === "--wrangler-config" && argv[i + 1]) {
+		} else if ((a === "--config" || a === "--wrangler-config") && argv[i + 1]) {
 			out.wranglerConfig = argv[++i];
 		} else if (a === "--skip-existing") {
 			out.skipExisting = true;
