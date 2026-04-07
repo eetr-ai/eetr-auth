@@ -5,6 +5,13 @@ As of version `0.1.0`, the auth app uses versioned schema patches.
 - **`schema.sql`** – The complete authoritative snapshot of the current schema.
 - **`patches/`** – Incremental schema patches named after released schema versions, for example `0.1.0.sql`.
 
+Rule of thumb:
+
+- **`schema.sql` = the latest and greatest full schema snapshot** for a fresh install.
+- **`patches/<version>.sql` = the additions and transformations required to move from the previous released schema to that released version**, not a copy of the full latest schema.
+
+In other words, `schema.sql` should always describe what a brand-new database must look like today, while each patch should only describe how an already-existing database catches up from an older released state.
+
 Databases without `schema_metadata` are treated as schema version `0.0.0`.
 
 - For a clean install with no existing application tables, the runner applies `schema.sql` directly.
@@ -43,6 +50,8 @@ For a brand-new database, the runner uses `schema.sql`. For an existing pre-meta
 
 Patch files are release-versioned, not change-by-change migration files. During development, schema changes for the next database release accumulate into the next unreleased patch file. When that schema is released, the patch version should match the released schema version.
 
+Do not treat a patch file as a second copy of `schema.sql`. The snapshot is allowed to include everything in the current release; the patch should include only what is needed to upgrade from the latest previous release to the new one.
+
 Not every app release needs a database patch. If a release does not change the schema, no new file is added under `db/patches`, and the database schema version simply stays on the latest released schema version.
 
 ## Authoring the next schema release
@@ -50,7 +59,7 @@ Not every app release needs a database patch. If a release does not change the s
 When the schema changes in a future release:
 
 1. Update `schema.sql` so it matches the new latest schema.
-2. Add or continue updating the unreleased patch file in `db/patches`, named with the target schema release version.
+2. Add or continue updating the unreleased patch file in `db/patches`, named with the target schema release version, with only the delta from the previous released schema.
 3. Make the patch idempotent enough for the expected upgrade path.
 4. End the patch by updating `schema_metadata.schema_version` to the released version.
 

@@ -212,6 +212,43 @@ CREATE TABLE IF NOT EXISTS user_challenges (
 CREATE INDEX IF NOT EXISTS idx_user_challenges_expires_at ON user_challenges(expires_at);
 CREATE INDEX IF NOT EXISTS idx_user_challenges_user_id_kind ON user_challenges(user_id, kind);
 
+-- Passkey (WebAuthn) support: challenges, credentials, and sign-in exchange tokens
+CREATE TABLE IF NOT EXISTS passkey_challenges (
+  id TEXT NOT NULL PRIMARY KEY,
+  user_id TEXT,
+  challenge TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('registration', 'authentication')),
+  expires_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_passkey_challenges_expires_at ON passkey_challenges(expires_at);
+
+CREATE TABLE IF NOT EXISTS user_passkeys (
+  id TEXT NOT NULL PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  credential_id TEXT NOT NULL UNIQUE,
+  public_key TEXT NOT NULL,
+  counter INTEGER NOT NULL DEFAULT 0,
+  device_type TEXT NOT NULL DEFAULT 'singleDevice',
+  backed_up INTEGER NOT NULL DEFAULT 0,
+  transports TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_passkeys_user_id ON user_passkeys(user_id);
+
+CREATE TABLE IF NOT EXISTS passkey_exchange_tokens (
+  id TEXT NOT NULL PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  used_at TEXT,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_passkey_exchange_tokens_expires_at ON passkey_exchange_tokens(expires_at);
+
 -- OAuth clients allowed for future admin API (internal clients.id)
 CREATE TABLE IF NOT EXISTS site_admin_api_clients (
   client_row_id TEXT NOT NULL PRIMARY KEY,
