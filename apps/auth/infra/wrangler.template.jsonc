@@ -53,7 +53,10 @@
 		},
 		{
 			"binding": "ARGON_HASHER",
-			"service": "argon-hasher"
+			"service": "argon-hasher",
+			"props": {
+				"internal": true
+			}
 		}
 	],
 	"vars": {

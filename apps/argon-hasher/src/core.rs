@@ -2,6 +2,9 @@ use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, Salt
 use argon2::{Algorithm, Argon2, Params, Version};
 use rand_core::OsRng;
 
+#[cfg(test)]
+const SEEDED_ADMIN_HASH: &str = "$argon2id$v=19$m=19456,t=3,p=1$5TIfE1Imf5CSupfO5v0x4Q$pUgZNbxjX7XRTr/he0pqQ0NWmcDWsUu6al6LGpcd2Qk";
+
 /// Tuned for Cloudflare Workers CPU/memory limits.
 pub const M_COST_KIB: u32 = 19_456;
 pub const T_COST: u32 = 3;
@@ -35,7 +38,8 @@ pub fn verify_password(password: &str, hash: &str) -> Result<bool, String> {
 		return Err("hash must not be empty".to_string());
 	}
 	let parsed = PasswordHash::new(hash).map_err(|_| "invalid hash format".to_string())?;
-	Ok(Argon2::default().verify_password(password.as_bytes(), &parsed).is_ok())
+	let argon2 = configured_argon2()?;
+	Ok(argon2.verify_password(password.as_bytes(), &parsed).is_ok())
 }
 
 #[cfg(test)]
@@ -77,6 +81,11 @@ mod tests {
 	fn verify_password_accepts_correct_password() {
 		let hash = hash_password("correct-horse").unwrap();
 		assert!(verify_password("correct-horse", &hash).unwrap());
+	}
+
+	#[test]
+	fn verify_password_accepts_seeded_admin_hash() {
+		assert!(verify_password("admin", SEEDED_ADMIN_HASH).unwrap());
 	}
 
 	#[test]
