@@ -153,15 +153,38 @@ Use `--force-rotate-secrets` only when intentionally rotating credentials.
 
 ## Local-only quick setup
 
-If you only need local development setup (no Terraform/deploy), run:
+If you only need local development setup (no Terraform/deploy), choose the path that matches your local database state.
+
+### 1. Prepare local env files and secrets
 
 ```bash
-npm run setup:local
-npm run db:create-admin:local -- <username> <email>
+npm run setup:local:env
+```
+
+### 2. Choose the local D1 path
+
+For a brand-new local database or a full reset from scratch, bootstrap from the current schema snapshot:
+
+```bash
+npm run db:seed-local-admin
+npm run db:schema
 npm run db:set-site-url:local -- https://auth.example.com
 ```
 
-This is the brand-new local bootstrap path. It also seeds a local `admin` / `admin` user with an MD5 password hash for development sign-in. Use `npm run db:migrate` only when upgrading an existing local database with versioned patches.
+For an existing local database from a previous app version, apply versioned patches instead:
+
+```bash
+npm run db:migrate
+npm run db:set-site-url:local -- https://auth.example.com
+```
+
+Or run the one-shot bootstrap command for a clean local environment:
+
+```bash
+npm run setup:local
+```
+
+The bootstrap path applies `db/schema.sql`, seeds the default local `admin` / `admin` user with an MD5 password hash for development sign-in, and prepares local secrets. Use `npm run db:create-admin:local -- <username> <email>` only when you explicitly need an additional named local admin. Use `npm run db:migrate` only when upgrading an existing local database with versioned patches.
 
 ## Ongoing
 

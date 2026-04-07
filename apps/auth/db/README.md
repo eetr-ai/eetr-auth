@@ -86,6 +86,7 @@ Or use env vars:
 ADMIN_USERNAME=admin ADMIN_EMAIL=admin@example.com npm run db:create-admin
 ```
 
-- **Local only:** `npm run db:create-admin:local -- <username> <email>`
+- **Local seed admin:** `npm run db:seed-local-admin` (`admin` / `admin`, MD5 for local-only development)
+- **Local only named admin:** `npm run db:create-admin:local -- <username> <email>`
 - **Remote only:** `npm run db:create-admin:remote -- --config wrangler.generated.jsonc <username> <email>`
 - **Seed default remote admin:** `npm run db:seed-remote-admin` (`admin` / `admin`, Argon2id hash)
