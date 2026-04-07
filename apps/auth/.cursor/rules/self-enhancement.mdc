@@ -1,0 +1,12 @@
+---
+description: Persist new user decisions into rules/skills
+alwaysApply: true
+---
+
+# Self-Enhancement
+
+- When the user defines a new design decision, convention, or process requirement, persist it by updating or creating relevant guidance artifacts.
+- Use `.cursor/rules/*.mdc` for always-on or file-scoped constraints.
+- Use `.cursor/skills/*/SKILL.md` for reusable workflows and playbooks.
+- Prefer updating existing related artifacts before creating new ones.
+- Keep guidance concise, actionable, and free of conflicting duplicates.

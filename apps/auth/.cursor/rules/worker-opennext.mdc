@@ -1,0 +1,13 @@
+---
+description: Preserve OpenNext worker entry DO NOT REMOVE comment and ts-ignore in worker.ts
+globs: worker.ts
+alwaysApply: false
+---
+
+# `worker.ts` (OpenNext Cloudflare entry)
+
+- **Do not remove** the first two lines before the `openNextWorker` import:
+  1. `//DO NOT REMOVE THE FOLLOWING COMMENT`
+  2. `// @ts-ignore — OpenNext writes .open-next/worker.js ...` (suppresses missing module before first build; **`@ts-ignore`** is used instead of `@ts-expect-error` so `tsc` does not fail with TS2578 “unused @ts-expect-error” after `.open-next/worker.js` exists post-build.)
+- OpenNext generates `.open-next/worker.js` only after `opennextjs-cloudflare build`. Do **not** delete these lines to “clean up” or satisfy an unused-directive error.
+- Do not replace this block with a plain import unless the user explicitly asks.

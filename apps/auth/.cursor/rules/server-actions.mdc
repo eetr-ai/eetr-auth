@@ -1,0 +1,25 @@
+---
+description: Server actions must use onServerAction and delegate to services
+globs: "**/actions/**/*.ts,**/*-actions.ts"
+alwaysApply: false
+---
+
+# Server Actions
+
+- File must have `"use server"` at the top.
+- Each exported action must call `onServerAction(async (ctx, getServices) => { ... })` and only invoke service methods inside the callback.
+- Do not access `getCloudflareContext()`, env, or DB directly. Do not contain business logic; only `getServices()` and service calls.
+
+Example:
+
+```ts
+"use server";
+import { onServerAction } from "@/lib/context/on-server-action";
+
+export async function getCurrentUser() {
+  return onServerAction(async (ctx, getServices) => {
+    const { userService } = getServices();
+    return userService.getCurrentUser(ctx);
+  });
+}
+```

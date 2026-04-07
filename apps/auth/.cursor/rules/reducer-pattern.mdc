@@ -1,0 +1,14 @@
+---
+description: Client state must use bootstrapProvider from @eetr/react-reducer-utils
+globs: "**/context/**/*.ts,**/store/**/*.ts"
+alwaysApply: false
+---
+
+# Reducer Pattern
+
+- Use `bootstrapProvider` from `@eetr/react-reducer-utils`.
+- Define: action enum, state interface, initial state, reducer `(state, action) => newState` using `ReducerAction<ActionType>`.
+- Export the `Provider` and the `useContextAccessors` hook (e.g. `useAdminState`).
+- Components use `const { state, dispatch } = useXState()` and the subtree must be wrapped with the Provider.
+
+See `src/context/admin-state.ts` for the pattern.
