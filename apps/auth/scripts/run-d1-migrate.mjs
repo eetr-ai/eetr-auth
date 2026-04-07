@@ -44,7 +44,7 @@ if (configPath) {
 	}
 }
 
-const dbName = process.env.D1_DATABASE_NAME || configDbName || "progression-ai-auth";
+const dbName = process.env.D1_DATABASE_NAME || configDbName || "eetr-auth";
 const flag = local ? "--local" : "--remote";
 const filePath = resolve(process.cwd(), file);
 

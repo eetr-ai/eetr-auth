@@ -129,7 +129,7 @@ try {
 	if (!existsSync(tmpDir)) mkdirSync(tmpDir, { recursive: true });
 	writeFileSync(sqlPath, sql, "utf8");
 
-	const dbName = process.env.D1_DATABASE_NAME || configDbName || "progression-ai-auth";
+	const dbName = process.env.D1_DATABASE_NAME || configDbName || "eetr-auth";
 	const configArg = wranglerConfig ? ` --config ${JSON.stringify(wranglerConfig)}` : "";
 	if (wranglerConfig) {
 		console.log(`Using Wrangler config: ${wranglerConfig}`);
