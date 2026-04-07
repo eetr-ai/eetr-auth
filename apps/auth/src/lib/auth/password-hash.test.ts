@@ -31,6 +31,28 @@ describe("hashPassword", () => {
 			"HASH_METHOD=argon requires ARGON_HASHER binding"
 		);
 	});
+
+	it("throws when the argon hasher hash endpoint returns non-ok", async () => {
+		const fetch = vi.fn(async () => new Response("service failed", { status: 503, statusText: "Unavailable" }));
+
+		await expect(
+			hashPassword("password", {
+				hashMethod: "argon",
+				argonHasher: { fetch } as unknown as Fetcher,
+			})
+		).rejects.toThrow("argon-hasher /hash failed: 503 Unavailable service failed");
+	});
+
+	it("throws when the argon hasher hash endpoint returns a non-argon hash", async () => {
+		const fetch = vi.fn(async () => Response.json({ hash: "legacy-md5-value" }));
+
+		await expect(
+			hashPassword("password", {
+				hashMethod: "argon",
+				argonHasher: { fetch } as unknown as Fetcher,
+			})
+		).rejects.toThrow("argon-hasher /hash returned no Argon2 PHC string");
+	});
 });
 
 describe("verifyPassword", () => {
@@ -99,6 +121,57 @@ describe("verifyPassword", () => {
 
 		await expect(
 			verifyPassword("wrong-password", md5("password"), {
+				hashMethod: "argon",
+				argonHasher: { fetch } as unknown as Fetcher,
+			})
+		).resolves.toEqual({ ok: false });
+		expect(fetch).not.toHaveBeenCalled();
+	});
+
+	it("rejects md5 mode for unsupported stored hash format", async () => {
+		await expect(verifyPassword("password", "not-a-supported-hash", { hashMethod: "md5" })).resolves.toEqual({
+			ok: false,
+		});
+	});
+
+	it("rejects argon mode when hasher binding is missing", async () => {
+		await expect(
+			verifyPassword("password", "$argon2id$v=19$m=19456,t=2,p=1$abc$def", { hashMethod: "argon" })
+		).resolves.toEqual({ ok: false });
+	});
+
+	it("rejects argon mode when hasher verify endpoint returns non-ok", async () => {
+		const fetch = vi.fn(async () => new Response("downstream error", { status: 500, statusText: "Server Error" }));
+
+		await expect(
+			verifyPassword("password", "$argon2id$v=19$m=19456,t=2,p=1$abc$def", {
+				hashMethod: "argon",
+				argonHasher: { fetch } as unknown as Fetcher,
+			})
+		).resolves.toEqual({ ok: false });
+	});
+
+	it("rejects argon mode when hasher verify endpoint returns invalid json", async () => {
+		const fetch = vi.fn(async () =>
+			new Response("not-json", {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			})
+		);
+
+		await expect(
+			verifyPassword("password", "$argon2id$v=19$m=19456,t=2,p=1$abc$def", {
+				hashMethod: "argon",
+				argonHasher: { fetch } as unknown as Fetcher,
+			})
+		).resolves.toEqual({ ok: false });
+	});
+
+	it("rejects argon mode for unsupported stored hash format", async () => {
+		const fetch = vi.fn();
+
+		await expect(
+			verifyPassword("password", "weird-format-hash", {
 				hashMethod: "argon",
 				argonHasher: { fetch } as unknown as Fetcher,
 			})
