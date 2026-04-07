@@ -1,4 +1,4 @@
--- progression-ai-auth D1 schema (SQLite)
+-- eetr-auth D1 schema (SQLite)
 -- Apply with: npm run db:migrate (local) or npm run db:migrate:remote
 
 -- Enable foreign keys (D1 supports them)

@@ -1,8 +1,8 @@
 {
 	"d1_database_id": { "sensitive": false, "type": "string", "value": "00000000-0000-0000-0000-000000000000" },
-	"d1_database_name": { "sensitive": false, "type": "string", "value": "progression-ai-auth" },
+	"d1_database_name": { "sensitive": false, "type": "string", "value": "eetr-auth" },
 	"r2_bucket_name": { "sensitive": false, "type": "string", "value": "blog-images" },
-	"worker_name": { "sensitive": false, "type": "string", "value": "progression-ai-auth" },
+	"worker_name": { "sensitive": false, "type": "string", "value": "eetr-auth" },
 	"issuer_base_url": { "sensitive": false, "type": "string", "value": "https://auth.example.com" },
 	"auth_url": { "sensitive": false, "type": "string", "value": "https://auth.example.com/api/auth/session" },
 	"jwks_cdn_base_url": { "sensitive": false, "type": "string", "value": "https://cdn.example.com" },

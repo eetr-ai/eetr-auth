@@ -1,10 +1,10 @@
 # Copy to terraform.tfvars (gitignored) and fill in.
 # account_id = "00000000000000000000000000000000"
 
-# d1_database_name = "progression-ai-auth"
+# d1_database_name = "eetr-auth"
 # r2_bucket_name   = "blog-images"
 
-# worker_name = "progression-ai-auth"
+# worker_name = "eetr-auth"
 
 # issuer_base_url     = "https://auth.example.com"
 # auth_url            = "https://auth.example.com/api/auth/session"

@@ -2,6 +2,8 @@
 
 > A production-ready **OAuth 2.1 + OpenID Connect** authorization server, built for the Cloudflare edge.
 
+Current release baseline: `0.1.0`. See [CHANGELOG.md](CHANGELOG.md).
+
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
@@ -196,6 +198,7 @@ sequenceDiagram
 | [docs/FEATURES.md](docs/FEATURES.md) | Full feature listing across all packages |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Step-by-step deploy, local dev, env vars, troubleshooting |
 | [docs/CLOUDFLARE_TEMPLATE.md](docs/CLOUDFLARE_TEMPLATE.md) | Using this as a Cloudflare template for your project |
+| [CHANGELOG.md](CHANGELOG.md) | Monorepo release history |
 | [PLAN.md](PLAN.md) | Monorepo migration plan and implementation status |
 
 ---

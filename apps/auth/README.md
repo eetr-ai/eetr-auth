@@ -21,7 +21,7 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 ## Local Setup
 
-For local sign-in and password-reset testing, bootstrap local D1 with schema, an admin user, and a site URL:
+For local sign-in and password-reset testing, bootstrap local D1 from the current clean-slate schema, then create an admin user and site URL:
 
 ```bash
 npm run db:migrate
@@ -158,9 +158,6 @@ This project now exposes OAuth authorization server endpoints for:
   - `id`, `username`, `email`, `email_verified_at`, `password_hash`, `is_admin`
 - Only users with `is_admin = 1` can sign in and access `/dashboard`.
 - User management (create, update, delete) is available at `/dashboard/users`.
-- For existing deployments with `admins`, run the one-time migration:
-  - `wrangler d1 execute progression-ai-auth --local --file=./db/migration-20260303-rename-admins-to-users.sql`
-  - `wrangler d1 execute progression-ai-auth --remote --file=./db/migration-20260303-rename-admins-to-users.sql`
 - Bootstrap admin user commands:
   - `npm run db:create-user -- <username> <email>`
   - `npm run db:create-user:local -- <username> <email>`

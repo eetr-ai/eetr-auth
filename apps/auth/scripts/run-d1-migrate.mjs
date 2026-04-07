@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Run wrangler d1 execute with D1_DATABASE_NAME (default progression-ai-auth).
+ * Run wrangler d1 execute with D1_DATABASE_NAME (default eetr-auth).
  * Usage: node scripts/run-d1-migrate.mjs --local|--remote [--file=./db/schema.sql]
  */
 import { execSync } from "node:child_process";

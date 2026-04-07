@@ -15,7 +15,7 @@ End-to-end steps to provision D1 + R2 with Terraform, render Wrangler config, up
 
 ```bash
 git clone <repo-url>
-cd progression-ai-auth
+cd eetr-auth
 npm install
 ```
 
@@ -81,7 +81,7 @@ This uploads `AUTH_SECRET`, `HMAC_KEY`, `JWT_PRIVATE_KEY`, optional `RESEND_API_
 
 ## 6. Apply database schema (remote D1)
 
-Align `D1_DATABASE_NAME` with `d1_database_name` from Terraform (defaults to `progression-ai-auth` if unset):
+Align `D1_DATABASE_NAME` with `d1_database_name` from Terraform (defaults to `eetr-auth` if unset):
 
 ```bash
 export D1_DATABASE_NAME=your-d1-name-from-tfvars
