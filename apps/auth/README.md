@@ -29,7 +29,7 @@ npm run setup:local
 
 From the repository root, the same command is available and delegates into `apps/auth`.
 
-This creates or updates `.env.local` and `.dev.vars`, sets local hashing to `md5`, stamps local auth secrets, generates `HMAC_KEY`, writes local JWT signing material plus `.tmp/jwks.json`, applies `db/schema.sql` to the local D1 database, and seeds a local admin user.
+This creates or updates `.env.local` and `.dev.vars`, writes `HASH_METHOD=md5` for local development, stamps local auth secrets, generates `HMAC_KEY`, writes local JWT signing material plus `.tmp/jwks.json`, applies `db/schema.sql` to the local D1 database, and seeds a local admin user.
 
 The seeded local credentials are `admin` / `admin`. The password is stored as an MD5 hash for local-only development.
 
@@ -42,7 +42,7 @@ npm run db:schema
 npm run db:set-site-url:local -- https://auth.example.com
 ```
 
-If you only want to refresh the local env files and secrets without touching the database, run `npm run setup:local:env`.
+If you only want to refresh the local env files and secrets without touching the database, run `npm run setup:local:env`. That local env step writes `HASH_METHOD=md5` into `.dev.vars`, so the argon hasher binding is not required for local sign-in.
 
 If you pass arguments to npm scripts, prefer `--` before script args.
 

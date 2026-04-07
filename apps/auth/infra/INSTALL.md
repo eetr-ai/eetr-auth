@@ -161,6 +161,8 @@ If you only need local development setup (no Terraform/deploy), choose the path 
 npm run setup:local:env
 ```
 
+This writes local auth secrets and sets `HASH_METHOD=md5` in `.dev.vars`, so local development uses MD5 hashing and does not require the argon hasher binding.
+
 ### 2. Choose the local D1 path
 
 For a brand-new local database or a full reset from scratch, bootstrap from the current schema snapshot:
