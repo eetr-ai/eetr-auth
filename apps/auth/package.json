@@ -11,7 +11,7 @@
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"test:coverage": "vitest run --coverage",
-		"deploy": "SKIP_WRANGLER_CONFIG_CHECK=yes opennextjs-cloudflare build && SKIP_WRANGLER_CONFIG_CHECK=yes opennextjs-cloudflare deploy -c wrangler.generated.jsonc",
+		"deploy": "npm run infra:terraform-output && npm run infra:render-wrangler && SKIP_WRANGLER_CONFIG_CHECK=yes opennextjs-cloudflare build && SKIP_WRANGLER_CONFIG_CHECK=yes opennextjs-cloudflare deploy -c wrangler.generated.jsonc",
 		"deploy:infra": "npm run deploy",
 		"upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
 		"preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
