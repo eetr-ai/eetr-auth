@@ -177,12 +177,20 @@ npm run db:set-site-url:remote -- https://auth.yourdomain.com
 ### 10. Create an admin user
 
 ```bash
-npm run db:create-admin:remote -- <username> <email>
+npm run db:seed-remote-admin
 ```
 
-The created admin gets a random placeholder password hash. Complete account setup through the password reset flow afterward.
+This seeds the default remote admin credentials:
 
-That requires your site URL to be set correctly and Resend email delivery to be configured correctly so the reset email can be sent.
+- Username: `admin`
+- Password: `admin`
+- Password hash: Argon2id PHC generated locally via the Rust `argon-hasher` CLI
+
+Optional email override:
+
+```bash
+npm run db:seed-remote-admin -- --email admin@yourdomain.com
+```
 
 ---
 

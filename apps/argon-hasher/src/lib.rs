@@ -1,29 +1,15 @@
 //! Cloudflare Worker: Argon2id hash and verify API (internal service binding + ctx.props).
 
-use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
-use argon2::{Algorithm, Argon2, Params, Version};
-use rand_core::OsRng;
+mod core;
+
 use serde::{Deserialize, Serialize};
 use worker::*;
-
-/// Tuned for Cloudflare Workers CPU/memory limits.
-const M_COST_KIB: u32 = 19_456;
-const T_COST: u32 = 3;
-const P_COST: u32 = 1;
-/// PHC output length (bytes), matches hash-wasm `hashLength`.
-const HASH_OUTPUT_LEN: usize = 32;
 
 /// Deserialize-only: the **caller** Worker must set matching `[[services]]` `props` in its Wrangler config.
 #[derive(Deserialize)]
 struct ServiceBindingProps {
     /// Must be `true` on the binding for this Worker to accept the request.
     internal: bool,
-}
-
-fn argon2_hasher() -> Result<Argon2<'static>> {
-    let params = Params::new(M_COST_KIB, T_COST, P_COST, Some(HASH_OUTPUT_LEN))
-        .map_err(|e| Error::RustError(format!("argon2 params: {e}")))?;
-    Ok(Argon2::new(Algorithm::Argon2id, Version::V0x13, params))
 }
 
 /// Returns `Err(Response)` with status 403 when the invocation is not from a configured service binding with `internal = true`.
@@ -90,20 +76,15 @@ async fn handle_hash(mut req: Request, ctx: Context) -> Result<Response> {
         return json_error(400, "missing or empty password");
     }
 
-    let argon2 = argon2_hasher()?;
-    // Salt: 16 random bytes, encoded as a PHC `SaltString`.
-    let salt = SaltString::generate(&mut OsRng);
     let t0 = now_ms();
-    let hash = argon2
-        .hash_password(body.password.as_bytes(), &salt)
-        .map_err(|e| Error::RustError(format!("hash failed: {e}")))?;
+    let hash = core::hash_password(&body.password).map_err(Error::RustError)?;
     let t1 = now_ms();
     console_log!("argon2 hash: {:.2}ms", (t1 - t0).max(0.0));
 
     json_response(
         200,
         &HashResponse {
-            hash: hash.to_string(),
+            hash,
         },
     )
 }
@@ -120,15 +101,12 @@ async fn handle_verify(mut req: Request, ctx: Context) -> Result<Response> {
         return json_error(400, "missing password or hash");
     }
 
-    let parsed_hash = match PasswordHash::new(&body.hash) {
-        Ok(h) => h,
-        Err(_) => return json_error(400, "invalid hash format"),
-    };
-
     let t0 = now_ms();
-    let valid = Argon2::default()
-        .verify_password(body.password.as_bytes(), &parsed_hash)
-        .is_ok();
+    let valid = match core::verify_password(&body.password, &body.hash) {
+		Ok(valid) => valid,
+		Err(err) if err == "invalid hash format" => return json_error(400, "invalid hash format"),
+		Err(err) => return Err(Error::RustError(err)),
+	};
     let t1 = now_ms();
     console_log!("argon2 verify: {:.2}ms", (t1 - t0).max(0.0));
 

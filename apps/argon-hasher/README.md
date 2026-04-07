@@ -60,6 +60,24 @@ worker-build --release
 
 Wrangler runs the same build when you `deploy` / `dev`.
 
+## CLI
+
+The same crate also exposes a native CLI entry point for local tooling.
+
+Hash a password:
+
+```bash
+cargo run -- hash admin
+```
+
+Verify a password against an Argon2 PHC string:
+
+```bash
+cargo run -- verify admin '$argon2id$...'
+```
+
+The CLI uses the same Argon2id parameters as the Worker service.
+
 ## Deploy
 
 Deploy **this** Worker **before** any caller that binds to it.

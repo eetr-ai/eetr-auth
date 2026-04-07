@@ -109,16 +109,20 @@ Uses `wrangler.generated.jsonc` (`opennextjs-cloudflare deploy -c wrangler.gener
 
 ## 9. Create first admin
 
-Create the user with a random placeholder password hash, then complete setup through the password reset flow:
+Seed the default remote admin user:
 
-- This requires `site_settings.site_url` to be set correctly.
-- This also requires Resend to be configured correctly so the password reset email can be delivered.
+- Username: `admin`
+- Password: `admin`
+- Password hash: Argon2id PHC generated locally via the Rust `argon-hasher` CLI
 
 ```bash
-npm run db:create-admin:remote -- --config wrangler.generated.jsonc <username> <email>
+npm run db:seed-remote-admin
+
+# Optional: override the seeded email address (default: admin@example.com)
+npm run db:seed-remote-admin -- --email admin@yourdomain.com
 
 # If your environment uses a non-default Wrangler config:
-npm run db:create-admin:remote -- --config path/to/your.wrangler.generated.jsonc <username> <email>
+npm run db:seed-remote-admin -- --config path/to/your.wrangler.generated.jsonc
 ```
 
 ## 10. Smoke test

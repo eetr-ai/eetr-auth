@@ -33,6 +33,7 @@
 		"db:create-user:local": "npm run db:create-admin:local --",
 		"db:create-user:remote": "npm run db:create-admin:remote --",
 		"db:seed-local-admin": "node scripts/seed-local-admin.mjs",
+		"db:seed-remote-admin": "node scripts/seed-remote-admin.mjs",
 		"setup:hmac-key": "bash scripts/setup-hmac-key.sh",
 		"jwt:setup-secrets": "node scripts/setup-jwt-secrets.mjs",
 		"jwt:generate-local-cert": "node scripts/generate-local-jwt-cert.mjs",
