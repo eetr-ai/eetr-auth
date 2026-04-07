@@ -1,8 +1,19 @@
 -- eetr-auth D1 schema (SQLite)
+-- Current schema version: 0.1.0
 -- Apply with: npm run db:migrate (local) or npm run db:migrate:remote
 
 -- Enable foreign keys (D1 supports them)
 PRAGMA foreign_keys = ON;
+
+-- Schema metadata (singleton key/value store)
+CREATE TABLE IF NOT EXISTS schema_metadata (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+INSERT INTO schema_metadata (key, value)
+VALUES ('schema_version', '0.1.0')
+ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 
 -- Environments (e.g. development, staging, production)
 CREATE TABLE IF NOT EXISTS environments (
