@@ -11,6 +11,7 @@
     "deploy": "npm run deploy:argon-hasher && npm run deploy:auth",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "test:coverage": "npm run test:coverage --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present"
   }
 }
