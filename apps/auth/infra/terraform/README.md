@@ -11,32 +11,16 @@ Terraform provisions a **D1 database** and **R2 bucket** for this app. Other val
 
 Terraform only accepts a Cloudflare **API Token** (or legacy global key—avoid). Set `CLOUDFLARE_API_TOKEN` before `terraform plan` / `apply`.
 
-**Minimum permissions for Terraform in this repo:**
+**Required permissions for the install flow in this repo:**
 
 - **Account** → **D1** → Edit
 - **Account** → **Workers R2 Storage** → Edit (R2 buckets)
 - **Account** → **Account Settings** → Read (optional; account metadata)
-
-**If you use the same token for Wrangler** (`npm run infra:provision`, `wrangler secret put`, deploy), add:
-
 - **Account** → **Workers Scripts** → **Edit** (required to create/update Worker **secrets**; without this, `wrangler secret put` fails with authentication error `10000`.)
 
 Scope the token to the correct **Account** (your account ID in `terraform.tfvars`).
 
-### Wrangler: OAuth instead of a token
-
-Wrangler reads **`CLOUDFLARE_API_TOKEN` first**. If that variable is set but the token lacks **Workers Scripts → Edit**, secret upload will fail.
-
-**Option A — Logged-in user (no API token for Wrangler):** run `npx wrangler login`, then **unset** the variable for the shell where you provision/deploy:
-
-```bash
-unset CLOUDFLARE_API_TOKEN
-npm run infra:provision
-```
-
-Use a **separate terminal** (or export the token only when running Terraform) so Terraform still has `CLOUDFLARE_API_TOKEN` while Wrangler uses OAuth.
-
-**Option B — One token for everything:** include **Workers Scripts → Edit** plus the Terraform permissions above, and keep `CLOUDFLARE_API_TOKEN` set.
+Wrangler reads **`CLOUDFLARE_API_TOKEN` first**. The prescribed path in this repo is to keep that variable set and give the token the full permission set above so Terraform and Wrangler use the same account-scoped token throughout the install flow.
 
 Do **not** commit `terraform.tfvars` if it contains `resend_api_key` or other secrets.
 

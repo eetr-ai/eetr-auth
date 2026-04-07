@@ -15,37 +15,36 @@
 Before running Terraform, complete the Cloudflare setup for the target account:
 
 1. Get your Cloudflare `account_id`.
-	- Run `npx wrangler whoami` after `npx wrangler login`, or
+	- Run `npx wrangler whoami`, or
 	- Find it in the Cloudflare dashboard for the target account, or
 	- Call the Cloudflare Accounts API with a valid API token.
 2. Activate R2 in the Cloudflare dashboard for that account. Terraform cannot create the bucket until R2 has been enabled once.
-3. Create a Cloudflare API token for Terraform and export it in the shell where you run `terraform init` and `terraform apply`:
+3. Create one Cloudflare API token for both Terraform and Wrangler, then export it in the shell where you run the install commands:
 
 ```bash
 export CLOUDFLARE_API_TOKEN=your_token_here
 ```
 
-Minimum permissions for Terraform in this repo:
+Required permissions for the install flow in this repo:
 
 - `Account -> D1 -> Edit`
 - `Account -> Workers R2 Storage -> Edit`
 - `Account -> Account Settings -> Read`
-
-If you want to reuse the same token for later Wrangler-backed steps, also add:
-
 - `Account -> Workers Scripts -> Edit`
 
-Wrangler prefers `CLOUDFLARE_API_TOKEN` over your `wrangler login` session. If you use a Terraform-only token, run `unset CLOUDFLARE_API_TOKEN` before `infra:provision`, `wrangler secret put`, or deploy commands so Wrangler falls back to OAuth.
+Best practice for this repo: use one properly scoped API token for the entire install and deploy flow. Keep `CLOUDFLARE_API_TOKEN` exported for Terraform, `infra:provision`, and Wrangler deploy commands.
 
 ---
 
 ## First-Time Setup
 
-### 1. Authenticate Wrangler
+### 1. Verify Cloudflare CLI access
 
 ```bash
-npx wrangler login
+npx wrangler whoami
 ```
+
+The prescribed install path uses the exported `CLOUDFLARE_API_TOKEN`; `wrangler login` is not required.
 
 ### 2. Install Rust WASM target
 
@@ -132,15 +131,9 @@ npm run infra:render-wrangler
 
 This generates `wrangler.generated.jsonc` with your real D1 database ID and R2 bucket name.
 
-### 5. Clear the Terraform token for Wrangler, unless your token also has Workers Scripts permissions
+### 5. Keep the shared Cloudflare token exported for Wrangler-backed steps
 
-If your `CLOUDFLARE_API_TOKEN` is scoped only for Terraform, clear it before any Wrangler-backed step so Wrangler uses `npx wrangler login` instead:
-
-```bash
-unset CLOUDFLARE_API_TOKEN
-```
-
-Skip this only if the token also has `Account -> Workers Scripts -> Edit`.
+`infra:provision` and Wrangler deploy commands use the same `CLOUDFLARE_API_TOKEN` you exported during Cloudflare preflight.
 
 ### 6. Upload secrets and JWKS to Cloudflare
 
@@ -156,13 +149,17 @@ This uploads `AUTH_SECRET`, `HMAC_KEY`, `JWT_PRIVATE_KEY`, optional `RESEND_API_
 npm run jwt:generate-local-cert
 ```
 
-### 8. Run database migrations
+### 8. Apply the schema to the new remote database
 
 ```bash
-npm run db:migrate:remote
+npm run db:schema:remote
 ```
 
-Remote migration scripts assume `wrangler.generated.jsonc` for the Terraform-based install path.
+For a fresh installation, apply `db/schema.sql` directly.
+
+Use `npm run db:migrate:remote` later when upgrading an existing deployment with versioned patches.
+
+Remote schema commands assume `wrangler.generated.jsonc` for the Terraform-based install path.
 
 ### 9. Set the site URL
 

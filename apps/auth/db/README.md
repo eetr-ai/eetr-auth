@@ -15,11 +15,15 @@ Databases without `schema_metadata` are treated as schema version `0.0.0`.
 From the project root:
 
 - **Local D1** (dev):
-  `npm run db:migrate`
+  `npm run db:schema`
 - **Remote D1** (Cloudflare):
-  `npm run db:migrate:remote`
+  `npm run db:schema:remote`
 - **Both**:
   `npm run db:bootstrap`
+
+Use the schema commands above for a fresh installation.
+
+Use `npm run db:migrate` and `npm run db:migrate:remote` only when upgrading an existing database with versioned patches.
 
 Requires the D1 database to exist. Default name is `eetr-auth`; override with **`D1_DATABASE_NAME`** for Terraform-created databases. For a new remote DB, use [infra/INSTALL.md](../infra/INSTALL.md) (Terraform + `wrangler.generated.jsonc`) or create it in the dashboard and set `database_id` in a generated Wrangler config.
 
