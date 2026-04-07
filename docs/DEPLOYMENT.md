@@ -36,7 +36,18 @@ Best practice for this repo: use one properly scoped API token for the entire in
 
 ---
 
-## First-Time Setup
+## Clean Install
+
+Use this path for a brand-new Cloudflare environment.
+
+The operator inputs are:
+
+1. export `CLOUDFLARE_API_TOKEN`
+2. fill Terraform variables
+3. run Terraform apply
+4. deploy `argon-hasher`
+
+After that, the repo automates the rest.
 
 ### 1. Verify Cloudflare CLI access
 
@@ -46,45 +57,15 @@ npx wrangler whoami
 
 The prescribed install path uses the exported `CLOUDFLARE_API_TOKEN`; `wrangler login` is not required.
 
-### 2. Install Rust WASM target
+### 2. Install prerequisites
 
 ```bash
 rustup target add wasm32-unknown-unknown
 cargo install worker-build --version '^0.7'
-```
-
-### 3. Install npm dependencies
-
-```bash
 npm install
 ```
 
----
-
-## Deploy argon-hasher
-
-> This step must always run before deploying `apps/auth`.
-
-```bash
-npm run deploy:argon-hasher
-```
-
-Or manually:
-
-```bash
-cd apps/argon-hasher
-npx wrangler deploy
-```
-
-This compiles Rust → WebAssembly and deploys it as a Cloudflare Worker named `argon-hasher`.
-
----
-
-## Provision Infrastructure (First Time)
-
-All infrastructure commands run from inside `apps/auth/`.
-
-### 1. Configure Terraform variables
+### 3. Configure Terraform variables
 
 ```bash
 cd apps/auth
@@ -94,19 +75,19 @@ cp infra/terraform/terraform.tfvars.example infra/terraform/terraform.tfvars
 Edit `infra/terraform/terraform.tfvars`:
 
 ```hcl
-account_id       = "YOUR_CLOUDFLARE_ACCOUNT_ID"
-d1_database_name = "eetr-auth"
-r2_bucket_name   = "eetr-auth-assets"
-worker_name      = "eetr-auth"
+account_id        = "YOUR_CLOUDFLARE_ACCOUNT_ID"
+d1_database_name  = "eetr-auth"
+r2_bucket_name    = "eetr-auth-assets"
+worker_name       = "eetr-auth"
 issuer_base_url   = "https://auth.yourdomain.com"
 auth_url          = "https://auth.yourdomain.com/api/auth/session"
 jwks_cdn_base_url = "https://cdn.yourdomain.com"
-resend_api_key   = "re_XXXXXXXXXXXX"   # optional
+resend_api_key    = "re_XXXXXXXXXXXX"   # optional
 ```
 
 `auth_url` must be the full Auth.js session endpoint.
 
-### 2. Provision D1 + R2 via Terraform
+### 4. Provision D1 + R2 via Terraform
 
 ```bash
 cd apps/auth/infra/terraform
@@ -114,99 +95,97 @@ terraform init
 terraform apply
 ```
 
-### 3. Export Terraform outputs
+### 5. Deploy `argon-hasher`
+
+From the repository root:
 
 ```bash
-cd apps/auth
-npm run infra:terraform-output
+npm run deploy:argon-hasher
 ```
 
-This writes `infra/out/terraform.tf.json`.
+### 6. Run automated remote setup
 
-### 4. Render the deployment wrangler config
+From the repository root:
 
 ```bash
-npm run infra:render-wrangler
+npm run setup:remote
 ```
 
-This generates `wrangler.generated.jsonc` with your real D1 database ID and R2 bucket name.
-Re-running it updates the Terraform-managed fields and preserves custom Wrangler `vars` that are not managed by Terraform.
+This command now automates the post-Terraform setup:
 
-Optional email sender override:
+- exports Terraform outputs
+- renders `wrangler.generated.jsonc`
+- validates Cloudflare access and remote prerequisites
+- provisions missing Wrangler secrets and JWT/JWKS material
+- applies the fresh remote schema snapshot
+- builds and deploys the auth worker
+- seeds the bootstrap remote admin user
 
-- Set `EMAIL_FROM_ADDRESS` in `wrangler.generated.jsonc` under `vars` (for example `no-reply@auth.yourdomain.com`).
-- Use a sender address that is valid for your Resend configuration.
-- If unset, the app falls back to `no-reply@<site hostname>`.
-
-### 5. Keep the shared Cloudflare token exported for Wrangler-backed steps
-
-`infra:provision` and Wrangler deploy commands use the same `CLOUDFLARE_API_TOKEN` you exported during Cloudflare preflight.
-
-### 6. Upload secrets and JWKS to Cloudflare
+Optional flags:
 
 ```bash
-npm run infra:provision
+npm run setup:remote -- --email admin@yourdomain.com
+npm run setup:remote -- --force-rotate-secrets
 ```
 
-This uploads `AUTH_SECRET`, `HMAC_KEY`, `JWT_PRIVATE_KEY`, optional `RESEND_API_KEY`, and pushes `jwks.json` to the Terraform-created R2 bucket using `wrangler.generated.jsonc`.
+### 7. First-login hardening
 
-### 7. Generate the local development certificate
-
-```bash
-npm run jwt:generate-local-cert
-```
-
-### 8. Apply the schema to the new remote database
-
-```bash
-npm run db:schema:remote
-```
-
-For a fresh installation, apply `db/schema.sql` directly.
-
-Use `npm run db:migrate:remote` later when upgrading an existing deployment with versioned patches.
-
-Remote schema commands assume `wrangler.generated.jsonc` for the Terraform-based install path.
-
-### 9. Set the site URL
-
-```bash
-npm run db:set-site-url:remote -- https://auth.yourdomain.com
-```
-
-### 10. Create an admin user
-
-```bash
-npm run db:seed-remote-admin
-```
-
-This seeds the default remote admin credentials:
+The clean-install flow seeds a bootstrap admin:
 
 - Username: `admin`
 - Password: `admin`
-- Password hash: Argon2id PHC generated locally via the Rust `argon-hasher` CLI
+- Default email: `admin@example.com` unless overridden with `--email`
 
-Optional email override:
+After first login, do one of these immediately:
 
-```bash
-npm run db:seed-remote-admin -- --email admin@yourdomain.com
-```
+- create a real admin account, then delete the bootstrap `admin` account
+- or change the bootstrap admin password and replace the placeholder email with a real admin email address
 
----
+Do not leave the bootstrap password or placeholder email in place.
 
-## Deploy auth
+### 8. DNS and JWKS CDN
 
-```bash
-npm run deploy:auth
-```
+- Route your auth hostname to the Worker; `ISSUER_BASE_URL` and `AUTH_URL` must match what users use.
+- Expose `jwks.json` at `JWKS_CDN_BASE_URL` so `jwks_uri` in OIDC metadata resolves.
 
-Or to deploy everything in the correct order from the root:
+### 9. Smoke test
 
 ```bash
-npm run deploy
+curl https://auth.yourdomain.com/api/health
 ```
 
-> `npm run deploy` runs `deploy:argon-hasher` first, then `deploy:auth`. Always use this for fresh deployments.
+Expected response:
+
+```json
+{ "status": "ok" }
+```
+
+## Upgrade Existing Deployment
+
+Use this path when the environment already exists and you want to preserve current secrets by default.
+
+From the repository root:
+
+```bash
+npm run upgrade:remote
+```
+
+This command now automates the upgrade flow:
+
+- exports Terraform outputs
+- renders `wrangler.generated.jsonc`
+- validates upgrade prerequisites
+- provisions only missing secrets by default
+- applies versioned remote D1 patches via `db:migrate:remote`
+- builds and deploys the auth worker
+
+Optional flag:
+
+```bash
+npm run upgrade:remote -- --force-rotate-secrets
+```
+
+Use `--force-rotate-secrets` only when intentionally rotating credentials.
 
 ---
 
@@ -252,31 +231,11 @@ The auth server will be available at `http://localhost:3000`.
 
 ---
 
-## Updating an Existing Deployment
+## Ongoing
 
-### Schema migrations
+`npm run infra:prepare-config` is safe to rerun when Terraform outputs change.
 
-```bash
-cd apps/auth
-npm run db:migrate:remote
-```
-
-### Redeploy workers
-
-```bash
-# From repo root:
-npm run deploy:argon-hasher  # only if argon-hasher changed
-npm run deploy:auth
-```
-
-### Rotate JWT keys
-
-Generate new keys and re-provision:
-
-```bash
-cd apps/auth
-npm run infra:provision
-```
+`npm run infra:provision` now preserves existing secrets by default. Use explicit force-rotation when intentionally replacing `AUTH_SECRET`, `HMAC_KEY`, or JWT signing material.
 
 ---
 
@@ -317,20 +276,6 @@ After deployment, verify in the [Cloudflare Dashboard](https://dash.cloudflare.c
 
 ---
 
-## Health Check
-
-```bash
-curl https://auth.yourdomain.com/api/health
-```
-
-Expected response:
-
-```json
-{ "status": "ok" }
-```
-
----
-
 ## Troubleshooting
 
 **`argon-hasher` deploy fails with WASM error**
@@ -347,4 +292,4 @@ Expected response:
 
 **JWT verification fails**
 - Confirm `jwks.json` is in R2 and `JWKS_CDN_BASE_URL` points to the correct public URL
-- Re-run `npm run infra:provision` after rotating keys
+- Re-run `npm run infra:provision -- --force-rotate` only when intentionally rotating keys
