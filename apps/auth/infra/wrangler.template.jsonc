@@ -39,7 +39,7 @@
 	],
 	"r2_buckets": [
 		{
-			"binding": "BLOG_IMAGES",
+			"binding": "AUTH_ASSETS",
 			"bucket_name": "REPLACE_WITH_YOUR_R2_BUCKET"
 		}
 	],

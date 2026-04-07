@@ -10,11 +10,38 @@
 - A [Cloudflare account](https://cloudflare.com) with Workers, D1, R2, and Images enabled
 - A [Resend](https://resend.com) account for transactional email
 
+## Cloudflare Preflight
+
+Before running Terraform, complete the Cloudflare setup for the target account:
+
+1. Get your Cloudflare `account_id`.
+	- Run `npx wrangler whoami` after `npx wrangler login`, or
+	- Find it in the Cloudflare dashboard for the target account, or
+	- Call the Cloudflare Accounts API with a valid API token.
+2. Activate R2 in the Cloudflare dashboard for that account. Terraform cannot create the bucket until R2 has been enabled once.
+3. Create a Cloudflare API token for Terraform and export it in the shell where you run `terraform init` and `terraform apply`:
+
+```bash
+export CLOUDFLARE_API_TOKEN=your_token_here
+```
+
+Minimum permissions for Terraform in this repo:
+
+- `Account -> D1 -> Edit`
+- `Account -> Workers R2 Storage -> Edit`
+- `Account -> Account Settings -> Read`
+
+If you want to reuse the same token for later Wrangler-backed steps, also add:
+
+- `Account -> Workers Scripts -> Edit`
+
+Wrangler prefers `CLOUDFLARE_API_TOKEN` over your `wrangler login` session. If you use a Terraform-only token, run `unset CLOUDFLARE_API_TOKEN` before `infra:provision`, `wrangler secret put`, or deploy commands so Wrangler falls back to OAuth.
+
 ---
 
 ## First-Time Setup
 
-### 1. Authenticate with Cloudflare
+### 1. Authenticate Wrangler
 
 ```bash
 npx wrangler login
@@ -72,9 +99,13 @@ account_id       = "YOUR_CLOUDFLARE_ACCOUNT_ID"
 d1_database_name = "eetr-auth"
 r2_bucket_name   = "eetr-auth-assets"
 worker_name      = "eetr-auth"
-site_url         = "https://auth.yourdomain.com"
+issuer_base_url   = "https://auth.yourdomain.com"
+auth_url          = "https://auth.yourdomain.com/api/auth/session"
+jwks_cdn_base_url = "https://cdn.yourdomain.com"
 resend_api_key   = "re_XXXXXXXXXXXX"   # optional
 ```
+
+`auth_url` must be the full Auth.js session endpoint.
 
 ### 2. Provision D1 + R2 via Terraform
 
@@ -101,50 +132,48 @@ npm run infra:render-wrangler
 
 This generates `wrangler.generated.jsonc` with your real D1 database ID and R2 bucket name.
 
-### 5. Set up JWT secrets
+### 5. Clear the Terraform token for Wrangler, unless your token also has Workers Scripts permissions
 
-Generate your RS256 key pair:
-
-```bash
-npm run jwt:setup-secrets
-```
-
-Generate the local development certificate:
+If your `CLOUDFLARE_API_TOKEN` is scoped only for Terraform, clear it before any Wrangler-backed step so Wrangler uses `npx wrangler login` instead:
 
 ```bash
-npm run jwt:generate-local-cert
+unset CLOUDFLARE_API_TOKEN
 ```
 
-### 6. Generate HMAC key
+Skip this only if the token also has `Account -> Workers Scripts -> Edit`.
 
-```bash
-npm run setup:hmac-key
-```
-
-### 7. Run database migrations
-
-```bash
-npm run db:migrate:remote
-```
-
-### 8. Upload secrets and JWKS to Cloudflare
+### 6. Upload secrets and JWKS to Cloudflare
 
 ```bash
 npm run infra:provision
 ```
 
-This uploads `AUTH_SECRET`, `HMAC_KEY`, `JWT_PRIVATE_KEY`, `RESEND_API_KEY` as Workers secrets and pushes `jwks.json` to R2.
+This uploads `AUTH_SECRET`, `HMAC_KEY`, `JWT_PRIVATE_KEY`, optional `RESEND_API_KEY`, and pushes `jwks.json` to the Terraform-created R2 bucket using `wrangler.generated.jsonc`.
+
+### 7. Generate the local development certificate
+
+```bash
+npm run jwt:generate-local-cert
+```
+
+### 8. Run database migrations
+
+```bash
+npm run db:migrate:remote
+```
+
+Remote migration scripts assume `wrangler.generated.jsonc` for the Terraform-based install path.
 
 ### 9. Set the site URL
 
 ```bash
-npm run db:set-site-url:remote
+npm run db:set-site-url:remote -- https://auth.yourdomain.com
 ```
 
 ### 10. Create an admin user
 
 ```bash
-npm run db:create-admin:remote
+npm run db:create-admin:remote -- <username> <email>
 ```
 
 ---
@@ -230,7 +259,6 @@ Generate new keys and re-provision:
 
 ```bash
 cd apps/auth
-npm run jwt:setup-secrets
 npm run infra:provision
 ```
 

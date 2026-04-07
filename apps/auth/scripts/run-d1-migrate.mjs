@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Run wrangler d1 execute with D1_DATABASE_NAME (default eetr-auth).
+ * Run wrangler d1 execute with D1_DATABASE_NAME or the remote Wrangler config database name.
  * When no --file is provided, this applies versioned SQL patches from ./db/patches.
  * Databases without schema metadata are treated as schema version 0.0.0.
  * Usage: node scripts/run-d1-migrate.mjs --local|--remote [--file=./db/schema.sql]
@@ -21,10 +21,15 @@ const passthroughArgs = args.filter(
 	(a) => a !== "--local" && a !== "--remote" && !a.startsWith("--file=")
 );
 const configArgIndex = passthroughArgs.findIndex((a) => a === "--config");
-const configPath =
+let configPath =
 	configArgIndex >= 0 && passthroughArgs[configArgIndex + 1]
 		? passthroughArgs[configArgIndex + 1]
 		: passthroughArgs.find((a) => a.startsWith("--config="))?.slice("--config=".length) ?? "";
+
+if (remote && !configPath) {
+	configPath = process.env.WRANGLER_CONFIG?.trim() || "wrangler.generated.jsonc";
+	passthroughArgs.push("--config", configPath);
+}
 
 if (!local && !remote) {
 	console.error("Usage: node scripts/run-d1-migrate.mjs --local|--remote [--file=./db/schema.sql]");
@@ -48,7 +53,13 @@ if (configPath) {
 	}
 }
 
-const dbName = process.env.D1_DATABASE_NAME || configDbName || "eetr-auth";
+const dbName = process.env.D1_DATABASE_NAME || configDbName || (local ? "eetr-auth" : "");
+if (!dbName) {
+	console.error(
+		"Remote migrations could not determine the D1 database name. Set D1_DATABASE_NAME or provide a Wrangler config with d1_databases[0].database_name."
+	);
+	process.exit(1);
+}
 const flag = local ? "--local" : "--remote";
 const workspaceCwd = process.cwd();
 const schemaSnapshotPath = resolve(workspaceCwd, "./db/schema.sql");

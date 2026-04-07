@@ -68,6 +68,10 @@ if (!wranglerConfig && filteredArgs.length >= 3 && /wrangler.*\.jsonc?$/i.test(f
 	wranglerConfig = filteredArgs.shift() || "";
 }
 
+if (!localOnly && !wranglerConfig) {
+	wranglerConfig = "wrangler.generated.jsonc";
+}
+
 let configDbName = "";
 
 if (wranglerConfig) {
@@ -129,7 +133,13 @@ try {
 	if (!existsSync(tmpDir)) mkdirSync(tmpDir, { recursive: true });
 	writeFileSync(sqlPath, sql, "utf8");
 
-	const dbName = process.env.D1_DATABASE_NAME || configDbName || "eetr-auth";
+	const dbName = process.env.D1_DATABASE_NAME || configDbName || (remoteOnly ? "" : "eetr-auth");
+	if (!localOnly && !dbName) {
+		console.error(
+			"Remote admin creation requires wrangler.generated.jsonc, --config <path>, or D1_DATABASE_NAME. Run npm run infra:render-wrangler first."
+		);
+		process.exit(1);
+	}
 	const configArg = wranglerConfig ? ` --config ${JSON.stringify(wranglerConfig)}` : "";
 	if (wranglerConfig) {
 		console.log(`Using Wrangler config: ${wranglerConfig}`);

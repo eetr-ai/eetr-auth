@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Merge base wrangler.jsonc with terraform output JSON (infra/out/terraform.tf.json).
+ * Merge the template Wrangler config with terraform output JSON (infra/out/terraform.tf.json).
  *
  * Usage:
  *   terraform -chdir=infra/terraform output -json > infra/out/terraform.tf.json
- *   node scripts/render-wrangler-config.mjs [--base wrangler.jsonc] [--tf-json path] [--out wrangler.generated.jsonc]
+ *   node scripts/render-wrangler-config.mjs [--base infra/wrangler.template.jsonc] [--tf-json path] [--out wrangler.generated.jsonc]
  *
  * Optional overrides (non-empty wins over Terraform): --issuer-base-url, --auth-url, --jwks-cdn-base-url
  */
@@ -14,7 +14,7 @@ import stripJsonComments from "strip-json-comments";
 
 function parseArgs(argv) {
 	const out = {
-		base: "wrangler.jsonc",
+		base: "infra/wrangler.template.jsonc",
 		tfJson: null,
 		outFile: "wrangler.generated.jsonc",
 		issuerBaseUrl: "",

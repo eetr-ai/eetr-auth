@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 /**
  * Generate RSA key pair for JWT (RS256), store private key as Wrangler secret,
- * and upload JWKS to the R2 bucket (public URL from JWKS_CDN_BASE_URL / jwks.json).
+ * and upload JWKS to the configured R2 bucket.
  *
- * Usage: node scripts/setup-jwt-secrets.mjs [--env <environment>] [--config <wrangler.jsonc>] [--bucket <name>] [--jwks-key <object-key>]
- * Bucket defaults to R2_BUCKET_NAME env or "blog-images". Object key defaults to "jwks.json".
+ * Usage: node scripts/setup-jwt-secrets.mjs [--env <environment>] [--config <wrangler.generated.jsonc>] [--bucket <name>] [--jwks-key <object-key>]
+ * Remote runs default to WRANGLER_CONFIG or wrangler.generated.jsonc. Bucket defaults to the first r2_buckets entry in the Wrangler config.
  * Run per environment; use the same key pair for that environment.
  */
 import { generateKeyPairSync } from "node:crypto";
-import { writeFileSync, unlinkSync, mkdirSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { writeFileSync, unlinkSync, mkdirSync, existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { execSync } from "node:child_process";
 import { importSPKI, exportJWK, calculateJwkThumbprint } from "jose";
+import stripJsonComments from "strip-json-comments";
 
 const args = process.argv.slice(2);
 const envIndex = args.indexOf("--env");
@@ -20,14 +21,13 @@ const envFlag = wranglerEnv ? `--env ${wranglerEnv}` : "";
 
 const configIndex = args.indexOf("--config");
 const wranglerConfig =
-	configIndex >= 0 && args[configIndex + 1] ? args[configIndex + 1] : "wrangler.jsonc";
+	configIndex >= 0 && args[configIndex + 1]
+		? args[configIndex + 1]
+		: process.env.WRANGLER_CONFIG?.trim() || "wrangler.generated.jsonc";
 const configFlag = ` --config ${JSON.stringify(wranglerConfig)}`;
 
 const bucketIndex = args.indexOf("--bucket");
-const r2Bucket =
-	(bucketIndex >= 0 && args[bucketIndex + 1] ? args[bucketIndex + 1] : null) ??
-	process.env.R2_BUCKET_NAME ??
-	"blog-images";
+const r2BucketArg = bucketIndex >= 0 && args[bucketIndex + 1] ? args[bucketIndex + 1] : null;
 
 const jwksKeyIndex = args.indexOf("--jwks-key");
 const jwksKey =
@@ -36,7 +36,32 @@ const jwksKey =
 const tmpDir = join(process.cwd(), ".tmp");
 const jwksPath = join(tmpDir, `jwks-${Date.now()}.json`);
 
+function loadWranglerConfig(configPath) {
+	const resolvedPath = resolve(process.cwd(), configPath);
+	if (!existsSync(resolvedPath)) {
+		throw new Error(
+			`Missing Wrangler config: ${resolvedPath}. Run npm run infra:render-wrangler or pass --config <path>.`
+		);
+	}
+
+	return JSON.parse(stripJsonComments(readFileSync(resolvedPath, "utf8")));
+}
+
+function resolveR2Bucket(config) {
+	const bucketName = config?.r2_buckets?.[0]?.bucket_name;
+	if (typeof bucketName === "string" && bucketName.trim()) {
+		return bucketName.trim();
+	}
+
+	throw new Error(
+		"R2 bucket is not configured. Pass --bucket <name> or ensure wrangler.generated.jsonc defines r2_buckets[0].bucket_name."
+	);
+}
+
 async function main() {
+	const config = loadWranglerConfig(wranglerConfig);
+	const r2Bucket = r2BucketArg?.trim() || resolveR2Bucket(config);
+
 	console.log("Generating RSA key pair (RS256, 2048-bit)...");
 	const { publicKey, privateKey } = generateKeyPairSync("rsa", {
 		modulusLength: 2048,

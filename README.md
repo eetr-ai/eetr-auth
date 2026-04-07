@@ -202,7 +202,6 @@ sequenceDiagram
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Step-by-step deploy, local dev, env vars, troubleshooting |
 | [docs/CLOUDFLARE_TEMPLATE.md](docs/CLOUDFLARE_TEMPLATE.md) | Using this as a Cloudflare template for your project |
 | [CHANGELOG.md](CHANGELOG.md) | Monorepo release history |
-| [PLAN.md](PLAN.md) | Monorepo migration plan and implementation status |
 
 ---
 

@@ -210,14 +210,14 @@ export class OauthTokenService {
 		const privateKeyPem =
 			(typeof env.JWT_PRIVATE_KEY === "string" ? env.JWT_PRIVATE_KEY : null) ??
 			(typeof process.env.JWT_PRIVATE_KEY === "string" ? process.env.JWT_PRIVATE_KEY : null);
-		const blogImages = env.BLOG_IMAGES as { get(key: string): Promise<{ body: ReadableStream } | null> } | undefined;
+		const authAssets = env.AUTH_ASSETS as { get(key: string): Promise<{ body: ReadableStream } | null> } | undefined;
 		const issuer = resolveIssuerBaseUrl(env);
 		const jwksR2Key = (typeof env.JWKS_R2_KEY === "string" ? env.JWKS_R2_KEY : null) ?? JWKS_R2_KEY_DEFAULT;
 
 		const clientIdentifier = params.clientIdentifier;
 		// Need kid from env (JWT_KID) or R2 when using .env.local only
 		const hasKidSource =
-			blogImages ||
+			authAssets ||
 			(typeof env.JWT_KID === "string" && env.JWT_KID.length > 0) ||
 			(typeof process.env.JWT_KID === "string" && process.env.JWT_KID.length > 0);
 		if (privateKeyPem && clientIdentifier && hasKidSource) {
@@ -230,7 +230,7 @@ export class OauthTokenService {
 				environmentName,
 				issuer,
 				privateKeyPem,
-				blogImages: blogImages ?? { get: async () => null },
+				authAssets: authAssets ?? { get: async () => null },
 				jwksR2Key,
 			});
 		}
@@ -291,7 +291,7 @@ export class OauthTokenService {
 		environmentName: string | null;
 		issuer: string;
 		privateKeyPem: string;
-		blogImages: { get(key: string): Promise<{ body: ReadableStream } | null> };
+		authAssets: { get(key: string): Promise<{ body: ReadableStream } | null> };
 		jwksR2Key: string;
 	}): Promise<OAuthTokenResponse> {
 		const t0 = Date.now();
@@ -311,7 +311,7 @@ export class OauthTokenService {
 
 		// Prefer R2 for kid when available so token kid matches public JWKS; use env JWT_KID only when R2 is missing (e.g. local dev)
 		let kid: string;
-		const r2Obj = await params.blogImages.get(params.jwksR2Key);
+		const r2Obj = await params.authAssets.get(params.jwksR2Key);
 		if (r2Obj) {
 			const jwks = (await new Response(r2Obj.body).json()) as { keys: Array<{ kid?: string }> };
 			kid = jwks?.keys?.[0]?.kid ?? envKid ?? "default";
@@ -791,7 +791,7 @@ export class OauthTokenService {
 		expectedEnvironmentName: string | null
 	): Promise<ValidateTokenResult> {
 		const env = this.env as unknown as Record<string, unknown>;
-		const blogImages = env.BLOG_IMAGES as { get(key: string): Promise<{ body: ReadableStream } | null> } | undefined;
+		const authAssets = env.AUTH_ASSETS as { get(key: string): Promise<{ body: ReadableStream } | null> } | undefined;
 		const jwksR2Key = (typeof env.JWKS_R2_KEY === "string" ? env.JWKS_R2_KEY : null) ?? JWKS_R2_KEY_DEFAULT;
 		// Prefer ctx.env; in next dev, JWT_JWKS_JSON may only be in process.env (.env.local)
 		const jwksJsonRaw =
@@ -822,13 +822,13 @@ export class OauthTokenService {
 				kids,
 				fromProcessEnv,
 			});
-		} else if (blogImages) {
+		} else if (authAssets) {
 			console.log("[oauth_token] JWT verification: no JWKS from env, trying R2", {
-				binding: "BLOG_IMAGES",
+				binding: "AUTH_ASSETS",
 				r2Key: jwksR2Key,
 			});
 		} else {
-			console.log("[oauth_token] JWT verification: no JWKS from env, BLOG_IMAGES binding not available");
+			console.log("[oauth_token] JWT verification: no JWKS from env, AUTH_ASSETS binding not available");
 		}
 
 		const invalidResult = (): ValidateTokenResult => ({
@@ -908,8 +908,8 @@ export class OauthTokenService {
 		// Prefer JWKS from env (e.g. JWT_JWKS_JSON in .env.local) so next dev uses same key as signing
 		let jwks: { keys: unknown[] } | null = jwksFromEnv;
 
-		if (!jwks?.keys?.length && blogImages) {
-			const r2Obj = await blogImages.get(jwksR2Key);
+		if (!jwks?.keys?.length && authAssets) {
+			const r2Obj = await authAssets.get(jwksR2Key);
 			if (r2Obj) {
 				jwks = (await new Response(r2Obj.body).json()) as { keys: unknown[] };
 				const kids = (jwks?.keys as { kid?: string }[] | undefined)?.map((k) => k.kid ?? "(no kid)") ?? [];

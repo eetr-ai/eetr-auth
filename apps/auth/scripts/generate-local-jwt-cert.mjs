@@ -73,7 +73,7 @@ async function main() {
 	console.log("Updated", envLocalPath, "with JWT_KID, JWT_PRIVATE_KEY, and JWT_JWKS_JSON");
 
 	console.log("\nFor wrangler dev/preview (uses R2): upload JWKS to local R2:");
-	console.log("  npx wrangler r2 object put blog-images/jwks.json --file=.tmp/jwks.json --local");
+	console.log("  npx wrangler r2 object put <your-r2-bucket>/jwks.json --file=.tmp/jwks.json --local");
 }
 
 main().catch((err) => {

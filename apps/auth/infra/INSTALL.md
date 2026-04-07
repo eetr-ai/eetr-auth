@@ -8,7 +8,7 @@ End-to-end steps to provision D1 + R2 with Terraform, render Wrangler config, up
 - **Terraform** `>= 1.5` ([install](https://developer.hashicorp.com/terraform/install)).
 - A **Cloudflare** account with Workers, D1, and R2. See [terraform/README.md](./terraform/README.md) for API token permissions.
 - **Auth:** Terraform **requires** an API token (`CLOUDFLARE_API_TOKEN`) with D1 + R2 permissions. **Wrangler** (`infra:provision`, deploy) can use **`npx wrangler login`** (OAuth) **or** a token that includes **Workers Scripts → Edit**. If `CLOUDFLARE_API_TOKEN` is set, Wrangler uses it and it must include **Workers Scripts → Edit** for `wrangler secret put`; otherwise run `unset CLOUDFLARE_API_TOKEN` and rely on `wrangler login`, or use a separate shell for Terraform vs Wrangler (see [terraform/README.md](./terraform/README.md)).
-- **Argon hasher** Worker deployed in the same account, bound as in `wrangler.jsonc` (`service: "argon-hasher"`). Required when `HASH_METHOD` is `argon` (default in `wrangler.jsonc` `vars`).
+- **Argon hasher** Worker deployed in the same account, bound as in `infra/wrangler.template.jsonc` and the rendered `wrangler.generated.jsonc` (`service: "argon-hasher"`). Required when `HASH_METHOD` is `argon`.
 - Optional: **Resend** API key if you use transactional email (`resend_api_key` in tfvars or `RESEND_API_KEY` when provisioning).
 
 ## 1. Clone and install
@@ -109,7 +109,7 @@ Create the user with a random placeholder password hash, then complete setup thr
 npm run db:create-admin:remote -- --config wrangler.generated.jsonc <username> <email>
 
 # If your environment uses a non-default Wrangler config:
-npm run db:create-admin:remote -- --config path/to/your.wrangler.jsonc <username> <email>
+npm run db:create-admin:remote -- --config path/to/your.wrangler.generated.jsonc <username> <email>
 ```
 
 ## 10. Smoke test

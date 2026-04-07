@@ -47,8 +47,8 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 		);
 	}
 
-	const env = ctx.env as unknown as { BLOG_IMAGES?: R2Bucket };
-	const bucket = env.BLOG_IMAGES;
+	const env = ctx.env as unknown as { AUTH_ASSETS?: R2Bucket };
+	const bucket = env.AUTH_ASSETS;
 	if (!bucket) {
 		return NextResponse.json(
 			{

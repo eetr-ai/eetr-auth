@@ -14,15 +14,15 @@ function getPrivateKeyPem(env: Record<string, unknown>): string | null {
 
 async function resolveKid(
 	env: Record<string, unknown>,
-	blogImages: { get(key: string): Promise<{ body: ReadableStream } | null> } | undefined,
+	authAssets: { get(key: string): Promise<{ body: ReadableStream } | null> } | undefined,
 	jwksR2Key: string
 ): Promise<string> {
 	const envKid =
 		(typeof env.JWT_KID === "string" ? env.JWT_KID : null) ??
 		(typeof process.env.JWT_KID === "string" ? process.env.JWT_KID : null);
 
-	if (blogImages) {
-		const r2Obj = await blogImages.get(jwksR2Key);
+	if (authAssets) {
+		const r2Obj = await authAssets.get(jwksR2Key);
 		if (r2Obj) {
 			const jwks = (await new Response(r2Obj.body).json()) as { keys: Array<{ kid?: string }> };
 			return jwks?.keys?.[0]?.kid ?? envKid ?? "default";
@@ -47,10 +47,10 @@ async function loadJwksForVerify(env: Record<string, unknown>): Promise<{ keys: 
 			// fall through
 		}
 	}
-	const blogImages = env.BLOG_IMAGES as { get(key: string): Promise<{ body: ReadableStream } | null> } | undefined;
+	const authAssets = env.AUTH_ASSETS as { get(key: string): Promise<{ body: ReadableStream } | null> } | undefined;
 	const jwksR2Key = (typeof env.JWKS_R2_KEY === "string" ? env.JWKS_R2_KEY : null) ?? JWKS_R2_KEY_DEFAULT;
-	if (blogImages) {
-		const r2Obj = await blogImages.get(jwksR2Key);
+	if (authAssets) {
+		const r2Obj = await authAssets.get(jwksR2Key);
 		if (r2Obj) {
 			return (await new Response(r2Obj.body).json()) as { keys: unknown[] };
 		}
@@ -67,9 +67,9 @@ export async function signPasswordResetJwt(
 		throw new Error("JWT_PRIVATE_KEY is not configured.");
 	}
 	const issuer = resolveIssuerBaseUrl(env);
-	const blogImages = env.BLOG_IMAGES as { get(key: string): Promise<{ body: ReadableStream } | null> } | undefined;
+	const authAssets = env.AUTH_ASSETS as { get(key: string): Promise<{ body: ReadableStream } | null> } | undefined;
 	const jwksR2Key = (typeof env.JWKS_R2_KEY === "string" ? env.JWKS_R2_KEY : null) ?? JWKS_R2_KEY_DEFAULT;
-	const kid = await resolveKid(env, blogImages, jwksR2Key);
+	const kid = await resolveKid(env, authAssets, jwksR2Key);
 	const privateKey = await importPKCS8(privateKeyPem, "RS256");
 	const now = Math.floor(Date.now() / 1000);
 	const exp = Math.floor(params.expiresAt.getTime() / 1000);

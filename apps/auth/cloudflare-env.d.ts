@@ -6,7 +6,7 @@ declare namespace Cloudflare {
 		mainModule: typeof import("./worker");
 	}
 	interface Env {
-		BLOG_IMAGES: R2Bucket;
+        AUTH_ASSETS: R2Bucket;
 		DB: D1Database;
 		IMAGES: ImagesBinding;
 		ASSETS: Fetcher;
