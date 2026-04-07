@@ -131,12 +131,12 @@ npm run db:create-admin:remote -- --config path/to/your.wrangler.generated.jsonc
 If you only need local development setup (no Terraform/deploy), run:
 
 ```bash
-npm run db:migrate
+npm run setup:local
 npm run db:create-admin:local -- <username> <email>
 npm run db:set-site-url:local -- https://auth.example.com
 ```
 
-This is enough for local sign-in and password reset flow testing.
+This is the brand-new local bootstrap path. It also seeds a local `admin` / `admin` user with an MD5 password hash for development sign-in. Use `npm run db:migrate` only when upgrading an existing local database with versioned patches.
 
 ## 11. Ongoing
 

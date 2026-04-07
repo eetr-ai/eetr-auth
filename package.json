@@ -6,6 +6,8 @@
     "packages/*"
   ],
   "scripts": {
+    "setup:local": "npm run setup:local --workspace=apps/auth",
+    "setup:local:env": "npm run setup:local:env --workspace=apps/auth",
     "deploy:argon-hasher": "cd apps/argon-hasher && npx wrangler deploy",
     "deploy:auth": "npm run deploy --workspace=apps/auth",
     "deploy": "npm run deploy:argon-hasher && npm run deploy:auth",

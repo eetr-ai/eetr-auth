@@ -1,4 +1,11 @@
-# Wrangler local dev secrets (copy to .dev.vars and fill in).
+# Wrangler local dev vars.
+# Prefer: npm run setup:local
+# Local dev uses md5 hashing so the argon hasher binding is not required.
+HASH_METHOD=md5
+
+# Auth.js secret for Wrangler-backed local runs.
+AUTH_SECRET=changeme-local-auth-secret
+
 # JWT for local testing is set in .env.local via npm run jwt:generate-local-cert.
 # Optional: prefix for generated OAuth client IDs (defaults to "eetr").
 # CLIENT_KEY_PREFIX=eetr

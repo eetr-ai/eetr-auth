@@ -1,6 +1,7 @@
 -- eetr-auth D1 schema (SQLite)
 -- Current schema version: 0.1.0
--- Apply with: npm run db:migrate (local) or npm run db:migrate:remote
+-- Apply with: npm run db:schema (fresh local), npm run db:schema:remote (fresh remote),
+-- or the db:migrate variants when upgrading an existing environment
 
 -- Enable foreign keys (D1 supports them)
 PRAGMA foreign_keys = ON;

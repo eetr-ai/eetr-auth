@@ -27,7 +27,7 @@ Use `npm run db:migrate` and `npm run db:migrate:remote` only when upgrading an 
 
 Requires the D1 database to exist. Default name is `eetr-auth`; override with **`D1_DATABASE_NAME`** for Terraform-created databases. For a new remote DB, use [infra/INSTALL.md](../infra/INSTALL.md) (Terraform + `wrangler.generated.jsonc`) or create it in the dashboard and set `database_id` in a generated Wrangler config.
 
-For login (Auth.js), set `AUTH_SECRET` in `.env.local` (dev) or via `wrangler secret put AUTH_SECRET` (production). See `.env.example`.
+For local development, `npm run setup:local` is the fresh-environment bootstrap: it prepares `.env.local` and `.dev.vars`, applies `db/schema.sql` to the local D1 database, and seeds a local `admin` / `admin` user with an MD5 password hash. Use `npm run setup:local:env` only when you want the local env files without touching the database. Production still requires real Wrangler secrets.
 
 ## Migration strategy
 
