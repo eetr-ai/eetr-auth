@@ -31,7 +31,7 @@
 		"jwt:setup-secrets": "node scripts/setup-jwt-secrets.mjs",
 		"jwt:generate-local-cert": "node scripts/generate-local-jwt-cert.mjs",
 		"infra:terraform-output": "node scripts/terraform-output.mjs",
-		"infra:render-wrangler": "node scripts/render-wrangler-config.mjs --tf-json infra/out/terraform.tf.json",
+		"infra:render-wrangler": "node scripts/render-wrangler-config.mjs --base infra/wrangler.template.jsonc --tf-json infra/out/terraform.tf.json",
 		"infra:provision": "node scripts/provision-env.mjs"
 	},
 	"dependencies": {
