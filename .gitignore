@@ -15,3 +15,16 @@ dist/
 
 # Logs
 *.log
+
+# Generated / instance-specific (apps/auth)
+apps/auth/wrangler.generated.jsonc
+apps/auth/infra/out/
+apps/auth/infra/terraform/terraform.tfvars
+apps/auth/infra/terraform/.terraform/
+apps/auth/infra/terraform/*.tfstate
+apps/auth/infra/terraform/*.tfstate.backup
+apps/auth/.env.local
+apps/auth/.dev.vars
+
+# Client package build output
+packages/eetr-auth-client/dist/
