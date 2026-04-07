@@ -59,7 +59,9 @@ npm run deploy
 # or similar package manager command
 ```
 
-**New environment (Terraform + generated Wrangler config):** see [infra/INSTALL.md](infra/INSTALL.md). After provisioning, deploy with `npm run deploy:infra` (uses `wrangler.generated.jsonc`).
+This repo's deployment path uses `wrangler.generated.jsonc` by default.
+
+**New environment (Terraform + generated Wrangler config):** see [infra/INSTALL.md](infra/INSTALL.md). After provisioning, run `npm run deploy`.
 
 ## Learn More
 

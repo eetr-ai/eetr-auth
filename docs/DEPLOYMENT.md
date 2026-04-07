@@ -131,6 +131,12 @@ npm run infra:render-wrangler
 
 This generates `wrangler.generated.jsonc` with your real D1 database ID and R2 bucket name.
 
+Optional email sender override:
+
+- Set `EMAIL_FROM_ADDRESS` in Wrangler `vars` (for example `no-reply@auth.yourdomain.com`).
+- Use a sender address that is valid for your Resend configuration.
+- If unset, the app falls back to `no-reply@<site hostname>`.
+
 ### 5. Keep the shared Cloudflare token exported for Wrangler-backed steps
 
 `infra:provision` and Wrangler deploy commands use the same `CLOUDFLARE_API_TOKEN` you exported during Cloudflare preflight.
@@ -172,6 +178,10 @@ npm run db:set-site-url:remote -- https://auth.yourdomain.com
 ```bash
 npm run db:create-admin:remote -- <username> <email>
 ```
+
+The created admin gets a random placeholder password hash. Complete account setup through the password reset flow afterward.
+
+That requires your site URL to be set correctly and Resend email delivery to be configured correctly so the reset email can be sent.
 
 ---
 
@@ -270,6 +280,7 @@ npm run infra:provision
 | `AUTH_URL` | Full URL to the auth worker (e.g. `https://auth.yourdomain.com`) |
 | `ISSUER_BASE_URL` | OAuth issuer base URL (usually same as `AUTH_URL`) |
 | `JWKS_CDN_BASE_URL` | Base URL for the public JWKS endpoint (can be R2 public URL) |
+| `EMAIL_FROM_ADDRESS` | Optional transactional email sender address used for password reset and other email flows. Set this in Wrangler `vars`; if unset, the app falls back to `no-reply@<site hostname>`. |
 | `JWKS_R2_KEY` | R2 key for `jwks.json` (default: `jwks.json`) |
 | `CLIENT_KEY_PREFIX` | Prefix for generated OAuth client IDs (e.g. `eetr`) |
 | `HASH_METHOD` | Password hashing method: `argon` (default) or legacy fallback |

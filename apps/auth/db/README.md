@@ -59,6 +59,8 @@ When the schema changes in a future release:
 From the project root, create an admin (`users.is_admin = 1`) in **both** local and remote D1 using `username` + `email`.
 The script stores a random placeholder password hash; finish setup via password reset.
 
+For remote environments, this requires the site URL to be configured and Resend email delivery to be working so the password reset email can be sent.
+
 ```bash
 npm run db:create-admin -- <username> <email>
 ```

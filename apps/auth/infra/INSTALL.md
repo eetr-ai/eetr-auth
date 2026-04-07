@@ -55,6 +55,7 @@ Writes `wrangler.generated.jsonc` (gitignored) with D1 id, R2 bucket, worker `na
 Optional email sender override:
 
 - Set `EMAIL_FROM_ADDRESS` in Wrangler `vars` (for example `no-reply@auth.example.com`).
+- Use a sender address that is valid for your Resend configuration.
 - If unset, the app falls back to `no-reply@<site hostname>`.
 
 Optional overrides (instead of editing tfvars):
@@ -108,6 +109,9 @@ Uses `wrangler.generated.jsonc` (`opennextjs-cloudflare deploy -c wrangler.gener
 ## 9. Create first admin
 
 Create the user with a random placeholder password hash, then complete setup through the password reset flow:
+
+- This requires `site_settings.site_url` to be set correctly.
+- This also requires Resend to be configured correctly so the password reset email can be delivered.
 
 ```bash
 npm run db:create-admin:remote -- --config wrangler.generated.jsonc <username> <email>
