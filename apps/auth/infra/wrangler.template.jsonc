@@ -53,8 +53,7 @@
 		},
 		{
 			"binding": "ARGON_HASHER",
-			"service": "argon-hasher",
-			"entrypoint": "ArgonHasherWorker"
+			"service": "argon-hasher"
 		}
 	],
 	"vars": {
