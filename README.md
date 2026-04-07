@@ -4,6 +4,8 @@
 
 Current release baseline: `0.1.0`. See [CHANGELOG.md](CHANGELOG.md).
 
+Public auth server package: `@eetr/auth`.
+
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
@@ -14,14 +16,14 @@ Current release baseline: `0.1.0`. See [CHANGELOG.md](CHANGELOG.md).
 
 ## What is this?
 
-`eetr-auth` is a self-hostable OAuth 2.1 / OIDC authorization server that runs entirely on **Cloudflare's edge platform** — no VMs, no containers, no servers. It ships as an npm monorepo with two Cloudflare Workers and a client library ready to publish.
+`eetr-auth` is a self-hostable OAuth 2.1 / OIDC authorization server that runs entirely on **Cloudflare's edge platform** — no VMs, no containers, no servers. The auth server product is published as `@eetr/auth`, and the repo ships as an npm monorepo with two Cloudflare Workers and a client library ready to publish.
 
 ```mermaid
 graph LR
     APP["Your App"] -->|OAuth 2.1 / OIDC| AUTH
 
     subgraph CF["Cloudflare Edge"]
-        AUTH["eetr-auth\nNext.js Worker"]
+        AUTH["@eetr/auth\nNext.js Worker"]
         HASHER["argon-hasher\nRust/Wasm Worker"]
         D1[("D1\nDatabase")]
         R2[("R2\nStorage")]
@@ -47,6 +49,7 @@ graph LR
 | **Admin** | Dashboard for users, clients, tokens, site settings |
 | **Infrastructure** | Cloudflare D1 (SQLite), R2 (object storage), Terraform provisioning |
 | **Security** | Argon2id hashing in isolated WASM worker, HMAC-SHA256 request signing, PKCE mandatory |
+| **Auth server package** | `@eetr/auth` — deployable OAuth 2.1 / OIDC server |
 | **Client library** | `@eetr/eetr-auth-client` — token management, typed API, JWT validation |
 
 ---
@@ -56,7 +59,7 @@ graph LR
 ```
 eetr-auth/
 ├── apps/
-│   ├── auth/               # Next.js 16 OAuth/OIDC server (Cloudflare Worker)
+│   ├── auth/               # @eetr/auth - Next.js 16 OAuth/OIDC server
 │   └── argon-hasher/       # Rust/Wasm password hashing worker
 └── packages/
     └── eetr-auth-client/   # @eetr/eetr-auth-client (TypeScript, publishable)
@@ -164,7 +167,7 @@ const user = await getUserInfo(accessToken, discovery.userinfo_endpoint)
 ```mermaid
 sequenceDiagram
     participant App as Your App
-    participant Auth as eetr-auth
+    participant Auth as @eetr/auth
     participant Hasher as argon-hasher
 
     App->>Auth: GET /api/authorize (code_challenge, scope)
@@ -182,7 +185,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant Svc as Backend Service
-    participant Auth as eetr-auth
+    participant Auth as @eetr/auth
 
     Svc->>Auth: POST /api/token (client_credentials, scope)
     Auth-->>Svc: { access_token }

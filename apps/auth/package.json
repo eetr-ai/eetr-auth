@@ -1,6 +1,7 @@
 {
-	"name": "auth",
+	"name": "@eetr/auth",
 	"version": "0.1.0",
+	"description": "OAuth 2.1 and OpenID Connect authorization server for Cloudflare Workers",
 	"private": true,
 	"scripts": {
 		"dev": "next dev",
