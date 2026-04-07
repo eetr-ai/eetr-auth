@@ -51,10 +51,11 @@ npm run infra:render-wrangler
 ```
 
 Writes `wrangler.generated.jsonc` (gitignored) with D1 id, R2 bucket, worker `name` + `WORKER_SELF_REFERENCE`, and `vars` URLs from Terraform.
+Re-running it updates the Terraform-managed fields and preserves custom Wrangler `vars` that are not managed by Terraform.
 
 Optional email sender override:
 
-- Set `EMAIL_FROM_ADDRESS` in Wrangler `vars` (for example `no-reply@auth.example.com`).
+- Set `EMAIL_FROM_ADDRESS` in `wrangler.generated.jsonc` under `vars` (for example `no-reply@auth.example.com`).
 - Use a sender address that is valid for your Resend configuration.
 - If unset, the app falls back to `no-reply@<site hostname>`.
 

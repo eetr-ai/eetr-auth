@@ -8,9 +8,11 @@
  *
  * Optional overrides (non-empty wins over Terraform): --issuer-base-url, --auth-url, --jwks-cdn-base-url
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import stripJsonComments from "strip-json-comments";
+
+const MANAGED_VAR_KEYS = new Set(["AUTH_URL", "ISSUER_BASE_URL", "JWKS_CDN_BASE_URL"]);
 
 function parseArgs(argv) {
 	const out = {
@@ -61,6 +63,10 @@ function readTfJson(pathOrStdin) {
 	return unwrapTerraformOutput(JSON.parse(text));
 }
 
+function readJsoncFile(filePath) {
+	return JSON.parse(stripJsonComments(readFileSync(filePath, "utf8")));
+}
+
 function main() {
 	const args = parseArgs(process.argv.slice(2));
 	const root = process.cwd();
@@ -74,9 +80,19 @@ function main() {
 		process.exit(1);
 	}
 
-	const baseText = readFileSync(basePath, "utf8");
-	const config = JSON.parse(stripJsonComments(baseText));
+	const config = readJsoncFile(basePath);
 	const tf = readTfJson(tfPath);
+	const outPath = resolve(root, args.outFile);
+	const existingConfig = existsSync(outPath) ? readJsoncFile(outPath) : null;
+
+	if (existingConfig?.vars && typeof existingConfig.vars === "object") {
+		config.vars = {
+			...config.vars,
+			...Object.fromEntries(
+				Object.entries(existingConfig.vars).filter(([key]) => !MANAGED_VAR_KEYS.has(key))
+			),
+		};
+	}
 
 	const workerName = tf.worker_name;
 	if (typeof workerName !== "string" || !workerName.trim()) {
@@ -122,7 +138,6 @@ function main() {
 	config.vars.AUTH_URL = auth;
 	config.vars.JWKS_CDN_BASE_URL = jwksCdn;
 
-	const outPath = resolve(root, args.outFile);
 	writeFileSync(outPath, JSON.stringify(config, null, "\t") + "\n", "utf8");
 	console.log("Wrote", outPath);
 }
