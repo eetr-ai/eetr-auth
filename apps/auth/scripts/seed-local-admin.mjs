@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 import { randomUUID } from "node:crypto";
 import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
-import md5 from "md5";
 import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import md5 from "md5";
+import stripJsonComments from "strip-json-comments";
+
+const DEFAULT_LOCAL_WRANGLER_CONFIGS = ["wrangler.generated.jsonc", "infra/wrangler.template.jsonc"];
 
 const username = "admin";
 const password = "admin";
@@ -31,12 +34,55 @@ ON CONFLICT(username) DO UPDATE SET
 const tmpDir = join(process.cwd(), ".tmp");
 const sqlPath = join(tmpDir, `seed-local-admin-${Date.now()}.sql`);
 
+function resolveDefaultLocalConfigPath() {
+	for (const candidate of DEFAULT_LOCAL_WRANGLER_CONFIGS) {
+		if (existsSync(candidate)) {
+			return candidate;
+		}
+	}
+
+	return "";
+}
+
+function resolveLocalDbTarget(configPath) {
+	if (!configPath) {
+		return process.env.D1_DATABASE_NAME?.trim() || "eetr-auth";
+	}
+
+	try {
+		const cfgRaw = readFileSync(configPath, "utf8");
+		const cfg = JSON.parse(stripJsonComments(cfgRaw));
+		const binding = cfg?.d1_databases?.[0]?.binding;
+		const databaseName = cfg?.d1_databases?.[0]?.database_name;
+
+		if (typeof binding === "string" && binding.trim()) {
+			return binding.trim();
+		}
+
+		if (typeof databaseName === "string" && databaseName.trim()) {
+			return databaseName.trim();
+		}
+	} catch (error) {
+		console.warn(
+			`Warning: could not read Wrangler config ${configPath}: ${(error && error.message) || error}`
+		);
+	}
+
+	return process.env.D1_DATABASE_NAME?.trim() || "eetr-auth";
+}
+
 try {
 	if (!existsSync(tmpDir)) {
 		mkdirSync(tmpDir, { recursive: true });
 	}
 	writeFileSync(sqlPath, sql, "utf8");
-	execSync(`npx wrangler d1 execute eetr-auth --local --file=${JSON.stringify(sqlPath)}`, {
+	const wranglerConfig = process.env.WRANGLER_CONFIG?.trim() || resolveDefaultLocalConfigPath();
+	const dbTarget = resolveLocalDbTarget(wranglerConfig);
+	const configArg = wranglerConfig ? ` --config ${JSON.stringify(wranglerConfig)}` : "";
+	if (wranglerConfig) {
+		console.log(`Using Wrangler config: ${wranglerConfig}`);
+	}
+	execSync(`npx wrangler d1 execute ${JSON.stringify(dbTarget)} --local${configArg} --file=${JSON.stringify(sqlPath)}`, {
 		stdio: "inherit",
 		cwd: process.cwd(),
 	});

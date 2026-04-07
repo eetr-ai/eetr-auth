@@ -6,11 +6,12 @@
  * Usage: node scripts/run-d1-migrate.mjs --local|--remote [--file=./db/schema.sql]
  */
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import stripJsonComments from "strip-json-comments";
 
 const INITIAL_SCHEMA_VERSION = "0.0.0";
+const DEFAULT_LOCAL_WRANGLER_CONFIGS = ["wrangler.generated.jsonc", "infra/wrangler.template.jsonc"];
 
 const args = process.argv.slice(2);
 const local = args.includes("--local");
@@ -26,6 +27,23 @@ let configPath =
 		? passthroughArgs[configArgIndex + 1]
 		: passthroughArgs.find((a) => a.startsWith("--config="))?.slice("--config=".length) ?? "";
 
+function resolveDefaultLocalConfigPath() {
+	for (const candidate of DEFAULT_LOCAL_WRANGLER_CONFIGS) {
+		if (existsSync(resolve(process.cwd(), candidate))) {
+			return candidate;
+		}
+	}
+
+	return "";
+}
+
+if (local && !configPath) {
+	configPath = process.env.WRANGLER_CONFIG?.trim() || resolveDefaultLocalConfigPath();
+	if (configPath) {
+		passthroughArgs.push("--config", configPath);
+	}
+}
+
 if (remote && !configPath) {
 	configPath = process.env.WRANGLER_CONFIG?.trim() || "wrangler.generated.jsonc";
 	passthroughArgs.push("--config", configPath);
@@ -37,12 +55,17 @@ if (!local && !remote) {
 }
 
 let configDbName = "";
+let configDbBinding = "";
 
 if (configPath) {
 	try {
 		const cfgRaw = readFileSync(resolve(process.cwd(), configPath), "utf8");
 		const cfg = JSON.parse(stripJsonComments(cfgRaw));
+		const fromBinding = cfg?.d1_databases?.[0]?.binding;
 		const fromConfig = cfg?.d1_databases?.[0]?.database_name;
+		if (typeof fromBinding === "string" && fromBinding.trim()) {
+			configDbBinding = fromBinding.trim();
+		}
 		if (typeof fromConfig === "string" && fromConfig.trim()) {
 			configDbName = fromConfig.trim();
 		}
@@ -53,8 +76,10 @@ if (configPath) {
 	}
 }
 
-const dbName = process.env.D1_DATABASE_NAME || configDbName || (local ? "eetr-auth" : "");
-if (!dbName) {
+const dbTarget = local
+	? configDbBinding || process.env.D1_DATABASE_NAME || configDbName || "eetr-auth"
+	: process.env.D1_DATABASE_NAME || configDbName;
+if (!dbTarget) {
 	console.error(
 		"Remote migrations could not determine the D1 database name. Set D1_DATABASE_NAME or provide a Wrangler config with d1_databases[0].database_name."
 	);
@@ -80,7 +105,7 @@ function compareVersions(left, right) {
 }
 
 function runWrangler(argsList, options = {}) {
-	const result = spawnSync("npx", ["wrangler", "d1", "execute", dbName, flag, ...argsList], {
+	const result = spawnSync("npx", ["wrangler", "d1", "execute", dbTarget, flag, ...argsList], {
 		cwd: workspaceCwd,
 		encoding: "utf8",
 		stdio: options.captureOutput ? ["inherit", "pipe", "pipe"] : "inherit",

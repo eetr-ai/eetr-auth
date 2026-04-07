@@ -17,6 +17,8 @@ import { join } from "node:path";
 import { execSync } from "node:child_process";
 import stripJsonComments from "strip-json-comments";
 
+const DEFAULT_LOCAL_WRANGLER_CONFIGS = ["wrangler.generated.jsonc", "infra/wrangler.template.jsonc"];
+
 const args = process.argv.slice(2);
 let localOnly = false;
 let remoteOnly = false;
@@ -72,14 +74,29 @@ if (!localOnly && !wranglerConfig) {
 	wranglerConfig = "wrangler.generated.jsonc";
 }
 
+function resolveDefaultLocalConfigPath() {
+	for (const candidate of DEFAULT_LOCAL_WRANGLER_CONFIGS) {
+		if (existsSync(candidate)) {
+			return candidate;
+		}
+	}
+
+	return "";
+}
+
 let configDbName = "";
+let configDbBinding = "";
 
 if (wranglerConfig) {
 	try {
 		const cfgRaw = readFileSync(wranglerConfig, "utf8");
 		const cfg = JSON.parse(stripJsonComments(cfgRaw));
 		if (Array.isArray(cfg?.d1_databases) && cfg.d1_databases[0]) {
+			const fromBinding = cfg.d1_databases[0].binding;
 			const fromConfig = cfg.d1_databases[0].database_name;
+			if (typeof fromBinding === "string" && fromBinding.trim()) {
+				configDbBinding = fromBinding.trim();
+			}
 			if (typeof fromConfig === "string" && fromConfig.trim()) {
 				configDbName = fromConfig.trim();
 			}
@@ -133,24 +150,34 @@ try {
 	if (!existsSync(tmpDir)) mkdirSync(tmpDir, { recursive: true });
 	writeFileSync(sqlPath, sql, "utf8");
 
-	const dbName = process.env.D1_DATABASE_NAME || configDbName || (remoteOnly ? "" : "eetr-auth");
-	if (!localOnly && !dbName) {
+	const localWranglerConfig = !remoteOnly
+		? process.env.WRANGLER_CONFIG?.trim() || wranglerConfig || resolveDefaultLocalConfigPath()
+		: wranglerConfig;
+	const localDbTarget = configDbBinding || process.env.D1_DATABASE_NAME || configDbName || "eetr-auth";
+	const remoteDbTarget = process.env.D1_DATABASE_NAME || configDbName;
+	if (!localOnly && !remoteDbTarget) {
 		console.error(
 			"Remote admin creation requires wrangler.generated.jsonc, --config <path>, or D1_DATABASE_NAME. Run npm run infra:render-wrangler first."
 		);
 		process.exit(1);
 	}
 	const configArg = wranglerConfig ? ` --config ${JSON.stringify(wranglerConfig)}` : "";
+	const localConfigArg = localWranglerConfig ? ` --config ${JSON.stringify(localWranglerConfig)}` : configArg;
 	if (wranglerConfig) {
 		console.log(`Using Wrangler config: ${wranglerConfig}`);
+	}
+	if (!remoteOnly && localWranglerConfig && localWranglerConfig !== wranglerConfig) {
+		console.log(`Using local Wrangler config: ${localWranglerConfig}`);
 	}
 	if (!process.env.D1_DATABASE_NAME && configDbName) {
 		console.log(`Using D1 database_name from config: ${configDbName}`);
 	}
 	const run = (target) => {
 		const flag = target === "local" ? "--local" : "--remote";
+		const dbTarget = target === "local" ? localDbTarget : remoteDbTarget;
+		const runConfigArg = target === "local" ? localConfigArg : configArg;
 		execSync(
-			`npx wrangler d1 execute ${JSON.stringify(dbName)} ${flag}${configArg} --file=${JSON.stringify(sqlPath)}`,
+			`npx wrangler d1 execute ${JSON.stringify(dbTarget)} ${flag}${runConfigArg} --file=${JSON.stringify(sqlPath)}`,
 			{
 				stdio: "inherit",
 				cwd: process.cwd(),
