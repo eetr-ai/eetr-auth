@@ -37,3 +37,70 @@ pub fn verify_password(password: &str, hash: &str) -> Result<bool, String> {
 	let parsed = PasswordHash::new(hash).map_err(|_| "invalid hash format".to_string())?;
 	Ok(Argon2::default().verify_password(password.as_bytes(), &parsed).is_ok())
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	// --- configured_argon2 ---
+
+	#[test]
+	fn configured_argon2_builds_successfully() {
+		assert!(configured_argon2().is_ok());
+	}
+
+	// --- hash_password ---
+
+	#[test]
+	fn hash_password_returns_phc_string() {
+		let hash = hash_password("secret").unwrap();
+		// PHC strings start with "$argon2id$"
+		assert!(hash.starts_with("$argon2id$"), "unexpected hash prefix: {hash}");
+	}
+
+	#[test]
+	fn hash_password_produces_unique_hashes() {
+		let h1 = hash_password("secret").unwrap();
+		let h2 = hash_password("secret").unwrap();
+		assert_ne!(h1, h2, "two hashes of the same password must differ (random salt)");
+	}
+
+	#[test]
+	fn hash_password_rejects_empty_password() {
+		let err = hash_password("").unwrap_err();
+		assert_eq!(err, "password must not be empty");
+	}
+
+	// --- verify_password ---
+
+	#[test]
+	fn verify_password_accepts_correct_password() {
+		let hash = hash_password("correct-horse").unwrap();
+		assert!(verify_password("correct-horse", &hash).unwrap());
+	}
+
+	#[test]
+	fn verify_password_rejects_wrong_password() {
+		let hash = hash_password("correct-horse").unwrap();
+		assert!(!verify_password("wrong-horse", &hash).unwrap());
+	}
+
+	#[test]
+	fn verify_password_rejects_empty_password() {
+		let hash = hash_password("some-password").unwrap();
+		let err = verify_password("", &hash).unwrap_err();
+		assert_eq!(err, "password must not be empty");
+	}
+
+	#[test]
+	fn verify_password_rejects_empty_hash() {
+		let err = verify_password("some-password", "").unwrap_err();
+		assert_eq!(err, "hash must not be empty");
+	}
+
+	#[test]
+	fn verify_password_rejects_malformed_hash() {
+		let err = verify_password("some-password", "not-a-valid-phc-hash").unwrap_err();
+		assert_eq!(err, "invalid hash format");
+	}
+}
