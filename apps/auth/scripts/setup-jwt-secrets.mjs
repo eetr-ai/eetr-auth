@@ -65,7 +65,7 @@ function listExistingSecrets(configPath) {
 	if (wranglerEnv) {
 		commandArgs.push("--env", wranglerEnv);
 	}
-	commandArgs.push("--config", configPath, "--json");
+	commandArgs.push("--config", configPath, "--format", "json");
 	try {
 		const output = execFileSync("npx", commandArgs, {
 			cwd: process.cwd(),

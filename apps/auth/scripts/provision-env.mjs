@@ -62,7 +62,7 @@ function listExistingSecrets(configPath, cwd) {
 	try {
 		const output = execFileSync(
 			"npx",
-			["wrangler", "secret", "list", "--config", configPath, "--json"],
+			["wrangler", "secret", "list", "--config", configPath, "--format", "json"],
 			{ cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }
 		);
 		const parsed = JSON.parse(output);
