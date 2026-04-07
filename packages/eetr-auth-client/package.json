@@ -1,0 +1,27 @@
+{
+  "name": "@eetr/eetr-auth-client",
+  "version": "0.1.0",
+  "description": "TypeScript client library for eetr-auth OAuth 2.1 / OIDC server",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch"
+  },
+  "dependencies": {
+    "jose": "^5.9.6"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
