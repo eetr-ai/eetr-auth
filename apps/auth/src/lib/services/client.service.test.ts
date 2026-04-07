@@ -158,4 +158,164 @@ describe("ClientService", () => {
 			"HMAC_KEY is required to create OAuth clients (set in Wrangler secrets or .dev.vars)."
 		);
 	});
+
+	describe("list / getById / getByClientIdentifier", () => {
+		it("delegates list to the repo", async () => {
+			const repo = createClientRepoMock();
+			repo.list.mockResolvedValue([makeClient()]);
+			const service = createService(repo);
+
+			await expect(service.list()).resolves.toHaveLength(1);
+			expect(repo.list).toHaveBeenCalled();
+		});
+
+		it("filters by environmentId when provided", async () => {
+			const repo = createClientRepoMock();
+			repo.list.mockResolvedValue([]);
+			const service = createService(repo);
+
+			await service.list("env-1");
+			expect(repo.list).toHaveBeenCalledWith("env-1");
+		});
+
+		it("returns null when getById finds no client", async () => {
+			const repo = createClientRepoMock();
+			repo.getById.mockResolvedValue(null);
+			const service = createService(repo);
+
+			await expect(service.getById("missing")).resolves.toBeNull();
+		});
+
+		it("delegates getByClientIdentifier to the repo", async () => {
+			const repo = createClientRepoMock();
+			repo.getByClientIdentifier.mockResolvedValue(makeClient());
+			const service = createService(repo);
+
+			await expect(service.getByClientIdentifier("progression_abc")).resolves.toEqual(makeClient());
+		});
+	});
+
+	describe("getClientWithDetails", () => {
+		it("returns null when the client is not found", async () => {
+			const repo = createClientRepoMock();
+			repo.getById.mockResolvedValue(null);
+			const service = createService(repo);
+
+			await expect(service.getClientWithDetails("missing")).resolves.toBeNull();
+		});
+
+		it("returns the client with redirect URIs and scope IDs", async () => {
+			const repo = createClientRepoMock();
+			repo.getById.mockResolvedValue(makeClient());
+			repo.getRedirectUris.mockResolvedValue(["https://example.com/callback"]);
+			repo.getClientScopes.mockResolvedValue([{ scopeId: "scope-read" }]);
+			const service = createService(repo);
+
+			const result = await service.getClientWithDetails("client-row-1");
+			expect(result?.redirectUris).toEqual(["https://example.com/callback"]);
+			expect(result?.scopeIds).toEqual(["scope-read"]);
+		});
+	});
+
+	describe("updateRedirectUris", () => {
+		it("returns null when the client is not found", async () => {
+			const repo = createClientRepoMock();
+			repo.getById.mockResolvedValue(null);
+			const service = createService(repo);
+
+			await expect(service.updateRedirectUris("missing", ["https://example.com"])).resolves.toBeNull();
+		});
+
+		it("sets filtered redirect URIs and returns updated client", async () => {
+			const repo = createClientRepoMock();
+			repo.getById.mockResolvedValue(makeClient());
+			repo.getRedirectUris.mockResolvedValue(["https://example.com/callback"]);
+			repo.getClientScopes.mockResolvedValue([]);
+			const service = createService(repo);
+
+			const result = await service.updateRedirectUris("client-row-1", ["https://example.com/callback", "   "]);
+			expect(repo.setRedirectUris).toHaveBeenCalledWith("client-row-1", ["https://example.com/callback"]);
+			expect(result?.redirectUris).toEqual(["https://example.com/callback"]);
+		});
+	});
+
+	describe("updateScopes", () => {
+		it("returns null when the client is not found", async () => {
+			const repo = createClientRepoMock();
+			repo.getById.mockResolvedValue(null);
+			const service = createService(repo);
+
+			await expect(service.updateScopes("missing", ["scope-1"])).resolves.toBeNull();
+		});
+
+		it("sets filtered scope IDs and returns updated client", async () => {
+			const repo = createClientRepoMock();
+			repo.getById.mockResolvedValue(makeClient());
+			repo.getRedirectUris.mockResolvedValue([]);
+			repo.getClientScopes.mockResolvedValue([{ scopeId: "scope-1" }]);
+			const service = createService(repo);
+
+			const result = await service.updateScopes("client-row-1", ["scope-1", ""]);
+			expect(repo.setClientScopes).toHaveBeenCalledWith("client-row-1", ["scope-1"]);
+			expect(result?.scopeIds).toEqual(["scope-1"]);
+		});
+	});
+
+	describe("updateName", () => {
+		it("returns null when the client is not found", async () => {
+			const repo = createClientRepoMock();
+			repo.getById.mockResolvedValue(null);
+			const service = createService(repo);
+
+			await expect(service.updateName("missing", "New Name")).resolves.toBeNull();
+		});
+
+		it("updates the client name", async () => {
+			const repo = createClientRepoMock();
+			repo.getById.mockResolvedValue(makeClient());
+			repo.getRedirectUris.mockResolvedValue([]);
+			repo.getClientScopes.mockResolvedValue([]);
+			const service = createService(repo);
+
+			await service.updateName("client-row-1", "Updated Name");
+			expect(repo.updateName).toHaveBeenCalledWith("client-row-1", "Updated Name");
+		});
+	});
+
+	describe("delete", () => {
+		it("returns false when the client is not found", async () => {
+			const repo = createClientRepoMock();
+			repo.getById.mockResolvedValue(null);
+			const service = createService(repo);
+
+			await expect(service.delete("missing")).resolves.toBe(false);
+		});
+
+		it("deletes the client and returns true", async () => {
+			const repo = createClientRepoMock();
+			repo.getById.mockResolvedValue(makeClient());
+			const service = createService(repo);
+
+			await expect(service.delete("client-row-1")).resolves.toBe(true);
+			expect(repo.delete).toHaveBeenCalledWith("client-row-1");
+		});
+	});
+
+	describe("rotateSecret", () => {
+		it("throws when HMAC_KEY is missing", async () => {
+			const service = createService(createClientRepoMock(), { CLIENT_KEY_PREFIX: "progression" } as unknown as CloudflareEnv);
+
+			await expect(service.rotateSecret("client-row-1")).rejects.toThrow(
+				"HMAC_KEY is required to rotate OAuth client secrets"
+			);
+		});
+
+		it("returns null when the client is not found", async () => {
+			const repo = createClientRepoMock();
+			repo.getById.mockResolvedValue(null);
+			const service = createService(repo);
+
+			await expect(service.rotateSecret("missing")).resolves.toBeNull();
+		});
+	});
 });

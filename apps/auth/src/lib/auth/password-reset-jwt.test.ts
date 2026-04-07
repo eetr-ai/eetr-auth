@@ -62,4 +62,45 @@ describe("password reset JWT", () => {
 
 		await expect(verifyPasswordResetJwt(env, token)).rejects.toThrow("Invalid token purpose.");
 	});
+
+	it("throws when JWT_PRIVATE_KEY is not configured", async () => {
+		await expect(
+			signPasswordResetJwt(
+				{ ISSUER_BASE_URL: "https://auth.test.local", JWT_KID: "test-kid" },
+				{ challengeId: "c1", userId: "u1", expiresAt: new Date(Date.now() + 60000) }
+			)
+		).rejects.toThrow("JWT_PRIVATE_KEY is not configured.");
+	});
+
+	it("throws when JWKS is not available for verification", async () => {
+		// Provide a valid token but no JWKS source
+		const signingKey = await importPKCS8(privateKeyPem, "RS256");
+		const token = await new SignJWT({ purpose: "password_reset" })
+			.setProtectedHeader({ alg: "RS256", kid: "test-kid" })
+			.setIssuer("https://auth.test.local")
+			.setSubject("user-1")
+			.setJti("c-1")
+			.setIssuedAt()
+			.setExpirationTime("1h")
+			.sign(signingKey);
+
+		await expect(
+			verifyPasswordResetJwt({ ISSUER_BASE_URL: "https://auth.test.local" }, token)
+		).rejects.toThrow("JWKS not available for password reset verification.");
+	});
+
+	it("throws when the token claims are invalid (empty sub or jti)", async () => {
+		const signingKey = await importPKCS8(privateKeyPem, "RS256");
+		// Token with empty subject — jti is also required
+		const token = await new SignJWT({ purpose: "password_reset" })
+			.setProtectedHeader({ alg: "RS256", kid: "test-kid" })
+			.setIssuer("https://auth.test.local")
+			.setSubject("")
+			.setJti("")
+			.setIssuedAt()
+			.setExpirationTime("1h")
+			.sign(signingKey);
+
+		await expect(verifyPasswordResetJwt(env, token)).rejects.toThrow("Invalid token claims.");
+	});
 });

@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { exportJWK, exportPKCS8, generateKeyPair, SignJWT } from "jose";
 
 import type { AuthorizationCodeRepository, AuthorizationCodeWithScopeIds } from "@/lib/repositories/authorization-code.repository";
 import type { Client, ClientRepository } from "@/lib/repositories/client.repository";
@@ -480,6 +481,357 @@ describe("OauthTokenService", () => {
 				valid: false,
 				active: false,
 			});
+		});
+
+		it("returns invalid when the token is null", async () => {
+			const service = createService();
+			await expect(service.validateAccessToken(null, ["read:users"], null)).resolves.toMatchObject({
+				valid: false,
+				active: false,
+				clientId: null,
+				missingScopes: ["read:users"],
+			});
+		});
+
+		it("returns valid=false with missingScopes when the token lacks required scopes", async () => {
+			const tokenRepo = createTokenRepoMock();
+			tokenRepo.getAccessTokenByTokenId.mockResolvedValue(
+				makeAccessTokenRecord({ scopeNames: ["read:users"] })
+			);
+			const service = createService({ tokenRepo });
+
+			const result = await service.validateAccessToken("at_existing", ["read:users", "write:users"], null);
+			expect(result.valid).toBe(false);
+			expect(result.missingScopes).toEqual(["write:users"]);
+		});
+
+		it("returns environmentMatch=false when environment does not match", async () => {
+			const tokenRepo = createTokenRepoMock();
+			tokenRepo.getAccessTokenByTokenId.mockResolvedValue(
+				makeAccessTokenRecord({ expiresAt: "2026-04-06T14:10:00.000Z" })
+			);
+			const service = createService({ tokenRepo });
+
+			const result = await service.validateAccessToken("at_existing", [], "staging");
+			expect(result.valid).toBe(false);
+			expect(result.environmentMatch).toBe(false);
+		});
+	});
+
+	describe("exchange (miscellaneous)", () => {
+		it("throws unsupported_grant_type for an unknown grant_type", async () => {
+			const service = createService();
+			await expect(
+				service.exchange({ grantType: "implicit", clientId: null, clientSecret: null })
+			).rejects.toMatchObject({ code: "unsupported_grant_type", status: 400 });
+		});
+
+		it("throws invalid_request when refresh_token is missing in refresh_token grant", async () => {
+			const clientRepo = createClientRepoMock();
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient());
+			const service = createService({ clientRepo });
+
+			await expect(
+				service.exchange({ grantType: "refresh_token", clientId: "client-app-id", clientSecret: "plain-secret", refreshToken: null })
+			).rejects.toMatchObject({ code: "invalid_request", message: "Missing refresh_token.", status: 400 });
+		});
+
+		it("throws invalid_scope when requesting scopes not granted to the client", async () => {
+			const clientRepo = createClientRepoMock();
+			const tokenRepo = createTokenRepoMock();
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient());
+			tokenRepo.getClientScopeGrants.mockResolvedValue([makeGrant({ scopeName: "read:users" })]);
+			const service = createService({ clientRepo, tokenRepo });
+
+			await expect(
+				service.exchange({ grantType: "client_credentials", clientId: "client-app-id", clientSecret: "plain-secret", scope: "write:users" })
+			).rejects.toMatchObject({ code: "invalid_scope", status: 400 });
+		});
+
+		it("throws invalid_grant when the authorization code uses an unsupported challenge method", async () => {
+			const clientRepo = createClientRepoMock();
+			const authorizationCodeRepo = createAuthorizationCodeRepoMock();
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient());
+			authorizationCodeRepo.getByCodeId.mockResolvedValue(
+				makeAuthorizationCode({ codeChallengeMethod: "plain" })
+			);
+			const service = createService({ clientRepo, authorizationCodeRepo });
+
+			await expect(
+				service.exchange({
+					grantType: "authorization_code",
+					clientId: "client-app-id",
+					clientSecret: "plain-secret",
+					code: "code_123",
+					redirectUri: "https://client.example.com/callback",
+					codeVerifier: "verifier-123",
+				})
+			).rejects.toMatchObject({ code: "invalid_grant", message: "Unsupported PKCE challenge method.", status: 400 });
+		});
+	});
+
+	describe("listTokenActivity", () => {
+		it("returns an empty list when there are no tokens", async () => {
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			tokenRepo.listAccessTokenActivity.mockResolvedValue([]);
+			refreshTokenRepo.listRefreshTokenActivity.mockResolvedValue([]);
+			const service = createService({ tokenRepo, refreshTokenRepo });
+
+			await expect(service.listTokenActivity()).resolves.toEqual([]);
+		});
+
+		it("merges and sorts access and refresh token activity by createdAt/expiresAt descending", async () => {
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			// Access token: sort key = expiresAt = "2026-04-06T14:10:00.000Z"
+			tokenRepo.listAccessTokenActivity.mockResolvedValue([
+				{
+					tokenId: "at_1",
+					clientId: "client-row-1",
+					clientName: "Client A",
+					environmentId: "env-1",
+					expiresAt: "2026-04-06T14:10:00.000Z",
+					status: "active" as const,
+					scopeNames: ["read:users"],
+				},
+			]);
+			// Refresh token: sort key = createdAt = "2026-04-06T15:00:00.000Z" (later → comes first)
+			refreshTokenRepo.listRefreshTokenActivity.mockResolvedValue([
+				{
+					tokenId: "rt_1",
+					clientId: "client-row-1",
+					clientName: "Client A",
+					environmentId: "env-1",
+					expiresAt: "2026-05-06T13:10:00.000Z",
+					status: "active" as const,
+					scopeNames: ["read:users"],
+					createdAt: "2026-04-06T15:00:00.000Z",
+					rotatedFromTokenId: null,
+				},
+			]);
+			const service = createService({ tokenRepo, refreshTokenRepo });
+
+			const result = await service.listTokenActivity();
+			expect(result).toHaveLength(2);
+			// Refresh createdAt (15:00) > Access expiresAt (14:10) → refresh sorts first (descending)
+			expect(result[0].tokenType).toBe("refresh");
+			expect(result[1].tokenType).toBe("access");
+		});
+
+		it("passes clientId to both repos when provided", async () => {
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			tokenRepo.listAccessTokenActivity.mockResolvedValue([]);
+			refreshTokenRepo.listRefreshTokenActivity.mockResolvedValue([]);
+			const service = createService({ tokenRepo, refreshTokenRepo });
+
+			await service.listTokenActivity("client-app-id");
+			expect(tokenRepo.listAccessTokenActivity).toHaveBeenCalledWith("client-app-id");
+			expect(refreshTokenRepo.listRefreshTokenActivity).toHaveBeenCalledWith("client-app-id");
+		});
+	});
+
+	describe("revokeTokenByValue", () => {
+		it("returns revoked=false for a null token", async () => {
+			const service = createService();
+			await expect(service.revokeTokenByValue(null)).resolves.toEqual({ revoked: false, tokenType: null });
+		});
+
+		it("returns revoked=false for a whitespace-only token", async () => {
+			const service = createService();
+			await expect(service.revokeTokenByValue("   ")).resolves.toEqual({ revoked: false, tokenType: null });
+		});
+
+		it("revokes an opaque refresh token", async () => {
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			refreshTokenRepo.getByTokenId.mockResolvedValue(makeRefreshToken({ revokedAt: null }));
+			const service = createService({ refreshTokenRepo });
+
+			const result = await service.revokeTokenByValue("rt_existing");
+			expect(refreshTokenRepo.revoke).toHaveBeenCalledWith("refresh-row-1", "2026-04-06T13:10:00.000Z");
+			expect(result).toEqual({ revoked: true, tokenType: "refresh" });
+		});
+
+		it("does not call revoke again if the refresh token is already revoked", async () => {
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			refreshTokenRepo.getByTokenId.mockResolvedValue(makeRefreshToken({ revokedAt: "2026-04-06T13:00:00.000Z" }));
+			const service = createService({ refreshTokenRepo });
+
+			const result = await service.revokeTokenByValue("rt_existing");
+			expect(refreshTokenRepo.revoke).not.toHaveBeenCalled();
+			expect(result).toEqual({ revoked: true, tokenType: "refresh" });
+		});
+
+		it("revokes an opaque access token when no refresh token is found", async () => {
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			refreshTokenRepo.getByTokenId.mockResolvedValue(null);
+			tokenRepo.revokeAccessTokenByTokenId.mockResolvedValue(true);
+			const service = createService({ tokenRepo, refreshTokenRepo });
+
+			const result = await service.revokeTokenByValue("at_some_opaque");
+			expect(tokenRepo.revokeAccessTokenByTokenId).toHaveBeenCalledWith("at_some_opaque", "2026-04-06T13:10:00.000Z");
+			expect(result).toEqual({ revoked: true, tokenType: "access" });
+		});
+
+		it("returns revoked=false when neither token type is found", async () => {
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			refreshTokenRepo.getByTokenId.mockResolvedValue(null);
+			tokenRepo.revokeAccessTokenByTokenId.mockResolvedValue(false);
+			const service = createService({ tokenRepo, refreshTokenRepo });
+
+			await expect(service.revokeTokenByValue("unknown_token")).resolves.toEqual({ revoked: false, tokenType: null });
+		});
+	});
+
+	describe("deleteTokenByValue", () => {
+		it("returns deleted=false for a null token", async () => {
+			const service = createService();
+			await expect(service.deleteTokenByValue(null)).resolves.toEqual({ deleted: false, tokenType: null });
+		});
+
+		it("deletes a refresh token", async () => {
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			refreshTokenRepo.deleteByTokenId.mockResolvedValue(true);
+			const service = createService({ refreshTokenRepo });
+
+			await expect(service.deleteTokenByValue("rt_some")).resolves.toEqual({ deleted: true, tokenType: "refresh" });
+		});
+
+		it("deletes an opaque access token when no refresh token matches", async () => {
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			refreshTokenRepo.deleteByTokenId.mockResolvedValue(false);
+			tokenRepo.deleteAccessTokenByTokenId.mockResolvedValue(true);
+			const service = createService({ tokenRepo, refreshTokenRepo });
+
+			await expect(service.deleteTokenByValue("at_opaque")).resolves.toEqual({ deleted: true, tokenType: "access" });
+		});
+
+		it("returns deleted=false when neither token type is found", async () => {
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			refreshTokenRepo.deleteByTokenId.mockResolvedValue(false);
+			tokenRepo.deleteAccessTokenByTokenId.mockResolvedValue(false);
+			const service = createService({ tokenRepo, refreshTokenRepo });
+
+			await expect(service.deleteTokenByValue("unknown")).resolves.toEqual({ deleted: false, tokenType: null });
+		});
+	});
+
+	describe("cleanupTokenArtifacts", () => {
+		it("returns all-zero result without hitting the DB on dryRun=true", async () => {
+			const tokenRepo = createTokenRepoMock();
+			const service = createService({ tokenRepo });
+
+			const result = await service.cleanupTokenArtifacts(true);
+			expect(result.totalDeleted).toBe(0);
+			expect(tokenRepo.deleteExpiredAccessTokens).not.toHaveBeenCalled();
+		});
+
+		it("deletes expired and revoked tokens when dryRun=false", async () => {
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			const authorizationCodeRepo = createAuthorizationCodeRepoMock();
+			tokenRepo.deleteExpiredAccessTokens.mockResolvedValue(3);
+			refreshTokenRepo.deleteExpired.mockResolvedValue(2);
+			refreshTokenRepo.deleteRevoked.mockResolvedValue(1);
+			authorizationCodeRepo.deleteUsedOrExpired.mockResolvedValue(4);
+			const service = createService({ tokenRepo, refreshTokenRepo, authorizationCodeRepo });
+
+			const result = await service.cleanupTokenArtifacts(false);
+			expect(result).toEqual({
+				accessTokensDeleted: 3,
+				refreshTokensExpiredDeleted: 2,
+				refreshTokensRevokedDeleted: 1,
+				authorizationCodesDeleted: 4,
+				totalDeleted: 10,
+			});
+		});
+	});
+
+	describe("validateAccessToken (JWT format)", () => {
+		let jwksJson: string;
+		let signedJwt: string;
+
+		beforeAll(async () => {
+			const { privateKey, publicKey } = await generateKeyPair("RS256", { extractable: true });
+			const publicJwk = await exportJWK(publicKey);
+			jwksJson = JSON.stringify({ keys: [{ ...publicJwk, kid: "test-kid" }] });
+
+			signedJwt = await new SignJWT({ scope: "read:users" })
+				.setProtectedHeader({ alg: "RS256", kid: "test-kid" })
+				.setIssuer("https://auth.example.com")
+				.setSubject("user-123")
+				.setJti("jti-test-001")
+				.setIssuedAt()
+				.setExpirationTime("1h")
+				.sign(privateKey);
+		});
+
+		it("validates a signed JWT via JWKS from env and returns valid=true", async () => {
+			const tokenRepo = createTokenRepoMock();
+			tokenRepo.getAccessTokenByTokenId.mockResolvedValue(
+				makeAccessTokenRecord({ tokenId: "jti-test-001", expiresAt: "2026-04-06T14:10:00.000Z" })
+			);
+			const service = createService({
+				tokenRepo,
+				env: { JWT_JWKS_JSON: jwksJson } as unknown as CloudflareEnv,
+			});
+
+			const result = await service.validateAccessToken(signedJwt, [], null);
+			expect(result.valid).toBe(true);
+			expect(result.active).toBe(true);
+			expect(result.subject).toBe("user-123");
+		});
+
+		it("falls back to DB lookup by jti when no JWKS is available", async () => {
+			const tokenRepo = createTokenRepoMock();
+			tokenRepo.getAccessTokenByTokenId.mockResolvedValue(
+				makeAccessTokenRecord({ tokenId: "jti-test-001", expiresAt: "2026-04-06T14:10:00.000Z" })
+			);
+			const service = createService({ tokenRepo });
+
+			const result = await service.validateAccessToken(signedJwt, [], null);
+			expect(result.valid).toBe(true);
+			expect(tokenRepo.getAccessTokenByTokenId).toHaveBeenCalledWith("jti-test-001");
+		});
+
+		it("returns invalid when JWT signature verification fails (wrong key)", async () => {
+			// Use a different key set that doesn't match the signed token
+			const { publicKey: wrongKey } = await generateKeyPair("RS256", { extractable: true });
+			const wrongJwk = await exportJWK(wrongKey);
+			const wrongJwksJson = JSON.stringify({ keys: [{ ...wrongJwk, kid: "test-kid" }] });
+
+			const service = createService({
+				env: { JWT_JWKS_JSON: wrongJwksJson } as unknown as CloudflareEnv,
+			});
+
+			const result = await service.validateAccessToken(signedJwt, [], null);
+			expect(result.valid).toBe(false);
+		});
+
+		it("returns invalid when jti is missing in JWKS validation result", async () => {
+			const { privateKey, publicKey } = await generateKeyPair("RS256", { extractable: true });
+			const publicJwk = await exportJWK(publicKey);
+			const noJtiJwksJson = JSON.stringify({ keys: [{ ...publicJwk, kid: "nojti-kid" }] });
+
+			const noJtiJwt = await new SignJWT({})
+				.setProtectedHeader({ alg: "RS256", kid: "nojti-kid" })
+				.setIssuer("https://auth.example.com")
+				.setSubject("user-123")
+				.setIssuedAt()
+				.setExpirationTime("1h")
+				.sign(privateKey);
+
+			const service = createService({
+				env: { JWT_JWKS_JSON: noJtiJwksJson } as unknown as CloudflareEnv,
+			});
+
+			const result = await service.validateAccessToken(noJtiJwt, [], null);
+			expect(result.valid).toBe(false);
 		});
 	});
 });

@@ -444,5 +444,193 @@ describe("UserChallengeService", () => {
 			expect(challengeRepo.insert).not.toHaveBeenCalled();
 			expect(mail.send).not.toHaveBeenCalled();
 		});
+
+		it("silently completes when the email is empty", async () => {
+			const challengeRepo = createChallengeRepoMock();
+			const service = createService({ challengeRepo });
+
+			await expect(service.requestPasswordReset("   ")).resolves.toBeUndefined();
+			expect(challengeRepo.insert).not.toHaveBeenCalled();
+		});
+
+		it("silently completes when site URL is not configured", async () => {
+			const userRepo = createUserRepoMock();
+			const siteRepo = createSiteRepoMock();
+			const mail = createMailMock();
+			userRepo.findByEmail.mockResolvedValue(makeUser({ email: "alice@example.com" }));
+			siteRepo.get.mockResolvedValue({ siteTitle: null, siteUrl: null, cdnUrl: null, logoKey: null, mfaEnabled: false });
+			const service = createService({ userRepo, siteRepo, mail });
+
+			await expect(service.requestPasswordReset("alice@example.com")).resolves.toBeUndefined();
+			expect(mail.send).not.toHaveBeenCalled();
+		});
+
+		it("silently completes when RESEND_API_KEY is not configured", async () => {
+			const userRepo = createUserRepoMock();
+			const siteRepo = createSiteRepoMock();
+			const mail = createMailMock();
+			mail.getResendApiKey.mockReturnValue(null);
+			userRepo.findByEmail.mockResolvedValue(makeUser({ email: "alice@example.com" }));
+			siteRepo.get.mockResolvedValue({ siteTitle: null, siteUrl: "https://auth.example.com", cdnUrl: null, logoKey: null, mfaEnabled: false });
+			const service = createService({ userRepo, siteRepo, mail });
+
+			await expect(service.requestPasswordReset("alice@example.com")).resolves.toBeUndefined();
+			expect(mail.send).not.toHaveBeenCalled();
+		});
+
+		it("creates a challenge, signs a JWT, and sends the password reset email", async () => {
+			const userRepo = createUserRepoMock();
+			const challengeRepo = createChallengeRepoMock();
+			const siteRepo = createSiteRepoMock();
+			const mail = createMailMock();
+			const signPasswordResetJwtMock = vi.mocked(
+				(await import("@/lib/auth/password-reset-jwt")).signPasswordResetJwt
+			);
+			signPasswordResetJwtMock.mockResolvedValue("signed-jwt-token");
+			userRepo.findByEmail.mockResolvedValue(makeUser({ email: "alice@example.com" }));
+			siteRepo.get.mockResolvedValue({ siteTitle: "Auth", siteUrl: "https://auth.example.com", cdnUrl: null, logoKey: null, mfaEnabled: false });
+			const service = createService({ userRepo, challengeRepo, siteRepo, mail });
+
+			await service.requestPasswordReset("alice@example.com");
+
+			expect(challengeRepo.insert).toHaveBeenCalledWith(
+				expect.objectContaining({ userId: "user-1", kind: "password_reset" })
+			);
+			expect(mail.send).toHaveBeenCalledWith(
+				expect.objectContaining({
+					to: "alice@example.com",
+					subject: expect.stringContaining("Reset your password"),
+				})
+			);
+		});
+
+		it("rethrows when sending the email fails", async () => {
+			const userRepo = createUserRepoMock();
+			const challengeRepo = createChallengeRepoMock();
+			const siteRepo = createSiteRepoMock();
+			const mail = createMailMock();
+			const signPasswordResetJwtMock = vi.mocked(
+				(await import("@/lib/auth/password-reset-jwt")).signPasswordResetJwt
+			);
+			signPasswordResetJwtMock.mockResolvedValue("signed-jwt-token");
+			userRepo.findByEmail.mockResolvedValue(makeUser({ email: "alice@example.com" }));
+			siteRepo.get.mockResolvedValue({ siteTitle: null, siteUrl: "https://auth.example.com", cdnUrl: null, logoKey: null, mfaEnabled: false });
+			mail.send.mockRejectedValue(new Error("SMTP failure"));
+			const service = createService({ userRepo, challengeRepo, siteRepo, mail });
+
+			await expect(service.requestPasswordReset("alice@example.com")).rejects.toThrow("SMTP failure");
+		});
+	});
+
+	describe("requestEmailVerification", () => {
+		it("throws when the user is not found", async () => {
+			const userRepo = createUserRepoMock();
+			userRepo.getById.mockResolvedValue(null);
+			const service = createService({ userRepo });
+
+			await expect(service.requestEmailVerification("user-1")).rejects.toThrow("User not found");
+		});
+
+		it("returns null for an admin user", async () => {
+			const userRepo = createUserRepoMock();
+			userRepo.getById.mockResolvedValue({ id: "user-1", username: "admin", name: null, email: "admin@example.com", emailVerifiedAt: null, avatarKey: null, isAdmin: true });
+			const service = createService({ userRepo });
+
+			await expect(service.requestEmailVerification("user-1")).resolves.toBeNull();
+		});
+
+		it("throws when the user has no email address", async () => {
+			const userRepo = createUserRepoMock();
+			userRepo.getById.mockResolvedValue({ id: "user-1", username: "alice", name: null, email: null, emailVerifiedAt: null, avatarKey: null, isAdmin: false });
+			const service = createService({ userRepo });
+
+			await expect(service.requestEmailVerification("user-1")).rejects.toThrow("no email address");
+		});
+
+		it("returns null when the email is already verified", async () => {
+			const userRepo = createUserRepoMock();
+			userRepo.getById.mockResolvedValue({ id: "user-1", username: "alice", name: null, email: "alice@example.com", emailVerifiedAt: "2026-01-01T00:00:00.000Z", avatarKey: null, isAdmin: false });
+			const service = createService({ userRepo });
+
+			await expect(service.requestEmailVerification("user-1")).resolves.toBeNull();
+		});
+	});
+
+	describe("markEmailVerified", () => {
+		it("does nothing when the user is not found", async () => {
+			const userRepo = createUserRepoMock();
+			userRepo.getById.mockResolvedValue(null);
+			const service = createService({ userRepo });
+
+			await service.markEmailVerified("user-1");
+			expect(userRepo.update).not.toHaveBeenCalled();
+		});
+
+		it("does nothing for admin users", async () => {
+			const userRepo = createUserRepoMock();
+			userRepo.getById.mockResolvedValue({ id: "user-1", username: "admin", name: null, email: "admin@example.com", emailVerifiedAt: null, avatarKey: null, isAdmin: true });
+			const service = createService({ userRepo });
+
+			await service.markEmailVerified("user-1");
+			expect(userRepo.update).not.toHaveBeenCalled();
+		});
+
+		it("does nothing when already verified", async () => {
+			const userRepo = createUserRepoMock();
+			userRepo.getById.mockResolvedValue({ id: "user-1", username: "alice", name: null, email: "alice@example.com", emailVerifiedAt: "2026-01-01T00:00:00.000Z", avatarKey: null, isAdmin: false });
+			const service = createService({ userRepo });
+
+			await service.markEmailVerified("user-1");
+			expect(userRepo.update).not.toHaveBeenCalled();
+		});
+
+		it("marks the email as verified when eligible", async () => {
+			const userRepo = createUserRepoMock();
+			userRepo.getById.mockResolvedValue({ id: "user-1", username: "alice", name: null, email: "alice@example.com", emailVerifiedAt: null, avatarKey: null, isAdmin: false });
+			const service = createService({ userRepo });
+
+			await service.markEmailVerified("user-1");
+			expect(userRepo.update).toHaveBeenCalledWith("user-1", expect.objectContaining({ emailVerifiedAt: "2026-04-06T13:10:00.000Z" }));
+		});
+	});
+
+	describe("cancelPasswordReset", () => {
+		it("completes silently when the challenge is not found", async () => {
+			const challengeRepo = createChallengeRepoMock();
+			verifyPasswordResetJwtMock.mockResolvedValue({ challengeId: "challenge-1", userId: "user-1" });
+			challengeRepo.getById.mockResolvedValue(null);
+			const service = createService({ challengeRepo });
+
+			await expect(service.cancelPasswordReset("token")).resolves.toBeUndefined();
+			expect(challengeRepo.deleteById).not.toHaveBeenCalled();
+		});
+
+		it("throws when the challenge kind or userId does not match", async () => {
+			const challengeRepo = createChallengeRepoMock();
+			verifyPasswordResetJwtMock.mockResolvedValue({ challengeId: "challenge-1", userId: "user-1" });
+			challengeRepo.getById.mockResolvedValue(makeChallenge({ kind: "mfa_otp" }));
+			const service = createService({ challengeRepo });
+
+			await expect(service.cancelPasswordReset("token")).rejects.toThrow("Invalid or expired reset link.");
+		});
+
+		it("throws when the challenge has already been consumed", async () => {
+			const challengeRepo = createChallengeRepoMock();
+			verifyPasswordResetJwtMock.mockResolvedValue({ challengeId: "challenge-1", userId: "user-1" });
+			challengeRepo.getById.mockResolvedValue(makeChallenge({ kind: "password_reset", consumedAt: "2026-04-06T13:09:00.000Z" }));
+			const service = createService({ challengeRepo });
+
+			await expect(service.cancelPasswordReset("token")).rejects.toThrow("This reset link is no longer valid.");
+		});
+
+		it("deletes the challenge on success", async () => {
+			const challengeRepo = createChallengeRepoMock();
+			verifyPasswordResetJwtMock.mockResolvedValue({ challengeId: "challenge-1", userId: "user-1" });
+			challengeRepo.getById.mockResolvedValue(makeChallenge({ kind: "password_reset" }));
+			const service = createService({ challengeRepo });
+
+			await service.cancelPasswordReset("token");
+			expect(challengeRepo.deleteById).toHaveBeenCalledWith("challenge-1");
+		});
 	});
 });
