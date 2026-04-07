@@ -10,7 +10,7 @@
 import { generateKeyPairSync } from "node:crypto";
 import { writeFileSync, unlinkSync, mkdirSync, existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import { importSPKI, exportJWK, calculateJwkThumbprint } from "jose";
 import stripJsonComments from "strip-json-comments";
 
@@ -18,6 +18,8 @@ const args = process.argv.slice(2);
 const envIndex = args.indexOf("--env");
 const wranglerEnv = envIndex >= 0 && args[envIndex + 1] ? args[envIndex + 1] : null;
 const envFlag = wranglerEnv ? `--env ${wranglerEnv}` : "";
+const skipExisting = args.includes("--skip-existing") && !args.includes("--force-rotate");
+const forceRotate = args.includes("--force-rotate");
 
 const configIndex = args.indexOf("--config");
 const wranglerConfig =
@@ -58,9 +60,40 @@ function resolveR2Bucket(config) {
 	);
 }
 
+function listExistingSecrets(configPath) {
+	const commandArgs = ["wrangler", "secret", "list"];
+	if (wranglerEnv) {
+		commandArgs.push("--env", wranglerEnv);
+	}
+	commandArgs.push("--config", configPath, "--json");
+	try {
+		const output = execFileSync("npx", commandArgs, {
+			cwd: process.cwd(),
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "inherit"],
+		});
+		const parsed = JSON.parse(output);
+		if (!Array.isArray(parsed)) {
+			return null;
+		}
+		return new Set(
+			parsed
+				.map((entry) => (entry && typeof entry.name === "string" ? entry.name.trim() : ""))
+				.filter(Boolean)
+		);
+	} catch {
+		return null;
+	}
+}
+
 async function main() {
 	const config = loadWranglerConfig(wranglerConfig);
 	const r2Bucket = r2BucketArg?.trim() || resolveR2Bucket(config);
+	const existingSecrets = skipExisting && !forceRotate ? listExistingSecrets(wranglerConfig) : null;
+	if (skipExisting && !forceRotate && existingSecrets?.has("JWT_PRIVATE_KEY")) {
+		console.log("Keeping existing JWT_PRIVATE_KEY and JWKS upload unchanged.");
+		return;
+	}
 
 	console.log("Generating RSA key pair (RS256, 2048-bit)...");
 	const { publicKey, privateKey } = generateKeyPairSync("rsa", {
@@ -70,7 +103,7 @@ async function main() {
 	const privatePem = privateKey.export({ type: "pkcs8", format: "pem" });
 	const publicPem = publicKey.export({ type: "spki", format: "pem" });
 
-	console.log("Storing JWT_PRIVATE_KEY secret in Wrangler...");
+	console.log(forceRotate ? "Rotating JWT_PRIVATE_KEY secret in Wrangler..." : "Storing JWT_PRIVATE_KEY secret in Wrangler...");
 	execSync(`npx wrangler secret put JWT_PRIVATE_KEY${configFlag} ${envFlag}`.trim(), {
 		input: privatePem,
 		stdio: ["pipe", "inherit", "inherit"],

@@ -13,6 +13,8 @@
 		"test:coverage": "vitest run --coverage",
 		"setup:local:env": "node scripts/setup-local-dev.mjs",
 		"setup:local": "npm run setup:local:env && npm run db:schema && npm run db:seed-local-admin",
+		"setup:remote": "node scripts/setup-remote.mjs",
+		"upgrade:remote": "node scripts/upgrade-remote.mjs",
 		"deploy": "npm run infra:terraform-output && npm run infra:render-wrangler && SKIP_WRANGLER_CONFIG_CHECK=yes opennextjs-cloudflare build && SKIP_WRANGLER_CONFIG_CHECK=yes opennextjs-cloudflare deploy -c wrangler.generated.jsonc",
 		"deploy:infra": "npm run deploy",
 		"upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
@@ -37,6 +39,9 @@
 		"setup:hmac-key": "bash scripts/setup-hmac-key.sh",
 		"jwt:setup-secrets": "node scripts/setup-jwt-secrets.mjs",
 		"jwt:generate-local-cert": "node scripts/generate-local-jwt-cert.mjs",
+		"infra:prepare-config": "npm run infra:terraform-output && npm run infra:render-wrangler",
+		"infra:validate:setup": "node scripts/validate-remote-setup.mjs --mode clean-install",
+		"infra:validate:upgrade": "node scripts/validate-remote-setup.mjs --mode upgrade",
 		"infra:terraform-output": "node scripts/terraform-output.mjs",
 		"infra:render-wrangler": "node scripts/render-wrangler-config.mjs --base infra/wrangler.template.jsonc --tf-json infra/out/terraform.tf.json",
 		"infra:provision": "node scripts/provision-env.mjs"

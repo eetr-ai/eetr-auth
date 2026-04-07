@@ -13,12 +13,14 @@
 import { randomBytes } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { execSync, execFileSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 function parseArgs(argv) {
 	const out = {
 		tfJson: "infra/out/terraform.tf.json",
 		wranglerConfig: process.env.WRANGLER_CONFIG || "wrangler.generated.jsonc",
+		skipExisting: true,
+		forceRotate: false,
 	};
 	for (let i = 0; i < argv.length; i++) {
 		const a = argv[i];
@@ -26,6 +28,11 @@ function parseArgs(argv) {
 			out.tfJson = argv[++i];
 		} else if (a === "--wrangler-config" && argv[i + 1]) {
 			out.wranglerConfig = argv[++i];
+		} else if (a === "--skip-existing") {
+			out.skipExisting = true;
+		} else if (a === "--force-rotate") {
+			out.forceRotate = true;
+			out.skipExisting = false;
 		}
 	}
 	return out;
@@ -44,12 +51,32 @@ function unwrapTerraformOutput(raw) {
 }
 
 function putSecret(name, value, configPath, cwd) {
-	const cfg = JSON.stringify(configPath);
-	execSync(`npx wrangler secret put ${name} --config ${cfg}`, {
+	execFileSync("npx", ["wrangler", "secret", "put", name, "--config", configPath], {
 		input: value,
 		stdio: ["pipe", "inherit", "inherit"],
 		cwd,
 	});
+}
+
+function listExistingSecrets(configPath, cwd) {
+	try {
+		const output = execFileSync(
+			"npx",
+			["wrangler", "secret", "list", "--config", configPath, "--json"],
+			{ cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }
+		);
+		const parsed = JSON.parse(output);
+		if (!Array.isArray(parsed)) {
+			return null;
+		}
+		return new Set(
+			parsed
+				.map((entry) => (entry && typeof entry.name === "string" ? entry.name.trim() : ""))
+				.filter(Boolean)
+		);
+	} catch {
+		return null;
+	}
 }
 
 function main() {
@@ -70,14 +97,32 @@ function main() {
 	}
 
 	const tf = unwrapTerraformOutput(JSON.parse(readFileSync(tfPath, "utf8")));
+	const existingSecrets = args.skipExisting && !args.forceRotate
+		? listExistingSecrets(args.wranglerConfig, root)
+		: null;
+	if (args.skipExisting && !args.forceRotate && existingSecrets === null) {
+		console.log(
+			"Could not list existing Wrangler secrets; treating this as a fresh provision and uploading required secrets."
+		);
+	}
+
+	const shouldUploadSecret = (name) => args.forceRotate || !args.skipExisting || !existingSecrets?.has(name);
 
 	const authSecret = randomBytes(32).toString("base64");
 	const hmacKey = randomBytes(32).toString("hex");
 
-	console.log("Uploading AUTH_SECRET...");
-	putSecret("AUTH_SECRET", authSecret, configPath, root);
-	console.log("Uploading HMAC_KEY...");
-	putSecret("HMAC_KEY", hmacKey, configPath, root);
+	if (shouldUploadSecret("AUTH_SECRET")) {
+		console.log(args.forceRotate ? "Rotating AUTH_SECRET..." : "Uploading AUTH_SECRET...");
+		putSecret("AUTH_SECRET", authSecret, configPath, root);
+	} else {
+		console.log("Keeping existing AUTH_SECRET.");
+	}
+	if (shouldUploadSecret("HMAC_KEY")) {
+		console.log(args.forceRotate ? "Rotating HMAC_KEY..." : "Uploading HMAC_KEY...");
+		putSecret("HMAC_KEY", hmacKey, configPath, root);
+	} else {
+		console.log("Keeping existing HMAC_KEY.");
+	}
 
 	const bucket = typeof tf.r2_bucket_name === "string" ? tf.r2_bucket_name : "";
 	if (!bucket) {
@@ -88,16 +133,26 @@ function main() {
 	const resendFromEnv = (process.env.RESEND_API_KEY ?? "").trim();
 	const resend = resendFromTf || resendFromEnv;
 	if (resend) {
-		console.log("Uploading RESEND_API_KEY...");
-		putSecret("RESEND_API_KEY", resend, configPath, root);
+		if (shouldUploadSecret("RESEND_API_KEY")) {
+			console.log(args.forceRotate ? "Rotating RESEND_API_KEY..." : "Uploading RESEND_API_KEY...");
+			putSecret("RESEND_API_KEY", resend, configPath, root);
+		} else {
+			console.log("Keeping existing RESEND_API_KEY.");
+		}
 	} else {
 		console.log("Skipping RESEND_API_KEY (set resend_api_key in tfvars or RESEND_API_KEY in env).");
 	}
 
 	console.log("Running JWT + JWKS upload (setup-jwt-secrets)...");
+	const jwtArgs = ["scripts/setup-jwt-secrets.mjs", "--config", args.wranglerConfig, "--bucket", bucket];
+	if (args.forceRotate) {
+		jwtArgs.push("--force-rotate");
+	} else if (args.skipExisting) {
+		jwtArgs.push("--skip-existing");
+	}
 	execFileSync(
 		process.execPath,
-		["scripts/setup-jwt-secrets.mjs", "--config", args.wranglerConfig, "--bucket", bucket],
+		jwtArgs,
 		{ stdio: "inherit", cwd: root }
 	);
 

@@ -1,6 +1,9 @@
-# Greenfield installation (new Cloudflare environment)
+# Remote setup
 
-End-to-end steps to provision D1 + R2 with Terraform, render Wrangler config, upload secrets and JWKS, migrate the database, deploy OpenNext, and create an admin.
+Use one of two paths:
+
+- **Clean install** for a brand-new Cloudflare environment
+- **Upgrade existing environment** for an already-deployed auth worker/D1 setup
 
 ## Prerequisites
 
@@ -11,7 +14,18 @@ End-to-end steps to provision D1 + R2 with Terraform, render Wrangler config, up
 - **Argon hasher** Worker deployed in the same account, bound as in `infra/wrangler.template.jsonc` and the rendered `wrangler.generated.jsonc` (`service: "argon-hasher"`). Required when `HASH_METHOD` is `argon`.
 - Optional: **Resend** API key if you use transactional email (`resend_api_key` in tfvars or `RESEND_API_KEY` when provisioning).
 
-## 1. Clone and install
+## Clean install
+
+The operator inputs for a clean install are:
+
+- export `CLOUDFLARE_API_TOKEN`
+- fill Terraform variables
+- run Terraform apply
+- deploy `argon-hasher`
+
+After that, the repo should automate the rest.
+
+### 1. Clone and install
 
 ```bash
 git clone <repo-url>
@@ -19,7 +33,7 @@ cd eetr-auth
 npm install
 ```
 
-## 2. Terraform
+### 2. Terraform
 
 ```bash
 cd infra/terraform
@@ -34,24 +48,40 @@ cd ../..
 
 `auth_url` must be the full Auth.js session URL, e.g. `https://auth.example.com/api/auth/session`.
 
-## 3. Terraform outputs for scripts
+### 3. Deploy `argon-hasher`
 
-From the **repository root**:
-
-```bash
-npm run infra:terraform-output
-```
-
-This writes `infra/out/terraform.tf.json` (gitignored).
-
-## 4. Render Wrangler config
+Deploy the Worker service binding target before the auth app:
 
 ```bash
-npm run infra:render-wrangler
+npm run deploy:argon-hasher
 ```
 
-Writes `wrangler.generated.jsonc` (gitignored) with D1 id, R2 bucket, worker `name` + `WORKER_SELF_REFERENCE`, and `vars` URLs from Terraform.
-Re-running it updates the Terraform-managed fields and preserves custom Wrangler `vars` that are not managed by Terraform.
+### 4. Run the automated remote setup
+
+From the repository root:
+
+```bash
+npm run setup:remote
+```
+
+This command now automates the post-Terraform flow:
+
+- exports Terraform outputs
+- renders `wrangler.generated.jsonc`
+- validates Cloudflare access and remote setup prerequisites
+- provisions missing Wrangler secrets and JWT/JWKS material
+- applies the fresh remote schema snapshot
+- builds and deploys the auth worker
+- seeds the bootstrap remote admin user
+
+Optional flags:
+
+```bash
+npm run setup:remote -- --email admin@yourdomain.com
+npm run setup:remote -- --force-rotate-secrets
+```
+
+`wrangler.generated.jsonc` is still the default rendered config. Re-running config preparation remains safe and preserves non-managed Wrangler vars.
 
 Optional email sender override:
 
@@ -69,66 +99,57 @@ node scripts/render-wrangler-config.mjs \
   --jwks-cdn-base-url https://...
 ```
 
-## 5. Provision Worker secrets and JWKS
+### 5. First login hardening
 
-Uses `wrangler.generated.jsonc` by default (`WRANGLER_CONFIG` overrides).
+The clean-install flow seeds a bootstrap admin:
 
-Ensure `CLOUDFLARE_API_TOKEN` is still exported before this step. The prescribed install path uses the same API token for Terraform and Wrangler.
+- Username: `admin`
+- Password: `admin`
+- Default email: `admin@example.com` unless overridden with `--email`
 
-```bash
-npm run infra:provision
-```
+After the first successful login, do one of these immediately:
 
-This uploads `AUTH_SECRET`, `HMAC_KEY`, `JWT_PRIVATE_KEY`, optional `RESEND_API_KEY`, and puts `jwks.json` into the R2 bucket from Terraform output.
+- create a real admin account, then delete the bootstrap `admin` account
+- or change the bootstrap admin password and replace the placeholder email with a real admin email address
 
-## 6. Apply database schema (remote D1)
+Do not leave the bootstrap password or placeholder email in place.
 
-Align `D1_DATABASE_NAME` with `d1_database_name` from Terraform (defaults to `eetr-auth` if unset):
-
-```bash
-export D1_DATABASE_NAME=your-d1-name-from-tfvars
-npm run db:schema:remote
-```
-
-For a brand-new installation, apply `db/schema.sql` directly.
-
-Use `npm run db:migrate:remote` only when upgrading an existing deployment with versioned schema patches.
-
-## 7. Deploy OpenNext
-
-```bash
-npm run deploy:infra
-```
-
-Uses `wrangler.generated.jsonc` (`opennextjs-cloudflare deploy -c wrangler.generated.jsonc`).
-
-## 8. DNS and JWKS CDN
+### 6. DNS and JWKS CDN
 
 - Route your auth hostname to the Worker; `ISSUER_BASE_URL` and `AUTH_URL` must match what users use.
 - Expose `jwks.json` at `JWKS_CDN_BASE_URL` (e.g. R2 custom domain or CDN) so `jwks_uri` in OIDC metadata resolves.
 
-## 9. Create first admin
-
-Seed the default remote admin user:
-
-- Username: `admin`
-- Password: `admin`
-- Password hash: Argon2id PHC generated locally via the Rust `argon-hasher` CLI
-
-```bash
-npm run db:seed-remote-admin
-
-# Optional: override the seeded email address (default: admin@example.com)
-npm run db:seed-remote-admin -- --email admin@yourdomain.com
-
-# If your environment uses a non-default Wrangler config:
-npm run db:seed-remote-admin -- --config path/to/your.wrangler.generated.jsonc
-```
-
-## 10. Smoke test
+### 7. Smoke test
 
 - `GET /api/health`
 - Sign in and exercise OAuth/token flows as needed.
+
+## Upgrade existing environment
+
+Use this path when the environment already exists and you want to preserve current secrets by default.
+
+From the repository root:
+
+```bash
+npm run upgrade:remote
+```
+
+This command now automates the upgrade flow:
+
+- exports Terraform outputs
+- renders `wrangler.generated.jsonc`
+- validates remote upgrade prerequisites
+- provisions only missing secrets by default
+- applies versioned remote D1 patches via `db:migrate:remote`
+- builds and deploys the auth worker
+
+Optional flags:
+
+```bash
+npm run upgrade:remote -- --force-rotate-secrets
+```
+
+Use `--force-rotate-secrets` only when intentionally rotating credentials.
 
 ## Local-only quick setup
 
@@ -142,10 +163,18 @@ npm run db:set-site-url:local -- https://auth.example.com
 
 This is the brand-new local bootstrap path. It also seeds a local `admin` / `admin` user with an MD5 password hash for development sign-in. Use `npm run db:migrate` only when upgrading an existing local database with versioned patches.
 
-## 11. Ongoing
+## Ongoing
 
-Re-running `npm run infra:provision` **regenerates** `AUTH_SECRET`, `HMAC_KEY`, and JWT keys—only do this when rotating credentials. Re-running `infra:render-wrangler` is safe when Terraform outputs change.
+`npm run infra:prepare-config` is safe to rerun when Terraform outputs change.
+
+`npm run infra:provision` now preserves existing secrets by default. Use explicit force-rotation when you intend to replace `AUTH_SECRET`, `HMAC_KEY`, or JWT signing material.
 
 ## Order summary
 
-`terraform apply` → `infra:terraform-output` → `infra:render-wrangler` → `infra:provision` → `db:schema:remote` → `deploy:infra` → DNS / JWKS CDN → `db:create-admin:remote` → verify.
+Clean install:
+
+`terraform apply` → `deploy:argon-hasher` → `setup:remote` → DNS / JWKS CDN → first-login hardening
+
+Upgrade:
+
+`terraform apply` (if infra changed) → `upgrade:remote`

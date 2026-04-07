@@ -181,6 +181,7 @@ This project now exposes OAuth authorization server endpoints for:
   - `npm run db:create-user:remote -- --config wrangler.generated.jsonc <username> <email>`
   - `npm run db:seed-remote-admin`
   - the remote seed command creates `admin` / `admin` with an Argon2id hash generated locally by the Rust `argon-hasher` CLI
+  - after first login to a fresh remote install, either delete the bootstrap `admin` account after creating a real admin or immediately change its password and replace the placeholder email with a real admin email
 
 ### Admin users API (client-credential JWT)
 
