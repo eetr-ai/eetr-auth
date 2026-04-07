@@ -6,6 +6,7 @@
 node_modules/
 .wrangler/
 dist/
+coverage/
 
 # OS / IDE
 .DS_Store
