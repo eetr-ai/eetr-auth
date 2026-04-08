@@ -173,6 +173,8 @@ describe("oauth-pending-cookie", () => {
 
 		it("throws when neither secret env var is set", async () => {
 			vi.unstubAllEnvs();
+			vi.stubEnv("AUTH_SECRET", "");
+			vi.stubEnv("NEXTAUTH_SECRET", "");
 			await expect(encodePendingAuthorizationCookie({ client_id: "x" })).rejects.toThrow(
 				"Missing OAUTH_PENDING_SECRET"
 			);

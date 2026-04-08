@@ -12,7 +12,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import stripJsonComments from "strip-json-comments";
 
-const MANAGED_VAR_KEYS = new Set(["AUTH_URL", "ISSUER_BASE_URL", "JWKS_CDN_BASE_URL"]);
+const MANAGED_VAR_KEYS = new Set(["AUTH_URL", "ISSUER_BASE_URL", "JWKS_CDN_BASE_URL", "JWT_KID"]);
 
 function parseArgs(argv) {
 	const out = {
@@ -22,6 +22,7 @@ function parseArgs(argv) {
 		issuerBaseUrl: "",
 		authUrl: "",
 		jwksCdnBaseUrl: "",
+		jwtKid: "",
 	};
 	for (let i = 0; i < argv.length; i++) {
 		const a = argv[i];
@@ -37,6 +38,8 @@ function parseArgs(argv) {
 			out.authUrl = argv[++i];
 		} else if (a === "--jwks-cdn-base-url" && argv[i + 1]) {
 			out.jwksCdnBaseUrl = argv[++i];
+		} else if (a === "--jwt-kid" && argv[i + 1]) {
+			out.jwtKid = argv[++i];
 		}
 	}
 	return out;
@@ -137,6 +140,10 @@ function main() {
 	config.vars.ISSUER_BASE_URL = issuer;
 	config.vars.AUTH_URL = auth;
 	config.vars.JWKS_CDN_BASE_URL = jwksCdn;
+	const jwtKid = args.jwtKid.trim() || tf.jwt_kid || null;
+	if (jwtKid) {
+		config.vars.JWT_KID = jwtKid;
+	}
 
 	writeFileSync(outPath, JSON.stringify(config, null, "\t") + "\n", "utf8");
 	console.log("Wrote", outPath);

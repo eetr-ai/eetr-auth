@@ -11,16 +11,11 @@ function parseBearerToken(authorizationHeader: string | null): string | null {
 	return token.length > 0 ? token : null;
 }
 
-function isLikelyJwt(token: string): boolean {
-	const parts = token.split(".");
-	return parts.length === 3 && parts.every((part) => /^[A-Za-z0-9_-]+$/.test(part));
-}
-
 export const GET = withApiContext(async (req, ctx, getServices) => {
 	const token = parseBearerToken(req.headers.get("authorization"));
-	if (!token || !isLikelyJwt(token)) {
+	if (!token) {
 		return NextResponse.json(
-			{ error: "invalid_token", error_description: "A valid JWT access token is required." },
+			{ error: "invalid_token", error_description: "A valid access token is required." },
 			{
 				status: 401,
 				headers: {

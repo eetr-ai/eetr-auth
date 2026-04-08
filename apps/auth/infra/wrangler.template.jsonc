@@ -8,7 +8,7 @@
  *   name, services[WORKER_SELF_REFERENCE].service,
  *   d1_databases[0].database_id, d1_databases[0].database_name,
  *   r2_buckets[0].bucket_name,
- *   vars.AUTH_URL, vars.ISSUER_BASE_URL, vars.JWKS_CDN_BASE_URL
+ *   vars.AUTH_URL, vars.ISSUER_BASE_URL, vars.JWKS_CDN_BASE_URL, vars.JWT_KID (via --jwt-kid)
  *
  * See docs/CLOUDFLARE_TEMPLATE.md for setup instructions.
  */
@@ -64,6 +64,7 @@
 		"ISSUER_BASE_URL": "REPLACE_WITH_YOUR_ISSUER_URL",
 		"JWKS_CDN_BASE_URL": "REPLACE_WITH_YOUR_JWKS_CDN_URL",
 		"JWKS_R2_KEY": "jwks.json",
+		"JWT_KID": "REPLACE_WITH_YOUR_JWT_KID",
 		"CLIENT_KEY_PREFIX": "eetr",
 		"HASH_METHOD": "argon",
 		"MFA_OTP_MAX_ATTEMPTS": "5"
