@@ -20,12 +20,26 @@ interface PendingAuthorizationEnvelope {
 	exp: number;
 }
 
-function getPendingSecret(): string {
-	const secret = process.env.OAUTH_PENDING_SECRET ?? process.env.NEXTAUTH_SECRET;
-	if (!secret || secret.trim().length === 0) {
-		throw new Error("Missing OAUTH_PENDING_SECRET (or NEXTAUTH_SECRET) for oauth_pending cookie.");
+function getPendingSecret(env?: Record<string, unknown>): string {
+	const hasEnvOauthSecret = typeof env?.OAUTH_PENDING_SECRET === "string" && (env.OAUTH_PENDING_SECRET as string).trim().length > 0;
+	const hasEnvAuthSecret = typeof env?.AUTH_SECRET === "string" && (env.AUTH_SECRET as string).trim().length > 0;
+	const hasProcessOauthSecret = typeof process.env.OAUTH_PENDING_SECRET === "string" && process.env.OAUTH_PENDING_SECRET.trim().length > 0;
+	const hasProcessAuthSecret = typeof process.env.AUTH_SECRET === "string" && process.env.AUTH_SECRET.trim().length > 0;
+	const hasProcessNextAuthSecret = typeof process.env.NEXTAUTH_SECRET === "string" && process.env.NEXTAUTH_SECRET.trim().length > 0;
+const fromEnv = hasEnvOauthSecret
+		? (env!.OAUTH_PENDING_SECRET as string).trim()
+		: hasEnvAuthSecret
+			? (env!.AUTH_SECRET as string).trim()
+			: null;
+	const secret =
+		fromEnv ??
+		(hasProcessOauthSecret ? process.env.OAUTH_PENDING_SECRET : null) ??
+		(hasProcessAuthSecret ? process.env.AUTH_SECRET : null) ??
+		(hasProcessNextAuthSecret ? process.env.NEXTAUTH_SECRET : null);
+	if (!secret) {
+		throw new Error("Missing OAUTH_PENDING_SECRET (or AUTH_SECRET) for oauth_pending cookie.");
 	}
-	return secret.trim();
+	return secret;
 }
 
 function base64UrlEncode(bytes: Uint8Array): string {
@@ -47,7 +61,8 @@ function base64UrlDecode(value: string): Uint8Array {
 	return bytes;
 }
 
-async function sign(data: string, secret: string): Promise<string> {
+async function sign(data: string, env?: Record<string, unknown>): Promise<string> {
+	const secret = getPendingSecret(env);
 	const key = await crypto.subtle.importKey(
 		"raw",
 		new TextEncoder().encode(secret),
@@ -59,8 +74,8 @@ async function sign(data: string, secret: string): Promise<string> {
 	return base64UrlEncode(new Uint8Array(signature));
 }
 
-async function verify(data: string, signature: string, secret: string): Promise<boolean> {
-	const expected = await sign(data, secret);
+async function verify(data: string, signature: string, env?: Record<string, unknown>): Promise<boolean> {
+	const expected = await sign(data, env);
 	if (expected.length !== signature.length) {
 		return false;
 	}
@@ -106,7 +121,8 @@ export function collectPendingAuthorizationParams(
 }
 
 export async function encodePendingAuthorizationCookie(
-	params: PendingAuthorizationParams
+	params: PendingAuthorizationParams,
+	env?: Record<string, unknown>
 ): Promise<string> {
 	const now = Math.floor(Date.now() / 1000);
 	const envelope: PendingAuthorizationEnvelope = {
@@ -115,19 +131,20 @@ export async function encodePendingAuthorizationCookie(
 	};
 	const payloadJson = JSON.stringify(envelope);
 	const payloadPart = base64UrlEncode(new TextEncoder().encode(payloadJson));
-	const signature = await sign(payloadPart, getPendingSecret());
+	const signature = await sign(payloadPart, env);
 	return `${payloadPart}.${signature}`;
 }
 
 export async function decodePendingAuthorizationCookie(
-	cookieValue: string | undefined | null
+	cookieValue: string | undefined | null,
+	env?: Record<string, unknown>
 ): Promise<PendingAuthorizationParams | null> {
 	if (!cookieValue) return null;
 	const [payloadPart, signature] = cookieValue.split(".");
 	if (!payloadPart || !signature) return null;
 
 	try {
-		const valid = await verify(payloadPart, signature, getPendingSecret());
+		const valid = await verify(payloadPart, signature, env);
 		if (!valid) return null;
 		const payloadJson = new TextDecoder().decode(base64UrlDecode(payloadPart));
 		const envelope = JSON.parse(payloadJson) as PendingAuthorizationEnvelope;

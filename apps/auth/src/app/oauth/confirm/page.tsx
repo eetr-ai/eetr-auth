@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { auth, signOut } from "@/auth";
 import {
 	decodePendingAuthorizationCookie,
@@ -9,8 +10,10 @@ import {
 export default async function OAuthConfirmPage() {
 	const session = await auth();
 	const cookieStore = await cookies();
+	const { env } = await getCloudflareContext({ async: true });
 	const pendingParams = await decodePendingAuthorizationCookie(
-		cookieStore.get(getPendingCookieName())?.value
+		cookieStore.get(getPendingCookieName())?.value,
+		env as unknown as Record<string, unknown>
 	);
 	const hasPkce =
 		typeof pendingParams?.code_challenge === "string" &&

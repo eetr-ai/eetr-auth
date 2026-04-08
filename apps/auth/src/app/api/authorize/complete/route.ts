@@ -44,7 +44,8 @@ export const GET = withApiContext(async (req, ctx, getServices) => {
 
 	const cookieStore = await cookies();
 	const pendingParams = await decodePendingAuthorizationCookie(
-		cookieStore.get(getPendingCookieName())?.value
+		cookieStore.get(getPendingCookieName())?.value,
+		ctx.env as unknown as Record<string, unknown>
 	);
 
 	const hasPkce =
@@ -54,6 +55,12 @@ export const GET = withApiContext(async (req, ctx, getServices) => {
 		pendingParams.code_challenge_method.length > 0;
 
 	if (!pendingParams || !hasPkce || !pendingParams.redirect_uri) {
+		console.error("[oauth_complete] missing pending params or PKCE", {
+			hasPendingParams: !!pendingParams,
+			hasPkce,
+			hasRedirectUri: !!pendingParams?.redirect_uri,
+			userId: session.user.id,
+		});
 		return NextResponse.redirect(new URL("/?error=oauth_confirm_missing_pkce", req.url));
 	}
 
@@ -75,14 +82,32 @@ export const GET = withApiContext(async (req, ctx, getServices) => {
 		clearPendingCookie(redirectResponse, req);
 		return redirectResponse;
 	} catch (error) {
-		if (isOAuthServiceError(error) && error.redirectUri) {
+		if (isOAuthServiceError(error)) {
+			const redirectUri = error.redirectUri ?? pendingParams.redirect_uri;
+			console.error("[oauth_complete] authorization service error", {
+				code: error.code,
+				message: error.message,
+				clientId: pendingParams.client_id,
+				redirectUri,
+				state: error.state ?? pendingParams.state,
+			});
 			return redirectToClientError(
-				error.redirectUri,
+				redirectUri,
 				error.code,
 				error.message,
-				error.state
+				error.state ?? pendingParams.state ?? undefined
 			);
 		}
-		return NextResponse.redirect(new URL("/?error=oauth_confirm_failed", req.url));
+		console.error("[oauth_complete] unexpected error", {
+			error,
+			clientId: pendingParams.client_id,
+			redirectUri: pendingParams.redirect_uri,
+		});
+		return redirectToClientError(
+			pendingParams.redirect_uri,
+			"server_error",
+			"An unexpected error occurred during authorization.",
+			pendingParams.state ?? undefined
+		);
 	}
 });

@@ -39,6 +39,7 @@ function withOAuthRedirectError(
 
 interface AuthorizeLogContext {
 	ctx: { waitUntil?: (p: Promise<unknown>) => void } | undefined;
+	env: Record<string, unknown>;
 	startMs: number;
 	ip: string | null;
 }
@@ -82,10 +83,13 @@ async function handleAuthorize(
 			response = NextResponse.redirect(confirmUrl);
 		}
 		try {
-			const cookieValue = await encodePendingAuthorizationCookie(pendingParams);
+			const cookieValue = await encodePendingAuthorizationCookie(pendingParams, logContext.env);
 			applyPendingCookie(response, req, cookieValue);
 		} catch (error) {
-			console.error("[oauth_authorize] failed to encode pending cookie", error);
+			console.error("[oauth_authorize] failed to encode pending cookie", {
+				name: error instanceof Error ? error.name : typeof error,
+				message: error instanceof Error ? error.message : String(error),
+			});
 			return NextResponse.json(
 				{
 					error: "server_error",
@@ -168,11 +172,11 @@ async function handleAuthorize(
 export const GET = withApiContext(async (req, ctx, getServices) => {
 	const startMs = Date.now();
 	const ip = req.headers.get("CF-Connecting-IP") ?? null;
-	return handleAuthorize(req, getServices(), { ctx: ctx.ctx, startMs, ip });
+	return handleAuthorize(req, getServices(), { ctx: ctx.ctx, env: ctx.env as unknown as Record<string, unknown>, startMs, ip });
 });
 
 export const POST = withApiContext(async (req, ctx, getServices) => {
 	const startMs = Date.now();
 	const ip = req.headers.get("CF-Connecting-IP") ?? null;
-	return handleAuthorize(req, getServices(), { ctx: ctx.ctx, startMs, ip });
+	return handleAuthorize(req, getServices(), { ctx: ctx.ctx, env: ctx.env as unknown as Record<string, unknown>, startMs, ip });
 });
