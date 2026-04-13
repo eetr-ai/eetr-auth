@@ -15,7 +15,7 @@
 		"setup:local": "npm run setup:local:env && npm run db:schema && npm run db:seed-local-admin",
 		"setup:remote": "node scripts/setup-remote.mjs",
 		"upgrade:remote": "node scripts/upgrade-remote.mjs",
-		"deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy -c wrangler.generated.jsonc",
+		"deploy": "opennextjs-cloudflare build && SKIP_WRANGLER_CONFIG_CHECK=yes opennextjs-cloudflare deploy -c wrangler.generated.jsonc",
 		"deploy:infra": "npm run deploy",
 		"upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
 		"preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
