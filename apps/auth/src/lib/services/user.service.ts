@@ -33,6 +33,22 @@ export class UserService {
 		this.hashMethod = hashMethod;
 	}
 
+	private async resolveUser(idOrUsername: string): Promise<UserRecord | null> {
+		const byId = await this.userRepository.getById(idOrUsername);
+		if (byId) return byId;
+		const byUsername = await this.userRepository.findByUsername(idOrUsername);
+		if (!byUsername) return null;
+		return {
+			id: byUsername.id,
+			username: byUsername.username,
+			name: byUsername.name,
+			email: byUsername.email,
+			emailVerifiedAt: byUsername.emailVerifiedAt,
+			avatarKey: byUsername.avatarKey,
+			isAdmin: byUsername.isAdmin,
+		};
+	}
+
 	private withAvatarUrl(user: UserRecord): UserRecord {
 		const avatarUrl = user.avatarKey
 			? `${this.avatarCdnBaseUrl}/${user.avatarKey.replace(/^\/+/, "")}`
@@ -51,6 +67,11 @@ export class UserService {
 
 	async getById(id: string): Promise<UserRecord | null> {
 		const user = await this.userRepository.getById(id);
+		return user ? this.withAvatarUrl(user) : null;
+	}
+
+	async getByIdOrUsername(idOrUsername: string): Promise<UserRecord | null> {
+		const user = await this.resolveUser(idOrUsername);
 		return user ? this.withAvatarUrl(user) : null;
 	}
 
@@ -93,11 +114,12 @@ export class UserService {
 		});
 	}
 
-	async updateUser(id: string, updates: UpdateUserInput, actorUserId: string): Promise<UserRecord> {
-		const current = await this.userRepository.getById(id);
+	async updateUser(idOrUsername: string, updates: UpdateUserInput, actorUserId: string): Promise<UserRecord> {
+		const current = await this.resolveUser(idOrUsername);
 		if (!current) {
 			throw new Error("User not found");
 		}
+		const id = current.id;
 
 		const patch: {
 			username?: string;
@@ -163,14 +185,14 @@ export class UserService {
 		return this.withAvatarUrl(updated);
 	}
 
-	async deleteUser(id: string, actorUserId: string): Promise<void> {
-		if (id === actorUserId) {
-			throw new Error("You cannot delete your own user");
-		}
-
-		const current = await this.userRepository.getById(id);
+	async deleteUser(idOrUsername: string, actorUserId: string): Promise<void> {
+		const current = await this.resolveUser(idOrUsername);
 		if (!current) {
 			throw new Error("User not found");
+		}
+		const id = current.id;
+		if (id === actorUserId) {
+			throw new Error("You cannot delete your own user");
 		}
 		if (current.isAdmin) {
 			const users = await this.userRepository.list();

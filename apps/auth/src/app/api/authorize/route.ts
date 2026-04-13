@@ -119,7 +119,7 @@ async function handleAuthorize(
 			state: asString(source.get("state")),
 			codeChallenge: asString(source.get("code_challenge")),
 			codeChallengeMethod: asString(source.get("code_challenge_method")),
-			subject: session.user.id,
+			subject: session.user.username,
 		});
 
 		const durationMs = Date.now() - logContext.startMs;

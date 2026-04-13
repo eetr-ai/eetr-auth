@@ -215,6 +215,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 				});
 				return {
 					id: user.id,
+					username: user.username,
 					name: user.name ?? user.username,
 					email: user.email,
 					image: getAvatarUrl(user.avatarKey, env as unknown as Record<string, unknown>),
@@ -298,6 +299,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
 				return {
 					id: user.id,
+					username: user.username,
 					name: user.name ?? user.username,
 					email: user.email,
 					image: getAvatarUrl(user.avatarKey, env as unknown as Record<string, unknown>),
@@ -311,6 +313,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 		jwt({ token, user }) {
 			if (user) {
 				token.id = user.id;
+				token.username = (user as { username?: string }).username;
 				token.name = user.name;
 				token.email = user.email;
 				token.picture = user.image;
@@ -322,6 +325,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 		session({ session, token }) {
 			if (session.user) {
 				session.user.id = token.id as string;
+				session.user.username = (token.username as string) ?? session.user.username;
 				session.user.name = (token.name as string) ?? session.user.name;
 				session.user.email = (token.email as string | null | undefined) ?? session.user.email;
 				session.user.image = (token.picture as string | null | undefined) ?? session.user.image;

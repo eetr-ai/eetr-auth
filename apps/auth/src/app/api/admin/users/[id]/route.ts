@@ -67,6 +67,30 @@ function toErrorResponse(error: unknown) {
 	);
 }
 
+export const GET = withAdminApiClientContext(async (req, _ctx, getServices) => {
+	const userId = getUserIdFromPath(req.nextUrl.pathname);
+	if (!userId) {
+		return NextResponse.json(
+			{ error: "invalid_request", error_description: "User id path parameter is required." },
+			{ status: 400 }
+		);
+	}
+
+	try {
+		const { userService } = getServices();
+		const user = await userService.getByIdOrUsername(userId);
+		if (!user) {
+			return NextResponse.json(
+				{ error: "not_found", error_description: "User not found" },
+				{ status: 404 }
+			);
+		}
+		return NextResponse.json(user, { status: 200 });
+	} catch (error) {
+		return toErrorResponse(error);
+	}
+});
+
 export const PUT = withAdminApiClientContext(async (req, _ctx, getServices, auth) => {
 	const userId = getUserIdFromPath(req.nextUrl.pathname);
 	if (!userId) {
