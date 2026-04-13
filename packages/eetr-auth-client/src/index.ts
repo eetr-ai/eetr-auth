@@ -28,3 +28,16 @@ export { TokenManager } from "./tokens.js";
 
 export { validateJwt, decodeJwtPayload } from "./jwt.js";
 export type { ValidateJwtOptions } from "./jwt.js";
+
+export {
+  getAdminUser,
+  createAdminUser,
+  updateAdminUser,
+  deleteAdminUser,
+} from "./admin.js";
+export type {
+  AdminUserRecord,
+  AdminClientConfig,
+  CreateUserParams,
+  UpdateUserParams,
+} from "./admin.js";
