@@ -547,14 +547,68 @@ export function getOpenApiDocument(serverUrl?: string) {
 				},
 			},
 			"/api/admin/users/{id}": {
+				get: {
+					tags: ["Admin"],
+					summary: "Get user",
+					description:
+						"Admin API endpoint. Requires a bearer JWT whose client is configured in Setup > Admin API. The `id` path parameter accepts either the internal user UUID or the username.",
+					security: [{ bearerAuth: [] }],
+					parameters: [
+						{
+							name: "id",
+							in: "path",
+							required: true,
+							schema: { type: "string" },
+							description: "Internal user UUID or username.",
+						},
+					],
+					responses: {
+						"200": {
+							description: "User found",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/UserRecord" } },
+							},
+						},
+						"400": {
+							description: "Missing path parameter",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"401": {
+							description: "Invalid token",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"403": {
+							description: "Token client is not configured as an admin API client",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"404": {
+							description: "User not found",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+					},
+				},
 				put: {
 					tags: ["Admin"],
 					summary: "Update user",
 					description:
-						"Admin API endpoint. Requires a bearer JWT whose client is configured in Setup > Admin API.",
+						"Admin API endpoint. Requires a bearer JWT whose client is configured in Setup > Admin API. The `id` path parameter accepts either the internal user UUID or the username.",
 					security: [{ bearerAuth: [] }],
 					parameters: [
-						{ name: "id", in: "path", required: true, schema: { type: "string" } },
+						{
+							name: "id",
+							in: "path",
+							required: true,
+							schema: { type: "string" },
+							description: "Internal user UUID or username.",
+						},
 					],
 					requestBody: {
 						required: true,
@@ -616,10 +670,16 @@ export function getOpenApiDocument(serverUrl?: string) {
 					tags: ["Admin"],
 					summary: "Delete user",
 					description:
-						"Admin API endpoint. Requires a bearer JWT whose client is configured in Setup > Admin API.",
+						"Admin API endpoint. Requires a bearer JWT whose client is configured in Setup > Admin API. The `id` path parameter accepts either the internal user UUID or the username.",
 					security: [{ bearerAuth: [] }],
 					parameters: [
-						{ name: "id", in: "path", required: true, schema: { type: "string" } },
+						{
+							name: "id",
+							in: "path",
+							required: true,
+							schema: { type: "string" },
+							description: "Internal user UUID or username.",
+						},
 					],
 					responses: {
 						"200": {
