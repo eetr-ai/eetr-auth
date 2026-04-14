@@ -4,7 +4,7 @@ export function getOpenApiDocument(serverUrl?: string) {
 	return {
 		openapi: "3.1.0",
 		info: {
-			title: "Progression AI Auth API",
+			title: "Eetr Auth API",
 			version: "1.0.0",
 			description: "OAuth and auth management endpoints exposed under /api.",
 		},
