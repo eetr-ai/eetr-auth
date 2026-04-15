@@ -33,7 +33,7 @@ function createService(
 	siteRepo: SiteSettingsRepository,
 	adminClientsRepo: SiteAdminApiClientsRepository,
 	clientRepo: ClientRepository,
-	options: { avatarCdnBaseUrl?: string; resendApiKey?: string | null } = {}
+	options: { avatarCdnBaseUrl?: string; resendApiKey?: string | null; authUrl?: string } = {}
 ): SiteSettingsService {
 	return new SiteSettingsService({
 		siteRepo,
@@ -41,6 +41,7 @@ function createService(
 		clientRepo,
 		avatarCdnBaseUrl: options.avatarCdnBaseUrl ?? "https://cdn.example.com",
 		resendApiKey: options.resendApiKey ?? null,
+		authUrl: options.authUrl ?? "https://auth.example.com",
 	});
 }
 
@@ -86,24 +87,30 @@ describe("SiteSettingsService", () => {
 	});
 
 	describe("getEmailLogoAbsoluteUrl", () => {
-		it("returns the default logo on the site origin when no logoKey is set", () => {
+		it("returns the default logo on the auth origin when no logoKey is set", () => {
 			const service = createService(createSiteRepoMock(), createAdminClientsRepoMock(), createClientRepoMock());
-			expect(service.getEmailLogoAbsoluteUrl("https://auth.example.com", null, null)).toBe(
+			expect(service.getEmailLogoAbsoluteUrl(null, null)).toBe(
 				`https://auth.example.com${DEFAULT_LOGO_PATH}`
 			);
 		});
 
 		it("returns the CDN URL when a logoKey is set", () => {
 			const service = createService(createSiteRepoMock(), createAdminClientsRepoMock(), createClientRepoMock());
-			expect(service.getEmailLogoAbsoluteUrl("https://auth.example.com", "logo.png", null)).toBe(
+			expect(service.getEmailLogoAbsoluteUrl("logo.png", null)).toBe(
 				"https://cdn.example.com/logo.png"
 			);
 		});
 
-		it("prepends https when siteUrl has no protocol", () => {
-			const service = createService(createSiteRepoMock(), createAdminClientsRepoMock(), createClientRepoMock());
-			const result = service.getEmailLogoAbsoluteUrl("auth.example.com", null, null);
-			expect(result).toBe(`https://auth.example.com${DEFAULT_LOGO_PATH}`);
+		it("prepends https when authUrl has no protocol", () => {
+			const service = createService(
+				createSiteRepoMock(),
+				createAdminClientsRepoMock(),
+				createClientRepoMock(),
+				{ authUrl: "auth.example.com" }
+			);
+			expect(service.getEmailLogoAbsoluteUrl(null, null)).toBe(
+				`https://auth.example.com${DEFAULT_LOGO_PATH}`
+			);
 		});
 	});
 

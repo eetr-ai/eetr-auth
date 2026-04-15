@@ -57,7 +57,7 @@ export interface UserChallengeServiceMail {
 }
 
 export interface UserChallengeServiceSiteSettings {
-	getEmailLogoAbsoluteUrl(siteUrlHttp: string, logoKey: string | null, cdnUrlOverride: string | null): string;
+	getEmailLogoAbsoluteUrl(logoKey: string | null, cdnUrlOverride: string | null): string;
 	getDisplaySiteTitle(siteTitle: string | null | undefined): string;
 }
 
@@ -168,7 +168,6 @@ export class UserChallengeService {
 		const displayTitle = site?.siteTitle?.trim() || "Sign in";
 		const siteUrlHttp = siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`;
 		const logoUrl = this.siteSettings.getEmailLogoAbsoluteUrl(
-			siteUrlHttp,
 			site?.logoKey ?? null,
 			site?.cdnUrl ?? null
 		);
@@ -224,7 +223,6 @@ export class UserChallengeService {
 		const displayTitle = site?.siteTitle?.trim() || "Verify your email";
 		const siteUrlHttp = siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`;
 		const logoUrl = this.siteSettings.getEmailLogoAbsoluteUrl(
-			siteUrlHttp,
 			site?.logoKey ?? null,
 			site?.cdnUrl ?? null
 		);
@@ -408,7 +406,6 @@ export class UserChallengeService {
 
 		const displayTitle = site?.siteTitle?.trim() || "Password reset";
 		const logoUrl = this.siteSettings.getEmailLogoAbsoluteUrl(
-			siteUrlHttp,
 			site?.logoKey ?? null,
 			site?.cdnUrl ?? null
 		);

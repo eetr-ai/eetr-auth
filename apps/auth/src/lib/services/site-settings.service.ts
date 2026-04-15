@@ -44,6 +44,7 @@ export interface SiteSettingsServiceDependencies {
 	clientRepo: ClientRepository;
 	avatarCdnBaseUrl: string;
 	resendApiKey: string | null;
+	authUrl: string;
 }
 
 export class SiteSettingsService {
@@ -52,6 +53,7 @@ export class SiteSettingsService {
 	private readonly clientRepo: ClientRepository;
 	private readonly avatarCdnBaseUrl: string;
 	private readonly resendApiKey: string | null;
+	private readonly authUrl: string;
 
 	constructor({
 		siteRepo,
@@ -59,12 +61,14 @@ export class SiteSettingsService {
 		clientRepo,
 		avatarCdnBaseUrl,
 		resendApiKey,
+		authUrl,
 	}: SiteSettingsServiceDependencies) {
 		this.siteRepo = siteRepo;
 		this.adminClientsRepo = adminClientsRepo;
 		this.clientRepo = clientRepo;
 		this.avatarCdnBaseUrl = avatarCdnBaseUrl.replace(/\/+$/, "");
 		this.resendApiKey = resendApiKey;
+		this.authUrl = authUrl.trim().replace(/\/+$/, "");
 	}
 
 	getLogoPublicUrlForKey(logoKey: string, cdnUrlOverride: string | null): string {
@@ -85,12 +89,12 @@ export class SiteSettingsService {
 		return this.getLogoPublicUrlForKey(key, cdnUrlOverride);
 	}
 
-	/** Absolute URL for `<img src>` in HTML emails (uploaded logo via CDN, or default asset on site origin). */
-	getEmailLogoAbsoluteUrl(siteUrlHttp: string, logoKey: string | null, cdnUrlOverride: string | null): string {
-		const raw = siteUrlHttp.trim();
-		const u = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
+	/** Absolute URL for `<img src>` in HTML emails (uploaded logo via CDN, or default asset on the auth origin). */
+	getEmailLogoAbsoluteUrl(logoKey: string | null, cdnUrlOverride: string | null): string {
 		const key = normalizeOptional(logoKey);
 		if (!key) {
+			const raw = this.authUrl;
+			const u = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
 			return `${u.origin}${DEFAULT_LOGO_PATH}`;
 		}
 		return this.getLogoPublicUrlForKey(key, cdnUrlOverride);

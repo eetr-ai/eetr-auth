@@ -74,6 +74,7 @@ export function getServices(ctx: RequestContext): Services {
 		clientRepo,
 		avatarCdnBaseUrl,
 		resendApiKey: resolveOptionalEnvString(resolvedEnv, "RESEND_API_KEY"),
+		authUrl: resolveOptionalEnvString(resolvedEnv, "AUTH_URL") ?? "",
 	});
 	const transactionalEmailService = new TransactionalEmailService(ctx);
 
