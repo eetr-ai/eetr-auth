@@ -218,10 +218,12 @@ function UsersPageContent() {
 		}
 	};
 
-	const handleDelete = async (id: string) => {
+	const handleDelete = async (user: UserRecord) => {
+		const label = user.username || user.email || user.id;
+		if (!confirm(`Delete user ${label}? This cannot be undone.`)) return;
 		dispatch({ type: UsersPageActionType.SET_ERROR, data: null });
 		try {
-			await deleteUser(id);
+			await deleteUser(user.id);
 			await load();
 		} catch (err) {
 			dispatch({
@@ -529,7 +531,7 @@ function UsersPageContent() {
 											</button>
 											<button
 												type="button"
-												onClick={() => handleDelete(user.id)}
+												onClick={() => handleDelete(user)}
 												className="rounded-full p-1.5 text-muted-foreground hover:bg-red-950/50 hover:text-red-200"
 												aria-label="Delete user"
 											>
