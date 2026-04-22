@@ -6,6 +6,7 @@ import {
 	decodePendingAuthorizationCookie,
 	getPendingCookieName,
 } from "@/lib/auth/oauth-pending-cookie";
+import PasskeyPrompt from "./passkey-prompt";
 
 export default async function OAuthConfirmPage() {
 	const session = await auth();
@@ -57,6 +58,8 @@ export default async function OAuthConfirmPage() {
 						)}
 					</div>
 				</div>
+
+				<PasskeyPrompt />
 
 				<a
 					href="/api/authorize/complete"
