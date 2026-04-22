@@ -126,6 +126,7 @@ Icons come from `lucide-react`. Match the established vocabulary:
 | Verified | `BadgeCheck` (green) |
 | Not verified | `BadgeX` (amber) |
 | Reset / retry | `RotateCcw` |
+| Audit log / list | `ClipboardList` (audit), `ListTodo` (token activity) |
 | Password | `Lock` |
 | Image placeholder | `ImageIcon` |
 

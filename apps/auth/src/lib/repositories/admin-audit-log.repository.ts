@@ -10,6 +10,7 @@ export interface AdminAuditLogRow {
 
 export interface ListAdminAuditLogParams {
 	actorUserId?: string | null;
+	action?: string | null;
 	resourceType?: string | null;
 	resourceId?: string | null;
 	sinceIso?: string | null;
@@ -18,8 +19,12 @@ export interface ListAdminAuditLogParams {
 	offset?: number;
 }
 
+export interface AdminAuditLogListEntry extends AdminAuditLogRow {
+	actor_username: string | null;
+}
+
 export interface ListAdminAuditLogResult {
-	rows: AdminAuditLogRow[];
+	rows: AdminAuditLogListEntry[];
 	total: number;
 }
 

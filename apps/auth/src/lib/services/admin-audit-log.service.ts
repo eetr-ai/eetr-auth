@@ -1,6 +1,8 @@
 import type {
 	AdminAuditLogRepository,
 	AdminAuditLogRow,
+	ListAdminAuditLogParams,
+	ListAdminAuditLogResult,
 } from "@/lib/repositories/admin-audit-log.repository";
 
 export interface LogAdminActionParams {
@@ -32,5 +34,9 @@ export class AdminAuditLogService {
 
 	async logAction(params: LogAdminActionParams): Promise<void> {
 		await this.logRepo.insert(this.buildRow(params));
+	}
+
+	async listLogs(params: ListAdminAuditLogParams): Promise<ListAdminAuditLogResult> {
+		return this.logRepo.listLogs(params);
 	}
 }

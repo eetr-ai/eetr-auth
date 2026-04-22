@@ -10,6 +10,7 @@ import {
 	Users,
 	LogOut,
 	ListTodo,
+	ClipboardList,
 } from "lucide-react";
 import { logout } from "@/app/actions/user-actions";
 
@@ -20,6 +21,7 @@ const navItems = [
 	{ href: "/dashboard/clients", label: "Clients", icon: KeyRound },
 	{ href: "/dashboard/tokens", label: "Tokens", icon: Fingerprint },
 	{ href: "/dashboard/logs", label: "Logs", icon: ListTodo },
+	{ href: "/dashboard/audit-log", label: "Audit log", icon: ClipboardList },
 ];
 
 export function AdminNav({
