@@ -2,7 +2,7 @@
 
 import { ReducerAction, bootstrapProvider } from "@eetr/react-reducer-utils";
 import { useEffect } from "react";
-import { Users, Plus, Pencil, Trash2, Loader2, BadgeCheck, BadgeX, RotateCcw } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, Loader2, BadgeCheck, BadgeX, RotateCcw, Check, X } from "lucide-react";
 import {
 	createUser,
 	deleteUser,
@@ -28,6 +28,8 @@ enum UsersPageActionType {
 	SET_EDITING_IS_ADMIN = "SET_EDITING_IS_ADMIN",
 	SET_UPLOADING_AVATAR_USER_ID = "SET_UPLOADING_AVATAR_USER_ID",
 	SET_RESETTING_VERIFICATION_USER_ID = "SET_RESETTING_VERIFICATION_USER_ID",
+	SET_CONFIRMING_DELETE_USER_ID = "SET_CONFIRMING_DELETE_USER_ID",
+	SET_DELETING_USER_ID = "SET_DELETING_USER_ID",
 }
 
 interface UsersPageState {
@@ -47,6 +49,8 @@ interface UsersPageState {
 	editingIsAdmin: boolean;
 	uploadingAvatarUserId: string | null;
 	resettingVerificationUserId: string | null;
+	confirmingDeleteUserId: string | null;
+	deletingUserId: string | null;
 }
 
 const initialState: UsersPageState = {
@@ -66,6 +70,8 @@ const initialState: UsersPageState = {
 	editingIsAdmin: true,
 	uploadingAvatarUserId: null,
 	resettingVerificationUserId: null,
+	confirmingDeleteUserId: null,
+	deletingUserId: null,
 };
 
 function reducer(
@@ -105,6 +111,10 @@ function reducer(
 			return { ...state, uploadingAvatarUserId: (action.data as string | null) ?? null };
 		case UsersPageActionType.SET_RESETTING_VERIFICATION_USER_ID:
 			return { ...state, resettingVerificationUserId: (action.data as string | null) ?? null };
+		case UsersPageActionType.SET_CONFIRMING_DELETE_USER_ID:
+			return { ...state, confirmingDeleteUserId: (action.data as string | null) ?? null };
+		case UsersPageActionType.SET_DELETING_USER_ID:
+			return { ...state, deletingUserId: (action.data as string | null) ?? null };
 		default:
 			return state;
 	}
@@ -143,6 +153,8 @@ function UsersPageContent() {
 		editingIsAdmin,
 		uploadingAvatarUserId,
 		resettingVerificationUserId,
+		confirmingDeleteUserId,
+		deletingUserId,
 	} = state;
 
 	const load = async () => {
@@ -218,18 +230,29 @@ function UsersPageContent() {
 		}
 	};
 
-	const handleDelete = async (user: UserRecord) => {
-		const label = user.username || user.email || user.id;
-		if (!confirm(`Delete user ${label}? This cannot be undone.`)) return;
+	const requestDelete = (user: UserRecord) => {
 		dispatch({ type: UsersPageActionType.SET_ERROR, data: null });
+		dispatch({ type: UsersPageActionType.SET_CONFIRMING_DELETE_USER_ID, data: user.id });
+	};
+
+	const cancelDelete = () => {
+		dispatch({ type: UsersPageActionType.SET_CONFIRMING_DELETE_USER_ID, data: null });
+	};
+
+	const confirmDelete = async (user: UserRecord) => {
+		dispatch({ type: UsersPageActionType.SET_ERROR, data: null });
+		dispatch({ type: UsersPageActionType.SET_DELETING_USER_ID, data: user.id });
 		try {
 			await deleteUser(user.id);
+			dispatch({ type: UsersPageActionType.SET_CONFIRMING_DELETE_USER_ID, data: null });
 			await load();
 		} catch (err) {
 			dispatch({
 				type: UsersPageActionType.SET_ERROR,
 				data: err instanceof Error ? err.message : "Failed to delete user",
 			});
+		} finally {
+			dispatch({ type: UsersPageActionType.SET_DELETING_USER_ID, data: null });
 		}
 	};
 
@@ -492,22 +515,52 @@ function UsersPageContent() {
 											</div>
 										</div>
 										<div className="flex items-center gap-2">
-											<label className="cursor-pointer rounded-full border border-brand-muted px-2 py-1 text-xs hover:bg-brand-muted/30">
-												{uploadingAvatarUserId === user.id ? "Uploading..." : "Photo"}
-												<input
-													type="file"
-													accept="image/jpeg,image/png,image/webp"
-													disabled={uploadingAvatarUserId != null}
-													className="hidden"
-													onChange={(e) => {
-														const file = e.target.files?.[0];
-														if (file) {
-															void handleAvatarUpload(user.id, file);
-														}
-														e.currentTarget.value = "";
-													}}
-												/>
-											</label>
+											{confirmingDeleteUserId === user.id ? (
+												<>
+													<span className="text-xs text-red-200">
+														Delete {user.username || user.email || "user"}?
+													</span>
+													<button
+														type="button"
+														onClick={() => confirmDelete(user)}
+														disabled={deletingUserId === user.id}
+														className="inline-flex items-center gap-1 rounded-full border border-red-800 bg-red-950/50 px-3 py-1 text-xs font-medium text-red-200 hover:bg-red-900/60 disabled:opacity-50"
+													>
+														{deletingUserId === user.id ? (
+															<Loader2 className="h-3.5 w-3.5 animate-spin" />
+														) : (
+															<Check className="h-3.5 w-3.5" />
+														)}
+														Delete
+													</button>
+													<button
+														type="button"
+														onClick={cancelDelete}
+														disabled={deletingUserId === user.id}
+														className="inline-flex items-center gap-1 rounded-full border border-brand-muted px-3 py-1 text-xs hover:bg-brand-muted/30 disabled:opacity-50"
+													>
+														<X className="h-3.5 w-3.5" />
+														Cancel
+													</button>
+												</>
+											) : (
+												<>
+													<label className="cursor-pointer rounded-full border border-brand-muted px-2 py-1 text-xs hover:bg-brand-muted/30">
+														{uploadingAvatarUserId === user.id ? "Uploading..." : "Photo"}
+														<input
+															type="file"
+															accept="image/jpeg,image/png,image/webp"
+															disabled={uploadingAvatarUserId != null}
+															className="hidden"
+															onChange={(e) => {
+																const file = e.target.files?.[0];
+																if (file) {
+																	void handleAvatarUpload(user.id, file);
+																}
+																e.currentTarget.value = "";
+															}}
+														/>
+													</label>
 													{user.email?.trim() && user.emailVerifiedAt && !user.isAdmin ? (
 														<button
 															type="button"
@@ -521,22 +574,24 @@ function UsersPageContent() {
 															</span>
 														</button>
 													) : null}
-											<button
-												type="button"
-												onClick={() => startEdit(user)}
-												className="rounded-full p-1.5 text-muted-foreground hover:bg-brand-muted/30 hover:text-foreground"
-												aria-label="Edit user"
-											>
-												<Pencil className="h-4 w-4" />
-											</button>
-											<button
-												type="button"
-												onClick={() => handleDelete(user)}
-												className="rounded-full p-1.5 text-muted-foreground hover:bg-red-950/50 hover:text-red-200"
-												aria-label="Delete user"
-											>
-												<Trash2 className="h-4 w-4" />
-											</button>
+													<button
+														type="button"
+														onClick={() => startEdit(user)}
+														className="rounded-full p-1.5 text-muted-foreground hover:bg-brand-muted/30 hover:text-foreground"
+														aria-label="Edit user"
+													>
+														<Pencil className="h-4 w-4" />
+													</button>
+													<button
+														type="button"
+														onClick={() => requestDelete(user)}
+														className="rounded-full p-1.5 text-muted-foreground hover:bg-red-950/50 hover:text-red-200"
+														aria-label="Delete user"
+													>
+														<Trash2 className="h-4 w-4" />
+													</button>
+												</>
+											)}
 										</div>
 									</div>
 								)}
