@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UserRecord, UserRepository } from "@/lib/repositories/admin.repository";
+import type { AdminAuditLogRepository } from "@/lib/repositories/admin-audit-log.repository";
 import { UserService } from "@/lib/services/user.service";
+import { AdminAuditLogService } from "@/lib/services/admin-audit-log.service";
 
 vi.mock("@/lib/auth/password-hash", () => ({
 	hashPassword: vi.fn().mockResolvedValue("hashed-password"),
@@ -24,12 +26,22 @@ function createUserRepoMock(): UserRepository {
 		getById: vi.fn(),
 		update: vi.fn(),
 		delete: vi.fn(),
+		deleteWithAudit: vi.fn(),
 	};
+}
+
+function createAuditLogService(): AdminAuditLogService {
+	const logRepo: AdminAuditLogRepository = {
+		insert: vi.fn(),
+		listLogs: vi.fn(),
+	};
+	return new AdminAuditLogService({ logRepo });
 }
 
 function createService(userRepository: UserRepository): UserService {
 	return new UserService({
 		userRepository,
+		adminAuditLogService: createAuditLogService(),
 		avatarCdnBaseUrl: "https://cdn.example.com",
 		argonHasher: { fetch: vi.fn() } as unknown as Fetcher,
 		hashMethod: "argon",
@@ -270,7 +282,15 @@ describe("UserService", () => {
 			vi.mocked(mockRepo.getById).mockResolvedValue(makeUserRecord({ isAdmin: false }));
 			const service = createService(mockRepo);
 			await service.deleteUser("user-1", "actor-2");
-			expect(mockRepo.delete).toHaveBeenCalledWith("user-1");
+			expect(mockRepo.deleteWithAudit).toHaveBeenCalledWith(
+				"user-1",
+				expect.objectContaining({
+					action: "user.delete",
+					resource_type: "user",
+					resource_id: "user-1",
+					actor_user_id: "actor-2",
+				})
+			);
 			expect(mockRepo.list).not.toHaveBeenCalled();
 		});
 
@@ -282,7 +302,10 @@ describe("UserService", () => {
 			]);
 			const service = createService(mockRepo);
 			await service.deleteUser("user-1", "actor-2");
-			expect(mockRepo.delete).toHaveBeenCalledWith("user-1");
+			expect(mockRepo.deleteWithAudit).toHaveBeenCalledWith(
+				"user-1",
+				expect.objectContaining({ action: "user.delete", resource_id: "user-1" })
+			);
 		});
 	});
 });

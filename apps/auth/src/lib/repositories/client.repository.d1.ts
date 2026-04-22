@@ -32,7 +32,7 @@ export class ClientRepositoryD1 implements ClientRepository {
 			environmentId != null
 				? [
 					"SELECT c.id, c.client_id, c.client_secret, c.environment_id,",
-					"COALESCE(u.username, c.created_by) AS created_by_display,",
+					"COALESCE(u.username, c.created_by, '(deleted user)') AS created_by_display,",
 					"c.expires_at, c.name",
 					"FROM clients c",
 					"LEFT JOIN users u ON u.id = c.created_by",
@@ -41,7 +41,7 @@ export class ClientRepositoryD1 implements ClientRepository {
 				].join(" ")
 				: [
 					"SELECT c.id, c.client_id, c.client_secret, c.environment_id,",
-					"COALESCE(u.username, c.created_by) AS created_by_display,",
+					"COALESCE(u.username, c.created_by, '(deleted user)') AS created_by_display,",
 					"c.expires_at, c.name",
 					"FROM clients c",
 					"LEFT JOIN users u ON u.id = c.created_by",
@@ -68,7 +68,7 @@ export class ClientRepositoryD1 implements ClientRepository {
 			.prepare(
 				[
 					"SELECT c.id, c.client_id, c.client_secret, c.environment_id,",
-					"COALESCE(u.username, c.created_by) AS created_by_display,",
+					"COALESCE(u.username, c.created_by, '(deleted user)') AS created_by_display,",
 					"c.expires_at, c.name",
 					"FROM clients c",
 					"LEFT JOIN users u ON u.id = c.created_by",
@@ -93,7 +93,7 @@ export class ClientRepositoryD1 implements ClientRepository {
 			.prepare(
 				[
 					"SELECT c.id, c.client_id, c.client_secret, c.environment_id,",
-					"COALESCE(u.username, c.created_by) AS created_by_display,",
+					"COALESCE(u.username, c.created_by, '(deleted user)') AS created_by_display,",
 					"c.expires_at, c.name",
 					"FROM clients c",
 					"LEFT JOIN users u ON u.id = c.created_by",

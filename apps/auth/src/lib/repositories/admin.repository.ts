@@ -30,6 +30,8 @@ export interface UserUpdateInput {
 	isAdmin?: boolean;
 }
 
+import type { AdminAuditLogRow } from "./admin-audit-log.repository";
+
 export interface UserRepository {
 	create(
 		id: string,
@@ -46,4 +48,9 @@ export interface UserRepository {
 	getById(id: string): Promise<UserRecord | null>;
 	update(id: string, updates: UserUpdateInput): Promise<void>;
 	delete(id: string): Promise<void>;
+	/**
+	 * Deletes a user and writes an audit log row atomically in a single D1 batch.
+	 * Dependent rows (passkeys, challenges, etc.) cascade automatically via FK.
+	 */
+	deleteWithAudit(id: string, auditRow: AdminAuditLogRow): Promise<void>;
 }

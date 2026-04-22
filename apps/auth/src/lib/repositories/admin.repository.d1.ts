@@ -4,6 +4,7 @@ import type {
 	UserUpdateInput,
 	UserWithPassword,
 } from "./admin.repository";
+import type { AdminAuditLogRow } from "./admin-audit-log.repository";
 
 export class UserRepositoryD1 implements UserRepository {
 	constructor(private readonly db: D1Database) {}
@@ -183,5 +184,24 @@ export class UserRepositoryD1 implements UserRepository {
 
 	async delete(id: string): Promise<void> {
 		await this.db.prepare("DELETE FROM users WHERE id = ?").bind(id).run();
+	}
+
+	async deleteWithAudit(id: string, auditRow: AdminAuditLogRow): Promise<void> {
+		await this.db.batch([
+			this.db
+				.prepare(
+					"INSERT INTO admin_audit_log (id, actor_user_id, action, resource_type, resource_id, details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+				)
+				.bind(
+					auditRow.id,
+					auditRow.actor_user_id,
+					auditRow.action,
+					auditRow.resource_type,
+					auditRow.resource_id,
+					auditRow.details,
+					auditRow.created_at
+				),
+			this.db.prepare("DELETE FROM users WHERE id = ?").bind(id),
+		]);
 	}
 }

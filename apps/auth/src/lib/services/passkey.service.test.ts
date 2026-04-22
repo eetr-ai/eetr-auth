@@ -59,6 +59,7 @@ function createUserRepoMock() {
 		getById: vi.fn(),
 		update: vi.fn(),
 		delete: vi.fn(),
+		deleteWithAudit: vi.fn(),
 	} satisfies UserRepository;
 }
 

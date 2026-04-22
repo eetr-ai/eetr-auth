@@ -11,6 +11,7 @@ import { EnvironmentRepositoryD1 } from "@/lib/repositories/environment.reposito
 import { PasskeyRepositoryD1 } from "@/lib/repositories/passkey.repository.d1";
 import { ScopeRepositoryD1 } from "@/lib/repositories/scope.repository.d1";
 import { TokenActivityLogRepositoryD1 } from "@/lib/repositories/token-activity-log.repository.d1";
+import { AdminAuditLogRepositoryD1 } from "@/lib/repositories/admin-audit-log.repository.d1";
 import { SiteAdminApiClientsRepositoryD1 } from "@/lib/repositories/site-admin-api-clients.repository.d1";
 import { resolveHashMethod } from "@/lib/config/hash-method";
 import { getAvatarCdnBaseUrl } from "@/lib/users/profile";
@@ -21,6 +22,7 @@ import { ClientService } from "./client.service";
 import { OauthAuthorizationService } from "./oauth-authorization.service";
 import { OauthTokenService } from "./oauth-token.service";
 import { TokenActivityLogService } from "./token-activity-log.service";
+import { AdminAuditLogService } from "./admin-audit-log.service";
 import { SiteSettingsService } from "./site-settings.service";
 import { UserChallengeService } from "./user-challenge.service";
 import { PasskeyService } from "./passkey.service";
@@ -34,6 +36,7 @@ export interface Services {
 	oauthAuthorizationService: OauthAuthorizationService;
 	oauthTokenService: OauthTokenService;
 	tokenActivityLogService: TokenActivityLogService;
+	adminAuditLogService: AdminAuditLogService;
 	siteSettingsService: SiteSettingsService;
 	userChallengeService: UserChallengeService;
 	passkeyService: PasskeyService;
@@ -65,6 +68,7 @@ export function getServices(ctx: RequestContext): Services {
 	const passkeyRepo = new PasskeyRepositoryD1(db);
 	const scopeRepo = new ScopeRepositoryD1(db);
 	const tokenActivityLogRepo = new TokenActivityLogRepositoryD1(db);
+	const adminAuditLogRepo = new AdminAuditLogRepositoryD1(db);
 	const adminClientsRepo = new SiteAdminApiClientsRepositoryD1(db);
 	const avatarCdnBaseUrl = getAvatarCdnBaseUrl(resolvedEnv);
 	const hashMethod = resolveHashMethod(resolvedEnv);
@@ -77,10 +81,12 @@ export function getServices(ctx: RequestContext): Services {
 		authUrl: resolveOptionalEnvString(resolvedEnv, "AUTH_URL") ?? "",
 	});
 	const transactionalEmailService = new TransactionalEmailService(ctx);
+	const adminAuditLogService = new AdminAuditLogService({ logRepo: adminAuditLogRepo });
 
 	return {
 		userService: new UserService({
 			userRepository: userRepo,
+			adminAuditLogService,
 			avatarCdnBaseUrl,
 			argonHasher: ctx.env.ARGON_HASHER,
 			hashMethod,
@@ -110,6 +116,7 @@ export function getServices(ctx: RequestContext): Services {
 			clientRepo,
 			envRepo,
 		}),
+		adminAuditLogService,
 		userChallengeService: new UserChallengeService({
 			userRepo,
 			challengeRepo,

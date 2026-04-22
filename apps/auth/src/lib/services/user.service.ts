@@ -2,6 +2,7 @@ import type { HashMethod } from "@/lib/config/hash-method";
 import type { UserRecord, UserRepository } from "@/lib/repositories/admin.repository";
 import { hashPassword } from "@/lib/auth/password-hash";
 import { normalizeOptionalProfileField } from "@/lib/users/profile";
+import type { AdminAuditLogService } from "./admin-audit-log.service";
 
 interface UpdateUserInput {
 	username?: string;
@@ -15,6 +16,7 @@ interface UpdateUserInput {
 
 export interface UserServiceDependencies {
 	userRepository: UserRepository;
+	adminAuditLogService: AdminAuditLogService;
 	avatarCdnBaseUrl: string;
 	argonHasher?: Fetcher;
 	hashMethod: HashMethod;
@@ -22,12 +24,20 @@ export interface UserServiceDependencies {
 
 export class UserService {
 	private readonly userRepository: UserRepository;
+	private readonly adminAuditLogService: AdminAuditLogService;
 	private readonly avatarCdnBaseUrl: string;
 	private readonly argonHasher?: Fetcher;
 	private readonly hashMethod: HashMethod;
 
-	constructor({ userRepository, avatarCdnBaseUrl, argonHasher, hashMethod }: UserServiceDependencies) {
+	constructor({
+		userRepository,
+		adminAuditLogService,
+		avatarCdnBaseUrl,
+		argonHasher,
+		hashMethod,
+	}: UserServiceDependencies) {
 		this.userRepository = userRepository;
+		this.adminAuditLogService = adminAuditLogService;
 		this.avatarCdnBaseUrl = avatarCdnBaseUrl.replace(/\/+$/, "");
 		this.argonHasher = argonHasher;
 		this.hashMethod = hashMethod;
@@ -202,6 +212,18 @@ export class UserService {
 			}
 		}
 
-		await this.userRepository.delete(id);
+		const auditRow = this.adminAuditLogService.buildRow({
+			actorUserId,
+			action: "user.delete",
+			resourceType: "user",
+			resourceId: id,
+			details: {
+				username: current.username,
+				email: current.email,
+				name: current.name,
+				isAdmin: current.isAdmin,
+			},
+		});
+		await this.userRepository.deleteWithAudit(id, auditRow);
 	}
 }

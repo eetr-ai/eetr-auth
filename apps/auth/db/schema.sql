@@ -1,5 +1,5 @@
 -- eetr-auth D1 schema (SQLite)
--- Current schema version: 0.1.0
+-- Current schema version: 0.2.0
 -- Apply with: npm run db:schema (fresh local), npm run db:schema:remote (fresh remote),
 -- or the db:migrate variants when upgrading an existing environment
 
@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS schema_metadata (
 );
 
 INSERT INTO schema_metadata (key, value)
-VALUES ('schema_version', '0.1.0')
+VALUES ('schema_version', '0.2.0')
 ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 
 -- Environments (e.g. development, staging, production)
@@ -35,16 +35,18 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- Clients (OAuth clients per environment, created by a user/admin)
+-- created_by is nullable + SET NULL on user delete so removing an admin does not
+-- cascade into their OAuth clients.
 CREATE TABLE IF NOT EXISTS clients (
   id TEXT PRIMARY KEY,
   client_id TEXT NOT NULL UNIQUE,
   client_secret TEXT NOT NULL,
   environment_id TEXT NOT NULL,
-  created_by TEXT NOT NULL,
+  created_by TEXT,
   expires_at TEXT,
   name TEXT,
   FOREIGN KEY (environment_id) REFERENCES environments(id),
-  FOREIGN KEY (created_by) REFERENCES users(id)
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_clients_environment_id ON clients(environment_id);
@@ -254,3 +256,19 @@ CREATE TABLE IF NOT EXISTS site_admin_api_clients (
   client_row_id TEXT NOT NULL PRIMARY KEY,
   FOREIGN KEY (client_row_id) REFERENCES clients(id) ON DELETE CASCADE
 );
+
+-- Admin audit log (admin actions taken via dashboard or admin API).
+-- actor_user_id has no FK so entries survive after the acting user is deleted.
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+  id TEXT PRIMARY KEY,
+  actor_user_id TEXT,
+  action TEXT NOT NULL,
+  resource_type TEXT NOT NULL,
+  resource_id TEXT,
+  details TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_audit_log_created_at ON admin_audit_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_log_actor ON admin_audit_log(actor_user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_log_resource ON admin_audit_log(resource_type, resource_id);
