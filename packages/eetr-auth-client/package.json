@@ -1,6 +1,6 @@
 {
   "name": "@eetr/eetr-auth-client",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "TypeScript client library for eetr-auth OAuth 2.1 / OIDC server",
   "type": "module",
   "main": "./dist/index.js",

@@ -1,6 +1,6 @@
 # D1 schema
 
-As of version `0.1.0`, the auth app uses versioned schema patches.
+As of version `0.1.0`, the auth app uses versioned schema patches. The current released schema version is `0.2.0`.
 
 - **`schema.sql`** – The complete authoritative snapshot of the current schema.
 - **`patches/`** – Incremental schema patches named after released schema versions, for example `0.1.0.sql`.

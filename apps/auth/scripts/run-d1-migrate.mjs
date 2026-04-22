@@ -228,7 +228,7 @@ const currentVersion = getCurrentSchemaVersion();
 if (currentVersion === INITIAL_SCHEMA_VERSION && !hasUserTables()) {
 	console.log(`No existing schema detected. Applying current schema snapshot from ${schemaSnapshotPath}`);
 	runWrangler(["--file", schemaSnapshotPath, ...passthroughArgs]);
-	console.log("Schema bootstrapped to version 0.1.0.");
+	console.log("Schema bootstrapped from snapshot.");
 	process.exit(0);
 }
 

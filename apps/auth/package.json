@@ -1,6 +1,6 @@
 {
 	"name": "@eetr/auth",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"description": "OAuth 2.1 and OpenID Connect authorization server for Cloudflare Workers",
 	"private": true,
 	"scripts": {
@@ -15,7 +15,7 @@
 		"setup:local": "npm run setup:local:env && npm run db:schema && npm run db:seed-local-admin",
 		"setup:remote": "node scripts/setup-remote.mjs",
 		"upgrade:remote": "node scripts/upgrade-remote.mjs",
-		"deploy": "opennextjs-cloudflare build && SKIP_WRANGLER_CONFIG_CHECK=yes opennextjs-cloudflare deploy -c wrangler.generated.jsonc",
+		"deploy": "opennextjs-cloudflare build && SKIP_WRANGLER_CONFIG_CHECK=yes opennextjs-cloudflare deploy -c wrangler.generated.jsonc -- --skipWranglerConfigCheck",
 		"deploy:infra": "npm run deploy",
 		"upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
 		"preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
