@@ -196,6 +196,9 @@ export class UserService {
 	}
 
 	async deleteUser(idOrUsername: string, actorUserId: string): Promise<void> {
+		if (idOrUsername === actorUserId) {
+			throw new Error("You cannot delete your own user");
+		}
 		const current = await this.resolveUser(idOrUsername);
 		if (!current) {
 			throw new Error("User not found");
