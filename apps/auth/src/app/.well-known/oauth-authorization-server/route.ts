@@ -3,6 +3,7 @@ import { getCachedScopeNames } from "@/lib/cache/scope-discovery-cache";
 import { withApiContext } from "@/lib/context/with-api-context";
 import { resolveIssuerBaseUrl } from "@/lib/config/issuer-base-url";
 import { resolveJwksCdnBaseUrl } from "@/lib/config/jwks-cdn-base-url";
+import { TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED } from "@/lib/config/oidc-metadata";
 
 const CORS_HEADERS = {
 	"Access-Control-Allow-Origin": "*",
@@ -35,6 +36,7 @@ export const GET = withApiContext(async (_req, ctx, getServices) => {
 		response_types_supported: ["code"],
 		scopes_supported: scopesSupported,
 		grant_types_supported: ["authorization_code", "client_credentials"],
+		token_endpoint_auth_methods_supported: TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED,
 		code_challenge_methods_supported: ["S256"],
 	};
 

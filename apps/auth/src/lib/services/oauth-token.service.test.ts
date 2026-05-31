@@ -7,6 +7,7 @@ import type { EnvironmentRepository } from "@/lib/repositories/environment.repos
 import type { RefreshTokenRecord, RefreshTokenRepository } from "@/lib/repositories/refresh-token.repository";
 import type { AccessTokenRecord, ClientScopeGrant, TokenRepository } from "@/lib/repositories/token.repository";
 import type { UserRecord, UserRepository } from "@/lib/repositories/admin.repository";
+import { OIDC_CLAIMS_SUPPORTED } from "@/lib/config/oidc-metadata";
 import { OauthTokenService } from "@/lib/services/oauth-token.service";
 
 function createClientRepoMock() {
@@ -812,6 +813,11 @@ describe("OauthTokenService", () => {
 			expect(payload.preferred_username).toBe("alice");
 			expect(payload.email).toBe("alice@example.com");
 			expect(payload.email_verified).toBe(true);
+			// Drift guard: every claim the builder emits must be advertised in the
+			// discovery doc's claims_supported (see /.well-known/openid-configuration).
+			for (const claim of Object.keys(payload)) {
+				expect(OIDC_CLAIMS_SUPPORTED).toContain(claim);
+			}
 		});
 
 		it("gates profile/email claims on the granted scopes", async () => {
