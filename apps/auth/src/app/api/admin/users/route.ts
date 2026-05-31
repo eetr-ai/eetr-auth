@@ -21,7 +21,7 @@ function toErrorResponse(error: unknown) {
 	);
 }
 
-export const POST = withAdminApiClientContext(async (req, _ctx, getServices) => {
+export const POST = withAdminApiClientContext(async (req, _ctx, getServices, authContext) => {
 	let payload: unknown;
 	try {
 		payload = await req.json();
@@ -83,7 +83,8 @@ export const POST = withAdminApiClientContext(async (req, _ctx, getServices) => 
 			body.password,
 			false,
 			body.name === undefined ? undefined : body.name,
-			body.email === undefined ? undefined : body.email
+			body.email === undefined ? undefined : body.email,
+			authContext.adminClientRowId
 		);
 		return NextResponse.json(user, { status: 201 });
 	} catch (error) {

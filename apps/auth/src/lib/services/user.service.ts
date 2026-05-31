@@ -90,7 +90,8 @@ export class UserService {
 		password: string,
 		isAdmin = true,
 		name?: string | null,
-		email?: string | null
+		email?: string | null,
+		actorUserId: string | null = null
 	): Promise<UserRecord> {
 		const normalizedUsername = username.trim();
 		if (!normalizedUsername) {
@@ -113,6 +114,18 @@ export class UserService {
 			passwordHash,
 			isAdmin
 		);
+		await this.adminAuditLogService.logAction({
+			actorUserId,
+			action: "user.create",
+			resourceType: "user",
+			resourceId: id,
+			details: {
+				username: normalizedUsername,
+				email: normalizedEmail,
+				name: normalizedName,
+				isAdmin,
+			},
+		});
 		return this.withAvatarUrl({
 			id,
 			username: normalizedUsername,
