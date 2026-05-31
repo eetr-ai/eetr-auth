@@ -250,6 +250,58 @@ describe("UserService", () => {
 			);
 		});
 
+		it("writes a user.update audit log entry listing changed fields", async () => {
+			const user = makeUserRecord();
+			vi.mocked(mockRepo.getById)
+				.mockResolvedValueOnce(user)
+				.mockResolvedValueOnce({ ...user, name: "Alice B" });
+			const insert = vi.fn();
+			const service = createService(mockRepo, createAuditLogService(insert));
+			await service.updateUser("user-1", { name: "Alice B", email: "new@example.com" }, "actor-1");
+			expect(insert).toHaveBeenCalledWith(
+				expect.objectContaining({
+					action: "user.update",
+					resource_type: "user",
+					resource_id: "user-1",
+					actor_user_id: "actor-1",
+				})
+			);
+			const details = JSON.parse(vi.mocked(insert).mock.calls[0]?.[0]?.details ?? "{}");
+			expect(details.changedFields).toEqual(expect.arrayContaining(["name", "email"]));
+			expect(details.changedFields).not.toContain("password");
+		});
+
+		it("writes a user.password_change audit entry when only the password changes", async () => {
+			const user = makeUserRecord();
+			vi.mocked(mockRepo.getById)
+				.mockResolvedValueOnce(user)
+				.mockResolvedValueOnce(user);
+			const insert = vi.fn();
+			const service = createService(mockRepo, createAuditLogService(insert));
+			// Self-service password change: actor and target are the same user.
+			await service.updateUser("user-1", { password: "new-password" }, "user-1");
+			expect(insert).toHaveBeenCalledWith(
+				expect.objectContaining({
+					action: "user.password_change",
+					resource_id: "user-1",
+					actor_user_id: "user-1",
+				})
+			);
+			const details = JSON.parse(vi.mocked(insert).mock.calls[0]?.[0]?.details ?? "{}");
+			expect(details.changedFields).toEqual(["password"]);
+		});
+
+		it("does not write an audit entry when nothing changes", async () => {
+			const user = makeUserRecord();
+			vi.mocked(mockRepo.getById)
+				.mockResolvedValueOnce(user)
+				.mockResolvedValueOnce(user);
+			const insert = vi.fn();
+			const service = createService(mockRepo, createAuditLogService(insert));
+			await service.updateUser("user-1", {}, "actor-1");
+			expect(insert).not.toHaveBeenCalled();
+		});
+
 		it("does not hash a blank password string", async () => {
 			const user = makeUserRecord();
 			vi.mocked(mockRepo.getById)

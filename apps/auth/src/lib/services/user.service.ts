@@ -205,6 +205,25 @@ export class UserService {
 		if (!updated) {
 			throw new Error("User not found");
 		}
+
+		// Never log the password value — only that it changed.
+		const changedFields = Object.keys(patch).map((field) =>
+			field === "passwordHash" ? "password" : field
+		);
+		if (changedFields.length > 0) {
+			const passwordOnly = changedFields.length === 1 && changedFields[0] === "password";
+			await this.adminAuditLogService.logAction({
+				actorUserId,
+				action: passwordOnly ? "user.password_change" : "user.update",
+				resourceType: "user",
+				resourceId: id,
+				details: {
+					username: updated.username,
+					changedFields,
+				},
+			});
+		}
+
 		return this.withAvatarUrl(updated);
 	}
 
