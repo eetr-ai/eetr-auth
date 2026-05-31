@@ -5,6 +5,9 @@ import type {
 	PasskeyRepository,
 } from "./passkey.repository";
 
+/** Raw row shape returned by the credential SELECT projections (backed_up as 0/1). */
+type PasskeyCredentialDbRow = Omit<PasskeyCredentialRow, "backedUp"> & { backedUp: number };
+
 export class PasskeyRepositoryD1 implements PasskeyRepository {
 	constructor(private readonly db: D1Database) {}
 
@@ -62,8 +65,8 @@ export class PasskeyRepositoryD1 implements PasskeyRepository {
 		await this.db
 			.prepare(
 				`INSERT INTO user_passkeys
-           (id, user_id, credential_id, public_key, counter, device_type, backed_up, transports, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+           (id, user_id, credential_id, public_key, counter, device_type, backed_up, transports, name, last_used_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 			)
 			.bind(
 				row.id,
@@ -74,6 +77,8 @@ export class PasskeyRepositoryD1 implements PasskeyRepository {
 				row.deviceType,
 				row.backedUp ? 1 : 0,
 				row.transports ?? null,
+				row.name ?? null,
+				row.lastUsedAt ?? null,
 				row.createdAt
 			)
 			.run();
@@ -84,21 +89,11 @@ export class PasskeyRepositoryD1 implements PasskeyRepository {
 			.prepare(
 				`SELECT id, user_id as userId, credential_id as credentialId, public_key as publicKey,
                 counter, device_type as deviceType, backed_up as backedUp,
-                transports, created_at as createdAt
+                transports, name, last_used_at as lastUsedAt, created_at as createdAt
          FROM user_passkeys WHERE credential_id = ?`
 			)
 			.bind(credentialId)
-			.first<{
-				id: string;
-				userId: string;
-				credentialId: string;
-				publicKey: string;
-				counter: number;
-				deviceType: string;
-				backedUp: number;
-				transports: string | null;
-				createdAt: string;
-			}>();
+			.first<PasskeyCredentialDbRow>();
 		if (!r) return null;
 		return { ...r, backedUp: r.backedUp === 1 };
 	}
@@ -108,28 +103,39 @@ export class PasskeyRepositoryD1 implements PasskeyRepository {
 			.prepare(
 				`SELECT id, user_id as userId, credential_id as credentialId, public_key as publicKey,
                 counter, device_type as deviceType, backed_up as backedUp,
-                transports, created_at as createdAt
+                transports, name, last_used_at as lastUsedAt, created_at as createdAt
          FROM user_passkeys WHERE user_id = ? ORDER BY created_at ASC`
 			)
 			.bind(userId)
-			.all<{
-				id: string;
-				userId: string;
-				credentialId: string;
-				publicKey: string;
-				counter: number;
-				deviceType: string;
-				backedUp: number;
-				transports: string | null;
-				createdAt: string;
-			}>();
+			.all<PasskeyCredentialDbRow>();
 		return results.map((r) => ({ ...r, backedUp: r.backedUp === 1 }));
 	}
 
-	async updateCredentialCounter(credentialId: string, counter: number): Promise<void> {
+	async findCredentialByRowIdForUser(
+		rowId: string,
+		userId: string
+	): Promise<PasskeyCredentialRow | null> {
+		const r = await this.db
+			.prepare(
+				`SELECT id, user_id as userId, credential_id as credentialId, public_key as publicKey,
+                counter, device_type as deviceType, backed_up as backedUp,
+                transports, name, last_used_at as lastUsedAt, created_at as createdAt
+         FROM user_passkeys WHERE id = ? AND user_id = ?`
+			)
+			.bind(rowId, userId)
+			.first<PasskeyCredentialDbRow>();
+		if (!r) return null;
+		return { ...r, backedUp: r.backedUp === 1 };
+	}
+
+	async updateCredentialCounter(
+		credentialId: string,
+		counter: number,
+		lastUsedAt: string
+	): Promise<void> {
 		await this.db
-			.prepare("UPDATE user_passkeys SET counter = ? WHERE credential_id = ?")
-			.bind(counter, credentialId)
+			.prepare("UPDATE user_passkeys SET counter = ?, last_used_at = ? WHERE credential_id = ?")
+			.bind(counter, lastUsedAt, credentialId)
 			.run();
 	}
 
@@ -138,6 +144,22 @@ export class PasskeyRepositoryD1 implements PasskeyRepository {
 			.prepare("DELETE FROM user_passkeys WHERE credential_id = ?")
 			.bind(credentialId)
 			.run();
+	}
+
+	async deleteCredentialForUser(userId: string, rowId: string): Promise<boolean> {
+		const result = await this.db
+			.prepare("DELETE FROM user_passkeys WHERE id = ? AND user_id = ?")
+			.bind(rowId, userId)
+			.run();
+		return (result.meta.changes ?? 0) > 0;
+	}
+
+	async renameCredential(userId: string, rowId: string, name: string): Promise<boolean> {
+		const result = await this.db
+			.prepare("UPDATE user_passkeys SET name = ? WHERE id = ? AND user_id = ?")
+			.bind(name, rowId, userId)
+			.run();
+		return (result.meta.changes ?? 0) > 0;
 	}
 
 	async hasCredentialForUser(userId: string): Promise<boolean> {

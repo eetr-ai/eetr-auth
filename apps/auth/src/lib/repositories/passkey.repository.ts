@@ -15,6 +15,8 @@ export interface PasskeyCredentialRow {
 	deviceType: string;
 	backedUp: boolean;
 	transports: string | null; // JSON array string
+	name: string | null; // user-editable label, e.g. "Chrome on macOS"
+	lastUsedAt: string | null; // ISO, updated on each verified ceremony
 	createdAt: string; // ISO
 }
 
@@ -36,8 +38,14 @@ export interface PasskeyRepository {
 	insertCredential(row: PasskeyCredentialRow): Promise<void>;
 	findCredentialById(credentialId: string): Promise<PasskeyCredentialRow | null>;
 	findCredentialsByUserId(userId: string): Promise<PasskeyCredentialRow[]>;
-	updateCredentialCounter(credentialId: string, counter: number): Promise<void>;
+	/** Look up a credential by its row id, scoped to its owner (IDOR-safe). */
+	findCredentialByRowIdForUser(rowId: string, userId: string): Promise<PasskeyCredentialRow | null>;
+	updateCredentialCounter(credentialId: string, counter: number, lastUsedAt: string): Promise<void>;
 	deleteCredential(credentialId: string): Promise<void>;
+	/** Delete a credential by row id scoped to its owner. Returns true if a row was removed. */
+	deleteCredentialForUser(userId: string, rowId: string): Promise<boolean>;
+	/** Rename a credential by row id scoped to its owner. Returns true if a row was updated. */
+	renameCredential(userId: string, rowId: string, name: string): Promise<boolean>;
 	hasCredentialForUser(userId: string): Promise<boolean>;
 
 	// Exchange tokens

@@ -42,8 +42,11 @@ function createRepoMock() {
 		insertCredential: vi.fn(),
 		findCredentialById: vi.fn(),
 		findCredentialsByUserId: vi.fn(),
+		findCredentialByRowIdForUser: vi.fn(),
 		updateCredentialCounter: vi.fn(),
 		deleteCredential: vi.fn(),
+		deleteCredentialForUser: vi.fn(),
+		renameCredential: vi.fn(),
 		hasCredentialForUser: vi.fn(),
 		insertExchangeToken: vi.fn(),
 		consumeExchangeToken: vi.fn(),
@@ -98,6 +101,8 @@ function makeCredentialRow(overrides?: Partial<PasskeyCredentialRow>): PasskeyCr
 		deviceType: "singleDevice",
 		backedUp: false,
 		transports: JSON.stringify(["internal"]),
+		name: null,
+		lastUsedAt: null,
 		createdAt: "2026-04-06T13:20:00.000Z",
 		...overrides,
 	};
@@ -404,7 +409,11 @@ describe("PasskeyService", () => {
 				expectedRPID: ["auth.sub.example.com", "example.com"],
 			})
 		);
-		expect(repo.updateCredentialCounter).toHaveBeenCalledWith("credential-base64url", 9);
+		expect(repo.updateCredentialCounter).toHaveBeenCalledWith(
+			"credential-base64url",
+			9,
+			expect.any(String)
+		);
 		expect(repo.deleteChallenge).toHaveBeenCalledWith("challenge-2");
 		expect(repo.insertExchangeToken).toHaveBeenCalledWith({
 			id: "challenge-1",

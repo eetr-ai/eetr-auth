@@ -184,6 +184,8 @@ export class PasskeyService {
 			deviceType: credentialDeviceType,
 			backedUp: credentialBackedUp,
 			transports: response.response.transports ? JSON.stringify(response.response.transports) : null,
+			name: null,
+			lastUsedAt: null,
 			createdAt: new Date().toISOString(),
 		};
 
@@ -304,10 +306,11 @@ export class PasskeyService {
 			throw new Error("Passkey authentication could not be verified.");
 		}
 
-		// Update the counter to prevent replay attacks
+		// Update the counter to prevent replay attacks (and record last use)
 		await this.repo.updateCredentialCounter(
 			credentialRow.credentialId,
-			authenticationInfo.newCounter
+			authenticationInfo.newCounter,
+			new Date().toISOString()
 		);
 		await this.repo.deleteChallenge(challengeId);
 
