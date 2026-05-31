@@ -4,17 +4,7 @@ import { ReducerAction, bootstrapProvider } from "@eetr/react-reducer-utils";
 import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-	KeyRound,
-	ArrowLeft,
-	Loader2,
-	Trash2,
-	RefreshCw,
-	Copy,
-	Check,
-	Plus,
-	Ban,
-} from "lucide-react";
+import { KeyRound, ArrowLeft } from "lucide-react";
 import {
 	getClientWithDetails,
 	updateClientRedirectUris,
@@ -30,22 +20,16 @@ import {
 } from "@/app/actions/token-actions";
 import { listEnvironments } from "@/app/actions/environment-actions";
 import { listScopes } from "@/app/actions/scope-actions";
+import { Banner, FullPageSpinner } from "@/components/ui";
 import type { ClientWithDetails } from "@/lib/repositories/client.repository";
 import type { Environment } from "@/lib/repositories/environment.repository";
 import type { Scope } from "@/lib/repositories/scope.repository";
-
-interface TokenActivityItem {
-	tokenType: "access" | "refresh";
-	tokenId: string;
-	clientId: string;
-	clientName: string | null;
-	environmentId: string;
-	expiresAt: string;
-	status: "active" | "expired" | "revoked";
-	scopeNames: string[];
-	createdAt: string | null;
-	rotatedFromTokenId: string | null;
-}
+import { ClientInfoSection } from "./_components/client-info-section";
+import { RedirectUrisSection } from "./_components/redirect-uris-section";
+import { ScopesSection } from "./_components/scopes-section";
+import { TokensSection } from "./_components/tokens-section";
+import { RotatedSecretBanner } from "./_components/rotated-secret-banner";
+import type { TokenActivityItem } from "./_components/token-row";
 
 enum ClientDetailActionType {
 	SET_CLIENT = "SET_CLIENT",
@@ -151,11 +135,6 @@ const { Provider: ClientDetailStateProvider, useContextAccessors: useClientDetai
 		reducer,
 		initialState
 	);
-
-function maskToken(token: string): string {
-	if (token.length <= 12) return token;
-	return `${token.slice(0, 8)}...${token.slice(-4)}`;
-}
 
 export default function ClientDetailPage() {
 	return (
@@ -415,11 +394,7 @@ function ClientDetailPageContent() {
 	};
 
 	if (loading) {
-		return (
-			<main className="flex min-h-screen items-center justify-center p-6">
-				<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-			</main>
-		);
+		return <FullPageSpinner />;
 	}
 
 	if (!client) {
@@ -453,246 +428,57 @@ function ClientDetailPageContent() {
 				</div>
 			</div>
 
-			{error && (
-				<p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
-					{error}
-				</p>
-			)}
+			<Banner variant="error" message={error} className="mb-4" />
 
 			{rotatedSecret && (
-				<div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-600/50 dark:bg-amber-950/30">
-					<p className="mb-2 text-sm font-medium text-amber-700 dark:text-amber-200">
-						New client secret. Copy it now — it will not be shown again.
-					</p>
-					<div className="flex items-center gap-2">
-						<code className="flex-1 rounded border border-brand-muted bg-background px-2 py-1 text-sm">
-							{rotatedSecret}
-						</code>
-						<button
-							type="button"
-							onClick={copySecret}
-							className="rounded-full p-1.5 hover:bg-brand-muted/30"
-							aria-label="Copy secret"
-						>
-							{copied ? (
-								<Check className="h-4 w-4 text-green-600 dark:text-green-400" />
-							) : (
-								<Copy className="h-4 w-4" />
-							)}
-						</button>
-					</div>
-					<button
-						type="button"
-						onClick={() =>
-							dispatch({ type: ClientDetailActionType.SET_ROTATED_SECRET, data: null })
-						}
-						className="mt-2 text-sm text-muted-foreground underline hover:text-foreground"
-					>
-						Dismiss
-					</button>
-				</div>
+				<RotatedSecretBanner
+					secret={rotatedSecret}
+					copied={copied}
+					onCopy={copySecret}
+					onDismiss={() =>
+						dispatch({ type: ClientDetailActionType.SET_ROTATED_SECRET, data: null })
+					}
+				/>
 			)}
 
 			<div className="space-y-6">
-				<section className="rounded-xl border border-brand-muted p-6">
-					<h2 className="mb-3 text-lg font-medium">
-						{client.name ? `${client.name}` : "Client details"}
-					</h2>
-					<div className="mb-3">
-						<label className="mb-1 block text-sm font-medium">Name</label>
-						<form onSubmit={handleSaveName} className="flex gap-2">
-							<input
-								type="text"
-								value={name}
-								onChange={(e) =>
-									dispatch({ type: ClientDetailActionType.SET_NAME, data: e.target.value })
-								}
-								placeholder="e.g. Production API"
-								className="flex-1 rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground placeholder:text-foreground/50 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-							/>
-							<button
-								type="submit"
-								disabled={savingName}
-								className="rounded-full bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-muted disabled:opacity-50"
-							>
-								{savingName ? "Saving…" : "Save name"}
-							</button>
-						</form>
-					</div>
-					<p className="mb-1 text-sm font-medium">Client ID</p>
-					<code className="block rounded border border-brand-muted bg-background px-3 py-2 font-mono text-sm">
-						{client.clientId}
-					</code>
-					<p className="mt-2 text-sm text-muted-foreground">
-						Environment: {envById[client.environmentId]?.name ?? client.environmentId}
-					</p>
-					{client.expiresAt && (
-						<p className="text-sm text-muted-foreground">
-							Expires: {new Date(client.expiresAt).toLocaleString()}
-						</p>
-					)}
-					<div className="mt-4 flex gap-2">
-						<button
-							type="button"
-							onClick={handleRotateSecret}
-							disabled={rotating}
-							className="flex items-center gap-2 rounded-full border border-brand-muted px-3 py-2 text-sm font-medium hover:bg-brand-muted/30 disabled:opacity-50"
-						>
-							<RefreshCw className={`h-4 w-4 ${rotating ? "animate-spin" : ""}`} />
-							Rotate secret
-						</button>
-						<button
-							type="button"
-							onClick={handleDelete}
-							className="flex items-center gap-2 rounded-full border border-red-300 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-200 dark:hover:bg-red-950/50"
-						>
-							<Trash2 className="h-4 w-4" />
-							Delete client
-						</button>
-					</div>
-				</section>
+				<ClientInfoSection
+					client={client}
+					envById={envById}
+					name={name}
+					onNameChange={(value) =>
+						dispatch({ type: ClientDetailActionType.SET_NAME, data: value })
+					}
+					savingName={savingName}
+					onSaveName={handleSaveName}
+					rotating={rotating}
+					onRotateSecret={handleRotateSecret}
+					onDelete={handleDelete}
+				/>
 
-				<section className="rounded-xl border border-brand-muted p-6">
-					<h2 className="mb-3 text-lg font-medium">Redirect URIs</h2>
-					<form onSubmit={handleSaveUris} className="space-y-2">
-						{redirectUris.map((uri, i) => (
-							<div key={i} className="flex gap-2">
-								<input
-									type="url"
-									value={uri}
-									onChange={(e) => setUriAt(i, e.target.value)}
-									placeholder="https://..."
-									className="flex-1 rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground placeholder:text-foreground/50 focus:border-brand focus:outline-none"
-								/>
-								<button
-									type="button"
-									onClick={() => removeUri(i)}
-									className="rounded-full p-2 text-muted-foreground hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/50 dark:hover:text-red-200"
-									aria-label="Remove"
-								>
-									<Trash2 className="h-4 w-4" />
-								</button>
-							</div>
-						))}
-						<button
-							type="button"
-							onClick={addUri}
-							className="flex items-center gap-1 text-sm text-brand hover:underline"
-						>
-							<Plus className="h-4 w-4" />
-							Add URI
-						</button>
-						<button
-							type="submit"
-							disabled={savingUris}
-							className="mt-2 rounded-full bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-muted disabled:opacity-50"
-						>
-							{savingUris ? "Saving…" : "Save redirect URIs"}
-						</button>
-					</form>
-				</section>
+				<RedirectUrisSection
+					redirectUris={redirectUris}
+					onUriChange={setUriAt}
+					onAddUri={addUri}
+					onRemoveUri={removeUri}
+					saving={savingUris}
+					onSubmit={handleSaveUris}
+				/>
 
-				<section className="rounded-xl border border-brand-muted p-6">
-					<h2 className="mb-3 text-lg font-medium">Scopes</h2>
-					<form onSubmit={handleSaveScopes} className="space-y-2">
-						<div className="flex flex-wrap gap-3">
-							{scopes.map((s) => (
-								<label key={s.id} className="flex cursor-pointer items-center gap-2">
-									<input
-										type="checkbox"
-										checked={scopeIds.includes(s.id)}
-										onChange={() => toggleScope(s.id)}
-										className="rounded border-brand-muted"
-									/>
-									<span className="text-sm">{s.scopeName}</span>
-								</label>
-							))}
-							{scopes.length === 0 && (
-								<span className="text-sm text-muted-foreground">
-									No scopes defined. Add them in Setup.
-								</span>
-							)}
-						</div>
-						<button
-							type="submit"
-							disabled={savingScopes}
-							className="mt-2 rounded-full bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-muted disabled:opacity-50"
-						>
-							{savingScopes ? "Saving…" : "Save scopes"}
-						</button>
-					</form>
-				</section>
+				<ScopesSection
+					scopes={scopes}
+					scopeIds={scopeIds}
+					onToggleScope={toggleScope}
+					saving={savingScopes}
+					onSubmit={handleSaveScopes}
+				/>
 
-				<section className="rounded-xl border border-brand-muted p-6">
-					<h2 className="mb-3 text-lg font-medium">Issued Tokens</h2>
-					<div className="overflow-x-auto rounded-xl border border-brand-muted">
-						<table className="w-full min-w-[760px] text-left text-sm">
-							<thead>
-								<tr className="border-b border-brand-muted bg-brand-muted/20">
-									<th className="px-4 py-3 font-medium">Type</th>
-									<th className="px-4 py-3 font-medium">Token</th>
-									<th className="px-4 py-3 font-medium">Scopes</th>
-									<th className="px-4 py-3 font-medium">Status</th>
-									<th className="px-4 py-3 font-medium">Created</th>
-									<th className="px-4 py-3 font-medium">Expires</th>
-									<th className="px-4 py-3 font-medium">Actions</th>
-								</tr>
-							</thead>
-							<tbody>
-								{tokens.map((token) => (
-									<tr
-										key={`${token.tokenType}-${token.tokenId}`}
-										className="border-b border-brand-muted/50"
-									>
-										<td className="px-4 py-3 uppercase">{token.tokenType}</td>
-										<td className="px-4 py-3 font-mono text-xs">
-											{maskToken(token.tokenId)}
-										</td>
-										<td className="px-4 py-3">
-											{token.scopeNames.length > 0
-												? token.scopeNames.join(" ")
-												: <span className="text-muted-foreground">none</span>}
-										</td>
-										<td className="px-4 py-3">{token.status}</td>
-										<td className="px-4 py-3">
-											{token.createdAt ? new Date(token.createdAt).toLocaleString() : "n/a"}
-										</td>
-										<td className="px-4 py-3">
-											{new Date(token.expiresAt).toLocaleString()}
-										</td>
-										<td className="px-4 py-3">
-											<div className="flex items-center gap-2">
-												<button
-													type="button"
-													onClick={() => handleRevokeToken(token)}
-													disabled={tokenActionKey != null}
-													className="inline-flex items-center gap-1 rounded-full border border-amber-300 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-950/50"
-												>
-													<Ban className="h-3.5 w-3.5" />
-													Revoke
-												</button>
-												<button
-													type="button"
-													onClick={() => handleDeleteToken(token)}
-													disabled={tokenActionKey != null}
-													className="inline-flex items-center gap-1 rounded-full border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-200 dark:hover:bg-red-950/50"
-												>
-													<Trash2 className="h-3.5 w-3.5" />
-													Delete
-												</button>
-											</div>
-										</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-					</div>
-					{tokens.length === 0 && (
-						<p className="mt-3 text-sm text-muted-foreground">
-							No tokens have been issued for this client yet.
-						</p>
-					)}
-				</section>
+				<TokensSection
+					tokens={tokens}
+					tokenActionKey={tokenActionKey}
+					onRevoke={handleRevokeToken}
+					onDelete={handleDeleteToken}
+				/>
 			</div>
 		</main>
 	);

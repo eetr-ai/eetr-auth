@@ -2,7 +2,7 @@
 
 import { ReducerAction, bootstrapProvider } from "@eetr/react-reducer-utils";
 import { useEffect } from "react";
-import { Users, Plus, Pencil, Trash2, Loader2, BadgeCheck, BadgeX, RotateCcw, Check, X } from "lucide-react";
+import { Users } from "lucide-react";
 import {
 	createUser,
 	deleteUser,
@@ -10,6 +10,9 @@ import {
 	updateUser,
 } from "@/app/actions/user-actions";
 import type { UserRecord } from "@/lib/repositories/admin.repository";
+import { FullPageSpinner } from "@/components/ui";
+import { CreateUserForm } from "./_components/create-user-form";
+import { UsersSection } from "./_components/users-section";
 
 enum UsersPageActionType {
 	SET_USERS = "SET_USERS",
@@ -300,32 +303,8 @@ function UsersPageContent() {
 		}
 	};
 
-	const renderVerificationStatus = (user: UserRecord) => {
-		if (!user.email?.trim()) {
-			return <span className="text-xs text-muted-foreground">No email</span>;
-		}
-		if (user.emailVerifiedAt) {
-			return (
-				<span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200">
-					<BadgeCheck className="h-3.5 w-3.5" />
-					Verified
-				</span>
-			);
-		}
-		return (
-			<span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700 dark:bg-amber-950/50 dark:text-amber-200">
-				<BadgeX className="h-3.5 w-3.5" />
-				Unverified
-			</span>
-		);
-	};
-
 	if (loading) {
-		return (
-			<main className="flex min-h-screen items-center justify-center p-6">
-				<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-			</main>
-		);
+		return <FullPageSpinner />;
 	}
 
 	return (
@@ -336,272 +315,69 @@ function UsersPageContent() {
 			</div>
 
 			<div className="mt-8 grid gap-8">
-				<section className="rounded-xl border border-brand-muted p-6">
-					<h2 className="mb-4 text-lg font-medium">Create user</h2>
-					{error && (
-						<p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">{error}</p>
-					)}
-					<form onSubmit={handleCreate} className="grid gap-3 md:grid-cols-6">
-						<input
-							type="text"
-							value={username}
-							onChange={(e) =>
-								dispatch({ type: UsersPageActionType.SET_USERNAME, data: e.target.value })
-							}
-							placeholder="Username"
-							className="rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground placeholder:text-foreground/50 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-						/>
-						<input
-							type="text"
-							value={name}
-							onChange={(e) =>
-								dispatch({ type: UsersPageActionType.SET_NAME, data: e.target.value })
-							}
-							placeholder="Display name (optional)"
-							className="rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground placeholder:text-foreground/50 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-						/>
-						<input
-							type="email"
-							value={email}
-							onChange={(e) =>
-								dispatch({ type: UsersPageActionType.SET_EMAIL, data: e.target.value })
-							}
-							placeholder="Email (optional)"
-							className="rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground placeholder:text-foreground/50 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-						/>
-						<input
-							type="password"
-							value={password}
-							onChange={(e) =>
-								dispatch({ type: UsersPageActionType.SET_PASSWORD, data: e.target.value })
-							}
-							placeholder="Password"
-							className="rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground placeholder:text-foreground/50 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-						/>
-						<label className="flex items-center gap-2 rounded-xl border border-brand-muted px-3 py-2 text-sm">
-							<input
-								type="checkbox"
-								checked={isAdmin}
-								onChange={(e) =>
-									dispatch({ type: UsersPageActionType.SET_IS_ADMIN, data: e.target.checked })
-								}
-							/>
-							Is admin
-						</label>
-						<button
-							type="submit"
-							className="flex items-center justify-center gap-1 rounded-full bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-muted"
-						>
-							<Plus className="h-4 w-4" />
-							Create
-						</button>
-					</form>
-				</section>
+				<CreateUserForm
+					username={username}
+					onUsernameChange={(value) =>
+						dispatch({ type: UsersPageActionType.SET_USERNAME, data: value })
+					}
+					name={name}
+					onNameChange={(value) =>
+						dispatch({ type: UsersPageActionType.SET_NAME, data: value })
+					}
+					email={email}
+					onEmailChange={(value) =>
+						dispatch({ type: UsersPageActionType.SET_EMAIL, data: value })
+					}
+					password={password}
+					onPasswordChange={(value) =>
+						dispatch({ type: UsersPageActionType.SET_PASSWORD, data: value })
+					}
+					isAdmin={isAdmin}
+					onIsAdminChange={(value) =>
+						dispatch({ type: UsersPageActionType.SET_IS_ADMIN, data: value })
+					}
+					error={error}
+					onSubmit={handleCreate}
+				/>
 
-				<section className="rounded-xl border border-brand-muted p-6">
-					<h2 className="mb-4 text-lg font-medium">Manage users</h2>
-					<ul className="space-y-2">
-						{users.map((user) => (
-							<li
-								key={user.id}
-								className="rounded-xl border border-brand-muted px-3 py-2"
-							>
-								{editingUserId === user.id ? (
-									<form onSubmit={handleUpdate} className="grid gap-2 md:grid-cols-7">
-										<input
-											type="text"
-											value={editingUsername}
-											onChange={(e) =>
-												dispatch({
-													type: UsersPageActionType.SET_EDITING_USERNAME,
-													data: e.target.value,
-												})
-											}
-											className="rounded-xl border border-brand-muted bg-background px-2 py-1 text-sm focus:border-brand focus:outline-none"
-										/>
-										<input
-											type="text"
-											value={editingName}
-											onChange={(e) =>
-												dispatch({
-													type: UsersPageActionType.SET_EDITING_NAME,
-													data: e.target.value,
-												})
-											}
-											placeholder="Display name"
-											className="rounded-xl border border-brand-muted bg-background px-2 py-1 text-sm focus:border-brand focus:outline-none"
-										/>
-										<input
-											type="email"
-											value={editingEmail}
-											onChange={(e) =>
-												dispatch({
-													type: UsersPageActionType.SET_EDITING_EMAIL,
-													data: e.target.value,
-												})
-											}
-											placeholder="Email"
-											className="rounded-xl border border-brand-muted bg-background px-2 py-1 text-sm focus:border-brand focus:outline-none"
-										/>
-										<input
-											type="password"
-											value={editingPassword}
-											onChange={(e) =>
-												dispatch({
-													type: UsersPageActionType.SET_EDITING_PASSWORD,
-													data: e.target.value,
-												})
-											}
-											placeholder="New password (optional)"
-											className="rounded-xl border border-brand-muted bg-background px-2 py-1 text-sm focus:border-brand focus:outline-none"
-										/>
-										<label className="flex items-center gap-2 rounded-xl border border-brand-muted px-2 py-1 text-sm">
-											<input
-												type="checkbox"
-												checked={editingIsAdmin}
-												onChange={(e) =>
-													dispatch({
-														type: UsersPageActionType.SET_EDITING_IS_ADMIN,
-														data: e.target.checked,
-													})
-												}
-											/>
-											Is admin
-										</label>
-										<button
-											type="submit"
-											className="rounded-full border border-brand-muted px-2 py-1 text-sm hover:bg-brand-muted/30"
-										>
-											Save
-										</button>
-										<button
-											type="button"
-											onClick={() =>
-												dispatch({
-													type: UsersPageActionType.SET_EDITING_USER_ID,
-													data: null,
-												})
-											}
-											className="rounded-full border border-brand-muted px-2 py-1 text-sm hover:bg-brand-muted/30"
-										>
-											Cancel
-										</button>
-									</form>
-								) : (
-									<div className="flex items-center justify-between">
-										<div className="flex items-center gap-3">
-											{user.avatarUrl ? (
-												<div
-													className="h-10 w-10 rounded-full bg-cover bg-center"
-													style={{ backgroundImage: `url("${user.avatarUrl}")` }}
-												/>
-											) : (
-												<div className="flex h-10 w-10 items-center justify-center rounded-full border border-brand-muted text-xs font-semibold">
-													{(user.name ?? user.username).slice(0, 2).toUpperCase()}
-												</div>
-											)}
-											<div className="flex flex-col">
-											<span className="font-medium">{user.name ?? user.username}</span>
-											<span className="text-xs text-muted-foreground">
-												@{user.username}
-											</span>
-											{user.email && (
-												<span className="text-xs text-muted-foreground">{user.email}</span>
-											)}
-											{renderVerificationStatus(user)}
-											<span className="text-xs text-muted-foreground">
-												{user.isAdmin ? "Admin" : "User"}
-											</span>
-											</div>
-										</div>
-										<div className="flex items-center gap-2">
-											{confirmingDeleteUserId === user.id ? (
-												<>
-													<span className="text-xs text-red-700 dark:text-red-200">
-														Delete {user.username || user.email || "user"}?
-													</span>
-													<button
-														type="button"
-														onClick={() => confirmDelete(user)}
-														disabled={deletingUserId === user.id}
-														className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200 dark:hover:bg-red-900/60"
-													>
-														{deletingUserId === user.id ? (
-															<Loader2 className="h-3.5 w-3.5 animate-spin" />
-														) : (
-															<Check className="h-3.5 w-3.5" />
-														)}
-														Delete
-													</button>
-													<button
-														type="button"
-														onClick={cancelDelete}
-														disabled={deletingUserId === user.id}
-														className="inline-flex items-center gap-1 rounded-full border border-brand-muted px-3 py-1 text-xs hover:bg-brand-muted/30 disabled:opacity-50"
-													>
-														<X className="h-3.5 w-3.5" />
-														Cancel
-													</button>
-												</>
-											) : (
-												<>
-													<label className="cursor-pointer rounded-full border border-brand-muted px-2 py-1 text-xs hover:bg-brand-muted/30">
-														{uploadingAvatarUserId === user.id ? "Uploading..." : "Photo"}
-														<input
-															type="file"
-															accept="image/jpeg,image/png,image/webp"
-															disabled={uploadingAvatarUserId != null}
-															className="hidden"
-															onChange={(e) => {
-																const file = e.target.files?.[0];
-																if (file) {
-																	void handleAvatarUpload(user.id, file);
-																}
-																e.currentTarget.value = "";
-															}}
-														/>
-													</label>
-													{user.email?.trim() && user.emailVerifiedAt && !user.isAdmin ? (
-														<button
-															type="button"
-															onClick={() => handleResetVerification(user)}
-															disabled={resettingVerificationUserId === user.id}
-															className="rounded-full border border-brand-muted px-2 py-1 text-xs hover:bg-brand-muted/30 disabled:opacity-50"
-														>
-															<span className="inline-flex items-center gap-1">
-																<RotateCcw className="h-3.5 w-3.5" />
-																{resettingVerificationUserId === user.id ? "Resetting..." : "Require re-verify"}
-															</span>
-														</button>
-													) : null}
-													<button
-														type="button"
-														onClick={() => startEdit(user)}
-														className="rounded-full p-1.5 text-muted-foreground hover:bg-brand-muted/30 hover:text-foreground"
-														aria-label="Edit user"
-													>
-														<Pencil className="h-4 w-4" />
-													</button>
-													<button
-														type="button"
-														onClick={() => requestDelete(user)}
-														className="rounded-full p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/50 dark:hover:text-red-200"
-														aria-label="Delete user"
-													>
-														<Trash2 className="h-4 w-4" />
-													</button>
-												</>
-											)}
-										</div>
-									</div>
-								)}
-							</li>
-						))}
-						{users.length === 0 && (
-							<li className="py-2 text-sm text-muted-foreground">No users found.</li>
-						)}
-					</ul>
-				</section>
+				<UsersSection
+					users={users}
+					editingUserId={editingUserId}
+					editingUsername={editingUsername}
+					onEditingUsernameChange={(value) =>
+						dispatch({ type: UsersPageActionType.SET_EDITING_USERNAME, data: value })
+					}
+					editingName={editingName}
+					onEditingNameChange={(value) =>
+						dispatch({ type: UsersPageActionType.SET_EDITING_NAME, data: value })
+					}
+					editingEmail={editingEmail}
+					onEditingEmailChange={(value) =>
+						dispatch({ type: UsersPageActionType.SET_EDITING_EMAIL, data: value })
+					}
+					editingPassword={editingPassword}
+					onEditingPasswordChange={(value) =>
+						dispatch({ type: UsersPageActionType.SET_EDITING_PASSWORD, data: value })
+					}
+					editingIsAdmin={editingIsAdmin}
+					onEditingIsAdminChange={(value) =>
+						dispatch({ type: UsersPageActionType.SET_EDITING_IS_ADMIN, data: value })
+					}
+					onUpdate={handleUpdate}
+					onCancelEdit={() =>
+						dispatch({ type: UsersPageActionType.SET_EDITING_USER_ID, data: null })
+					}
+					onStartEdit={startEdit}
+					uploadingAvatarUserId={uploadingAvatarUserId}
+					onAvatarUpload={(userId, file) => void handleAvatarUpload(userId, file)}
+					resettingVerificationUserId={resettingVerificationUserId}
+					onResetVerification={handleResetVerification}
+					confirmingDeleteUserId={confirmingDeleteUserId}
+					deletingUserId={deletingUserId}
+					onRequestDelete={requestDelete}
+					onConfirmDelete={confirmDelete}
+					onCancelDelete={cancelDelete}
+				/>
 			</div>
 		</main>
 	);

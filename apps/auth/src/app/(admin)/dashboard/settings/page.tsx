@@ -6,21 +6,8 @@ import type {
 	PublicKeyCredentialCreationOptionsJSON,
 	PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/types";
-import {
-	UserCircle,
-	Lock,
-	ImageIcon,
-	Upload,
-	Fingerprint,
-	Loader2,
-	Trash2,
-	Check,
-	X,
-	Pencil,
-	BadgeCheck,
-	Smartphone,
-} from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
+import { UserCircle } from "lucide-react";
+import { FullPageSpinner } from "@/components/ui";
 import { updateDisplayName, changePassword } from "@/app/actions/user-settings-actions";
 // updateUsername is intentionally omitted — username is read-only for users
 import { getCurrentUser, getUserById } from "@/app/actions/user-actions";
@@ -30,6 +17,11 @@ import {
 	confirmTotpEnrollment,
 	disableTotp,
 } from "@/app/actions/totp-actions";
+import { ProfileSection } from "./_components/profile-section";
+import { PasskeysSection } from "./_components/passkeys-section";
+import { ChangePasswordSection } from "./_components/change-password-section";
+import { AuthenticatorSection } from "./_components/authenticator-section";
+import type { PasskeyItem } from "./_components/passkey-list-item";
 
 type UserInfo = {
 	id: string;
@@ -38,57 +30,6 @@ type UserInfo = {
 	email?: string | null;
 	avatarUrl?: string | null;
 };
-
-/** Safe, display-only passkey summary returned by GET /api/users/passkey. */
-type PasskeyItem = {
-	id: string;
-	name: string | null;
-	synced: boolean;
-	deviceBound: boolean;
-	createdAt: string;
-	lastUsedAt: string | null;
-};
-
-function formatDate(iso: string | null): string {
-	if (!iso) return "Never";
-	const d = new Date(iso);
-	if (Number.isNaN(d.getTime())) return "Unknown";
-	return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-}
-
-function SectionCard({ title, icon: Icon, children }: { title: string; icon: typeof UserCircle; children: React.ReactNode }) {
-	return (
-		<section className="rounded-xl border border-brand-muted p-6">
-			<h2 className="mb-4 flex items-center gap-2 text-lg font-medium">
-				<Icon className="h-5 w-5" />
-				{title}
-			</h2>
-			{children}
-		</section>
-	);
-}
-
-function ErrorBanner({ message }: { message: string | null }) {
-	if (!message) return null;
-	return <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">{message}</p>;
-}
-
-function SuccessBanner({ message }: { message: string | null }) {
-	if (!message) return null;
-	return <p className="mb-3 rounded-xl bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-950/50 dark:text-green-200">{message}</p>;
-}
-
-const inputClass =
-	"w-full rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground placeholder:text-foreground/50 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand disabled:opacity-50";
-
-const btnPrimary =
-	"rounded-full bg-brand px-5 py-2 text-sm font-medium text-white hover:bg-brand-muted disabled:opacity-50";
-
-const iconBtn =
-	"rounded-full p-1.5 text-muted-foreground hover:bg-brand-muted/30 hover:text-foreground disabled:opacity-50";
-
-const iconBtnDanger =
-	"rounded-full p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-700 disabled:opacity-50 dark:hover:bg-red-950/50 dark:hover:text-red-200";
 
 export default function SettingsPage() {
 	const [user, setUser] = useState<UserInfo | null>(null);
@@ -458,11 +399,7 @@ export default function SettingsPage() {
 	};
 
 	if (!user) {
-		return (
-			<main className="flex min-h-screen items-center justify-center p-6">
-				<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-			</main>
-		);
+		return <FullPageSpinner />;
 	}
 
 	return (
@@ -474,409 +411,79 @@ export default function SettingsPage() {
 
 			<div className="mx-auto grid max-w-xl gap-6 lg:max-w-5xl lg:grid-cols-2">
 				{/* Profile — name, username, avatar together */}
-				<SectionCard title="Profile" icon={UserCircle}>
-					<ErrorBanner message={profileError ?? avatarError} />
-					<SuccessBanner message={profileSuccess} />
-
-					{/* Avatar row */}
-					<div className="mb-5 flex items-center gap-4">
-						{avatarPreview ? (
-							// eslint-disable-next-line @next/next/no-img-element
-							<img
-								src={avatarPreview}
-								alt=""
-								className="h-16 w-16 shrink-0 rounded-full border border-brand-muted object-cover"
-							/>
-						) : (
-							<div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-dashed border-brand-muted">
-								<ImageIcon className="h-6 w-6 text-muted-foreground" />
-							</div>
-						)}
-						<div>
-							<input
-								ref={avatarInputRef}
-								type="file"
-								accept="image/jpeg,image/png,image/webp"
-								className="hidden"
-								onChange={handleAvatarChange}
-							/>
-							<button
-								type="button"
-								disabled={avatarUploading}
-								onClick={() => avatarInputRef.current?.click()}
-								className="flex items-center gap-2 rounded-full border border-brand-muted px-4 py-2 text-sm font-medium hover:bg-brand-muted/30 disabled:opacity-50"
-							>
-								{avatarUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-								{avatarUploading ? "Uploading…" : "Change avatar"}
-							</button>
-							<p className="mt-1 text-xs text-muted-foreground">JPEG, PNG, or WEBP · Max 5 MB</p>
-						</div>
-					</div>
-
-					<form onSubmit={handleProfileSave} className="space-y-4">
-						<div className="grid gap-4 sm:grid-cols-2">
-							<div>
-								<label className="mb-1 block text-sm text-muted-foreground">Display name</label>
-								<input
-									type="text"
-									value={displayName}
-									onChange={(e) => setDisplayName(e.target.value)}
-									placeholder="Your name"
-									className={inputClass}
-								/>
-							</div>
-							<div>
-								<label className="mb-1 block text-sm text-muted-foreground">Username</label>
-								<input type="text" value={user.username ?? ""} readOnly disabled className={inputClass} />
-							</div>
-						</div>
-						<button type="submit" disabled={profilePending} className={btnPrimary}>
-							{profilePending ? "Saving…" : "Save profile"}
-						</button>
-					</form>
-				</SectionCard>
+				<ProfileSection
+					displayName={displayName}
+					onDisplayNameChange={setDisplayName}
+					username={user.username ?? ""}
+					avatarPreview={avatarPreview}
+					avatarUploading={avatarUploading}
+					avatarInputRef={avatarInputRef}
+					onAvatarChange={handleAvatarChange}
+					pending={profilePending}
+					error={profileError ?? avatarError}
+					success={profileSuccess}
+					onSubmit={handleProfileSave}
+				/>
 
 				{/* Passkeys — above password */}
-				<SectionCard title="Passkeys" icon={Fingerprint}>
-					<ErrorBanner message={passkeyError} />
-					<SuccessBanner message={passkeySuccess} />
-					<p className="mb-4 text-sm text-muted-foreground">
-						Passkeys let you sign in without a password. Add one for each device you use.
-					</p>
-					{passkeys === null ? (
-						<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-					) : (
-						<div className="space-y-3">
-							{passkeys.length === 0 ? (
-								<p className="text-sm text-muted-foreground">No passkeys yet.</p>
-							) : (
-								<ul className="divide-y divide-brand-muted/40 overflow-hidden rounded-xl border border-brand-muted">
-									{passkeys.map((pk) => (
-										<li key={pk.id} className="flex items-center gap-3 p-3">
-											<Fingerprint className="h-5 w-5 shrink-0 text-muted-foreground" />
-											{renamingId === pk.id ? (
-												<div className="flex flex-1 items-center gap-2">
-													<input
-														autoFocus
-														value={renameValue}
-														onChange={(e) => setRenameValue(e.target.value)}
-														maxLength={60}
-														placeholder="Passkey name"
-														className={inputClass}
-														onKeyDown={(e) => {
-															if (e.key === "Enter") {
-																e.preventDefault();
-																void handleRename(pk);
-															} else if (e.key === "Escape") {
-																cancelRename();
-															}
-														}}
-													/>
-													<button
-														type="button"
-														aria-label="Save name"
-														disabled={savingRenameId === pk.id}
-														onClick={() => handleRename(pk)}
-														className={iconBtn}
-													>
-														{savingRenameId === pk.id ? (
-															<Loader2 className="h-4 w-4 animate-spin" />
-														) : (
-															<Check className="h-4 w-4" />
-														)}
-													</button>
-													<button
-														type="button"
-														aria-label="Cancel rename"
-														disabled={savingRenameId === pk.id}
-														onClick={cancelRename}
-														className={iconBtn}
-													>
-														<X className="h-4 w-4" />
-													</button>
-												</div>
-											) : (
-												<>
-													<div className="min-w-0 flex-1">
-														<div className="flex items-center gap-2">
-															<span className="truncate text-sm font-medium">
-																{pk.name ?? "Unnamed passkey"}
-															</span>
-															<span className="shrink-0 rounded-full border border-brand-muted px-2 py-0.5 text-xs text-muted-foreground">
-																{pk.synced ? "Synced" : "This device"}
-															</span>
-														</div>
-														<p className="mt-0.5 text-xs text-muted-foreground">
-															Added {formatDate(pk.createdAt)} · Last used {formatDate(pk.lastUsedAt)}
-														</p>
-													</div>
-													{confirmingDeleteId === pk.id ? (
-														<div className="flex shrink-0 items-center gap-2">
-															<span className="text-xs text-red-700 dark:text-red-200">Remove?</span>
-															<button
-																type="button"
-																onClick={() => handleDelete(pk)}
-																disabled={deletingId === pk.id}
-																className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200 dark:hover:bg-red-900/60"
-															>
-																{deletingId === pk.id ? (
-																	<Loader2 className="h-3.5 w-3.5 animate-spin" />
-																) : (
-																	<Check className="h-3.5 w-3.5" />
-																)}
-																Remove
-															</button>
-															<button
-																type="button"
-																onClick={cancelDelete}
-																disabled={deletingId === pk.id}
-																className="inline-flex items-center gap-1 rounded-full border border-brand-muted px-3 py-1 text-xs hover:bg-brand-muted/30 disabled:opacity-50"
-															>
-																<X className="h-3.5 w-3.5" />
-																Cancel
-															</button>
-														</div>
-													) : (
-														<div className="flex shrink-0 items-center gap-1">
-															<button
-																type="button"
-																aria-label="Verify passkey on this device"
-																title="Verify on this device"
-																disabled={verifyingId === pk.id}
-																onClick={() => handleVerify(pk)}
-																className={iconBtn}
-															>
-																{verifyingId === pk.id ? (
-																	<Loader2 className="h-4 w-4 animate-spin" />
-																) : (
-																	<BadgeCheck className="h-4 w-4" />
-																)}
-															</button>
-															<button
-																type="button"
-																aria-label="Rename passkey"
-																disabled={verifyingId === pk.id}
-																onClick={() => startRename(pk)}
-																className={iconBtn}
-															>
-																<Pencil className="h-4 w-4" />
-															</button>
-															<button
-																type="button"
-																aria-label="Remove passkey"
-																disabled={verifyingId === pk.id}
-																onClick={() => requestDelete(pk.id)}
-																className={iconBtnDanger}
-															>
-																<Trash2 className="h-4 w-4" />
-															</button>
-														</div>
-													)}
-												</>
-											)}
-										</li>
-									))}
-								</ul>
-							)}
-							<button
-								type="button"
-								disabled={passkeyPending}
-								onClick={handleEnrollPasskey}
-								className="flex items-center gap-2 rounded-full border border-brand-muted px-4 py-2 text-sm font-medium hover:bg-brand-muted/20 disabled:opacity-50"
-							>
-								{passkeyPending ? (
-									<>
-										<Loader2 className="h-4 w-4 animate-spin" />
-										Waiting for device…
-									</>
-								) : (
-									<>
-										<Fingerprint className="h-4 w-4" />
-										Add a passkey
-									</>
-								)}
-							</button>
-						</div>
-					)}
-				</SectionCard>
+				<PasskeysSection
+					passkeys={passkeys}
+					error={passkeyError}
+					success={passkeySuccess}
+					pending={passkeyPending}
+					onEnroll={handleEnrollPasskey}
+					renamingId={renamingId}
+					renameValue={renameValue}
+					onRenameValueChange={setRenameValue}
+					savingRenameId={savingRenameId}
+					onRename={handleRename}
+					onCancelRename={cancelRename}
+					onStartRename={startRename}
+					confirmingDeleteId={confirmingDeleteId}
+					deletingId={deletingId}
+					onRequestDelete={requestDelete}
+					onDelete={handleDelete}
+					onCancelDelete={cancelDelete}
+					verifyingId={verifyingId}
+					onVerify={handleVerify}
+				/>
 
 				{/* Password */}
-				<SectionCard title="Change password" icon={Lock}>
-					<ErrorBanner message={passwordError} />
-					<SuccessBanner message={passwordSuccess} />
-					<form onSubmit={handlePasswordSave} className="space-y-4">
-						<div>
-							<label className="mb-1 block text-sm text-muted-foreground">Current password</label>
-							<input
-								type="password"
-								value={currentPassword}
-								onChange={(e) => setCurrentPassword(e.target.value)}
-								autoComplete="current-password"
-								required
-								className={inputClass}
-							/>
-						</div>
-						<div className="grid gap-4 sm:grid-cols-2">
-							<div>
-								<label className="mb-1 block text-sm text-muted-foreground">New password</label>
-								<input
-									type="password"
-									value={newPassword}
-									onChange={(e) => setNewPassword(e.target.value)}
-									autoComplete="new-password"
-									required
-									className={inputClass}
-								/>
-							</div>
-							<div>
-								<label className="mb-1 block text-sm text-muted-foreground">Confirm new password</label>
-								<input
-									type="password"
-									value={confirmPassword}
-									onChange={(e) => setConfirmPassword(e.target.value)}
-									autoComplete="new-password"
-									required
-									className={inputClass}
-								/>
-							</div>
-						</div>
-						<button type="submit" disabled={passwordPending} className={btnPrimary}>
-							{passwordPending ? "Changing…" : "Change password"}
-						</button>
-					</form>
-				</SectionCard>
+				<ChangePasswordSection
+					currentPassword={currentPassword}
+					onCurrentPasswordChange={setCurrentPassword}
+					newPassword={newPassword}
+					onNewPasswordChange={setNewPassword}
+					confirmPassword={confirmPassword}
+					onConfirmPasswordChange={setConfirmPassword}
+					pending={passwordPending}
+					error={passwordError}
+					success={passwordSuccess}
+					onSubmit={handlePasswordSave}
+				/>
 
 				{/* Authenticator app (TOTP) — second MFA method alongside email */}
-				<SectionCard title="Authenticator app" icon={Smartphone}>
-					<ErrorBanner message={totpError} />
-					<SuccessBanner message={totpSuccess} />
-					<p className="mb-4 text-sm text-muted-foreground">
-						Use an authenticator app (like Google Authenticator) for two-factor sign-in codes.
-					</p>
-					{totpStatus === null ? (
-						<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-					) : totpStatus.enrolled ? (
-						<div className="flex items-center gap-3 rounded-xl border border-brand-muted p-3">
-							<Smartphone className="h-5 w-5 shrink-0 text-muted-foreground" />
-							<div className="min-w-0 flex-1">
-								<div className="flex items-center gap-2">
-									<span className="text-sm font-medium">Authenticator app</span>
-									<span className="shrink-0 rounded-full border border-green-300 bg-green-50 px-2 py-0.5 text-xs text-green-700 dark:border-green-800 dark:bg-green-950/50 dark:text-green-200">
-										Enabled
-									</span>
-								</div>
-								<p className="mt-0.5 text-xs text-muted-foreground">
-									Added {formatDate(totpStatus.createdAt)} · Last used {formatDate(totpStatus.lastUsedAt)}
-								</p>
-							</div>
-							{confirmingTotpRemove ? (
-								<div className="flex shrink-0 items-center gap-2">
-									<span className="text-xs text-red-700 dark:text-red-200">Remove?</span>
-									<button
-										type="button"
-										onClick={handleRemoveTotp}
-										disabled={totpRemoving}
-										className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200 dark:hover:bg-red-900/60"
-									>
-										{totpRemoving ? (
-											<Loader2 className="h-3.5 w-3.5 animate-spin" />
-										) : (
-											<Check className="h-3.5 w-3.5" />
-										)}
-										Remove
-									</button>
-									<button
-										type="button"
-										onClick={() => setConfirmingTotpRemove(false)}
-										disabled={totpRemoving}
-										className="inline-flex items-center gap-1 rounded-full border border-brand-muted px-3 py-1 text-xs hover:bg-brand-muted/30 disabled:opacity-50"
-									>
-										<X className="h-3.5 w-3.5" />
-										Cancel
-									</button>
-								</div>
-							) : (
-								<button
-									type="button"
-									aria-label="Remove authenticator app"
-									onClick={() => {
-										setTotpError(null);
-										setTotpSuccess(null);
-										setConfirmingTotpRemove(true);
-									}}
-									className={iconBtnDanger}
-								>
-									<Trash2 className="h-4 w-4" />
-								</button>
-							)}
-						</div>
-					) : totpEnroll ? (
-						<form onSubmit={handleConfirmTotp} className="space-y-4">
-							<p className="text-sm text-muted-foreground">
-								Scan this QR code with your authenticator app, then enter the 6-digit code it shows.
-							</p>
-							<div className="flex justify-center">
-								<div className="rounded-xl bg-white p-3">
-									<QRCodeSVG value={totpEnroll.otpauthUri} size={176} />
-								</div>
-							</div>
-							<div>
-								<p className="mb-1 text-xs text-muted-foreground">Can&apos;t scan? Enter this key manually:</p>
-								<code className="block break-all rounded-xl border border-brand-muted bg-brand-muted/20 px-3 py-2 text-sm tracking-wider">
-									{totpEnroll.secret}
-								</code>
-							</div>
-							<div>
-								<label className="mb-1 block text-sm text-muted-foreground">Verification code</label>
-								<input
-									type="text"
-									inputMode="numeric"
-									autoComplete="one-time-code"
-									pattern="[0-9]{6}"
-									maxLength={6}
-									required
-									value={totpCode}
-									onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-									className={`${inputClass} text-center tracking-[0.3em]`}
-									placeholder="000000"
-								/>
-							</div>
-							<div className="flex items-center gap-2">
-								<button type="submit" disabled={totpBusy || totpCode.length !== 6} className={btnPrimary}>
-									{totpBusy ? "Verifying…" : "Verify and enable"}
-								</button>
-								<button
-									type="button"
-									onClick={cancelTotpEnroll}
-									disabled={totpBusy}
-									className="rounded-full border border-brand-muted px-4 py-2 text-sm font-medium hover:bg-brand-muted/30 disabled:opacity-50"
-								>
-									Cancel
-								</button>
-							</div>
-						</form>
-					) : (
-						<button
-							type="button"
-							disabled={totpBusy}
-							onClick={handleBeginTotp}
-							className="flex items-center gap-2 rounded-full border border-brand-muted px-4 py-2 text-sm font-medium hover:bg-brand-muted/20 disabled:opacity-50"
-						>
-							{totpBusy ? (
-								<>
-									<Loader2 className="h-4 w-4 animate-spin" />
-									Preparing…
-								</>
-							) : (
-								<>
-									<Smartphone className="h-4 w-4" />
-									Add authenticator app
-								</>
-							)}
-						</button>
-					)}
-				</SectionCard>
-
+				<AuthenticatorSection
+					status={totpStatus}
+					enroll={totpEnroll}
+					code={totpCode}
+					onCodeChange={setTotpCode}
+					busy={totpBusy}
+					error={totpError}
+					success={totpSuccess}
+					confirmingRemove={confirmingTotpRemove}
+					removing={totpRemoving}
+					onBegin={handleBeginTotp}
+					onConfirm={handleConfirmTotp}
+					onCancelEnroll={cancelTotpEnroll}
+					onRequestRemove={() => {
+						setTotpError(null);
+						setTotpSuccess(null);
+						setConfirmingTotpRemove(true);
+					}}
+					onRemove={handleRemoveTotp}
+					onCancelRemove={() => setConfirmingTotpRemove(false)}
+				/>
 			</div>
 		</main>
 	);
