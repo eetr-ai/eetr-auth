@@ -4,6 +4,19 @@ All notable changes to this monorepo are documented in this file.
 
 The current released baseline for both the auth server and the client library is 0.2.0.
 
+## [0.3.1](https://github.com/eetr-ai/eetr-auth/compare/v0.3.0...v0.3.1) (2026-05-31)
+
+
+### Bug Fixes
+
+* adding users now gets audited ([58befba](https://github.com/eetr-ai/eetr-auth/commit/58befba951e5a86818d23c6a154737c73fc1bce3))
+* **audit:** added audit logs on user updates and password change ([c4ce72f](https://github.com/eetr-ai/eetr-auth/commit/c4ce72f7f1d3b1c96dace4d08f4d59fbf3acf511))
+* **audit:** audit when user resets password ([b760b7f](https://github.com/eetr-ai/eetr-auth/commit/b760b7fe98cbbee2678aef99ad1970c33d4f8530))
+* **deploy:** drop invalid --skipWranglerConfigCheck wrangler flag ([7dc0989](https://github.com/eetr-ai/eetr-auth/commit/7dc09899987b6d249aa54bf6f44face6f116deba))
+* **deploy:** drop invalid --skipWranglerConfigCheck wrangler flag ([f449586](https://github.com/eetr-ai/eetr-auth/commit/f449586860758417e2fdb9823ccee0b4613a19fe))
+* **deploy:** point build/upload/preview at wrangler.generated.jsonc ([d58dd8a](https://github.com/eetr-ai/eetr-auth/commit/d58dd8ad2e58c5896122eada9e1c8ef442632092))
+* General fixes ([91ef540](https://github.com/eetr-ai/eetr-auth/commit/91ef540ae921794369ff72129d10e30d08c30700))
+
 ## [0.3.0](https://github.com/eetr-ai/eetr-auth/compare/v0.2.0...v0.3.0) (2026-05-31)
 
 
