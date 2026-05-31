@@ -2,7 +2,7 @@
 
 > A production-ready **OAuth 2.1 + OpenID Connect** authorization server, built for the Cloudflare edge.
 
-Current release baseline: `0.2.0`. See [CHANGELOG.md](CHANGELOG.md).
+Current release baseline: `0.3.0`. See [CHANGELOG.md](CHANGELOG.md). <!-- x-release-please-version -->
 
 Public auth server package: `@eetr/auth`.
 
@@ -44,9 +44,12 @@ graph LR
 |---|---|
 | **OAuth 2.1** | Authorization Code + PKCE (S256), Client Credentials, Refresh Token with rotation |
 | **OpenID Connect** | OIDC discovery, JWKS endpoint, `/userinfo`, ID tokens (RS256) |
-| **Authentication** | Password (Argon2id), Passkeys (WebAuthn), MFA via email OTP |
+| **Authentication** | Password (Argon2id), Passkeys (WebAuthn) with multiple devices per user, Google sign-in |
+| **Multi-factor** | Email OTP and authenticator-app (TOTP) — offered during sign-in and self-managed in settings |
+| **Passkey self-service** | Enroll, rename, remove, and verify-on-this-device, all from user settings |
 | **User flows** | Registration, email verification, password reset |
-| **Admin** | Dashboard for users, clients, tokens, site settings |
+| **Theming** | Light, dark, and system themes across the sign-in and admin UI, with no-flash init |
+| **Admin** | Dashboard for users, clients, tokens, audit log, site settings |
 | **Infrastructure** | Cloudflare D1 (SQLite), R2 (object storage), Terraform provisioning |
 | **Security** | Argon2id hashing in isolated WASM worker, HMAC-SHA256 request signing, PKCE mandatory |
 | **Auth server package** | `@eetr/auth` — deployable OAuth 2.1 / OIDC server |
