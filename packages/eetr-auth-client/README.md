@@ -74,6 +74,28 @@ Fetch the server's `/.well-known/openid-configuration` or
 `token_endpoint`, `jwks_uri`, `userinfo_endpoint`, etc. to configure the rest of
 the client rather than hard-coding paths.
 
+### Authorization URL
+
+```ts
+buildAuthorizationUrl(authorizationEndpoint: string, params: AuthorizationUrlParams): string
+```
+
+Builds the authorization-request URL for the `authorization_code` + PKCE flow.
+`code_challenge` is required (the server only accepts `S256`). Pass `nonce` to
+request an OIDC `nonce` that the server binds into the issued `id_token`, then
+verify it on the returned token with [`validateIdToken`](#jwt-verification).
+
+```ts
+const url = buildAuthorizationUrl(discovery.authorization_endpoint, {
+  clientId: "my-client",
+  redirectUri: "https://app.example.com/callback",
+  codeChallenge,            // base64url SHA-256 of your PKCE verifier
+  scope: "openid profile email",
+  state,
+  nonce,
+});
+```
+
 ### Token exchange
 
 ```ts
@@ -82,6 +104,8 @@ exchangeToken(params: ExchangeTokenParams, config: ExchangeTokenConfig): Promise
 
 Performs an OAuth token request. `grantType` is one of `"authorization_code"`,
 `"client_credentials"`, or `"refresh_token"`; supply the fields relevant to the grant.
+When the `openid` scope was granted on an `authorization_code` exchange, the
+`TokenResponse` also includes a signed `id_token`.
 
 ```ts
 // Client credentials (machine-to-machine)
@@ -125,6 +149,7 @@ token and no refresh token to fall back on.
 
 ```ts
 validateJwt(token: string, jwksUri: string, options?: ValidateJwtOptions): Promise<JWTPayload>
+validateIdToken(token: string, jwksUri: string, options?: ValidateIdTokenOptions): Promise<IDTokenClaims>
 decodeJwtPayload(token: string): JWTPayload
 ```
 
@@ -138,6 +163,20 @@ const payload = await validateJwt(accessToken, discovery.jwks_uri, {
   issuer: ISSUER,
   audience: "my-client",
   clockTolerance: 10,
+});
+```
+
+`validateIdToken` verifies an OIDC `id_token` the same way and, when you pass the
+`nonce` you sent to the authorization endpoint, additionally checks the token's
+`nonce` claim — throwing `id_token nonce mismatch` on a mismatch. It returns the
+typed `IDTokenClaims` (`sub`, `auth_time`, `nonce`, `at_hash`, plus scope-gated
+`name`/`preferred_username`/`picture`/`email`/`email_verified`).
+
+```ts
+const claims = await validateIdToken(tokens.id_token!, discovery.jwks_uri, {
+  issuer: ISSUER,
+  audience: "my-client",
+  nonce, // the value passed to buildAuthorizationUrl
 });
 ```
 
@@ -239,11 +278,12 @@ The discovery helpers throw a plain `Error` with the HTTP status on failure.
 ## Types
 
 The package exports TypeScript types for every request and response shape, including
-`TokenResponse`, `UserInfoResponse`, `OIDCDiscovery`, `OAuthServerMetadata`,
-`AuthClientConfig`, `JWTPayload`, `TokenValidationResponse`, `GrantType`,
-`ExchangeTokenParams`/`Config`, `IntrospectTokenParams`/`Config`, `AdminUserRecord`,
-`AdminClientConfig`, `CreateUserParams`, `UpdateUserParams`, `PasskeySummary`, and
-`UserClientConfig`.
+`TokenResponse`, `UserInfoResponse`, `IDTokenClaims`, `OIDCDiscovery`,
+`OAuthServerMetadata`, `AuthClientConfig`, `JWTPayload`, `TokenValidationResponse`,
+`GrantType`, `ExchangeTokenParams`/`Config`, `AuthorizationUrlParams`,
+`IntrospectTokenParams`/`Config`, `ValidateJwtOptions`, `ValidateIdTokenOptions`,
+`AdminUserRecord`, `AdminClientConfig`, `CreateUserParams`, `UpdateUserParams`,
+`PasskeySummary`, and `UserClientConfig`.
 
 ## License
 

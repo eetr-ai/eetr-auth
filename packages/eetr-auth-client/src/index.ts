@@ -5,6 +5,7 @@ export type {
   OAuthServerMetadata,
   AuthClientConfig,
   JWTPayload,
+  IDTokenClaims,
   TokenValidationResponse,
 } from "./types.js";
 
@@ -15,6 +16,7 @@ export {
   exchangeToken,
   introspectToken,
   getUserInfo,
+  buildAuthorizationUrl,
 } from "./api.js";
 export type {
   GrantType,
@@ -22,12 +24,13 @@ export type {
   ExchangeTokenConfig,
   IntrospectTokenParams,
   IntrospectTokenConfig,
+  AuthorizationUrlParams,
 } from "./api.js";
 
 export { TokenManager } from "./tokens.js";
 
-export { validateJwt, decodeJwtPayload } from "./jwt.js";
-export type { ValidateJwtOptions } from "./jwt.js";
+export { validateJwt, validateIdToken, decodeJwtPayload } from "./jwt.js";
+export type { ValidateJwtOptions, ValidateIdTokenOptions } from "./jwt.js";
 
 export {
   getAdminUser,
