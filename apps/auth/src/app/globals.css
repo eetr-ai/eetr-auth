@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Drive the `dark:` variant off our explicit `.dark` class (set on <html> by
+   the theme switcher) instead of Tailwind v4's default prefers-color-scheme,
+   so the in-app toggle controls it. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Light theme is the baseline; .dark overrides below. The theme class is
    applied to <html> before paint by the inline script in layout.tsx. */
 :root {

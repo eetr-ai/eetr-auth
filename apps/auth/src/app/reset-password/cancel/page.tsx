@@ -31,7 +31,7 @@ export default async function CancelPasswordResetPage({
 				{trimmed ? (
 					<CancelPasswordResetClient token={trimmed} />
 				) : (
-					<p className="rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">
+					<p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
 						Missing reset link. Open the cancel link from your email, or request a new reset from
 						forgot password.
 					</p>

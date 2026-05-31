@@ -70,17 +70,17 @@ export default async function HomePage({
 					) : null}
 				</div>
 				{error === "CredentialsSignin" && (
-					<p className="rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">
+					<p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
 						Invalid username or password.
 					</p>
 				)}
 				{error === "AuthError" && (
-					<p className="rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">
+					<p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
 						Something went wrong. Please try again.
 					</p>
 				)}
 				{reset === "success" && (
-					<p className="rounded-xl bg-emerald-950/50 px-3 py-2 text-sm text-emerald-200">
+					<p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200">
 						Your password was updated. You can sign in below.
 					</p>
 				)}
