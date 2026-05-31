@@ -251,6 +251,49 @@ describe("OauthAuthorizationService", () => {
 		);
 	});
 
+	it("binds the OIDC nonce and records auth_time on the authorization code", async () => {
+		const clientRepo = createClientRepoMock();
+		const tokenRepo = createTokenRepoMock();
+		const authorizationCodeRepo = createAuthorizationCodeRepoMock();
+		clientRepo.getByClientIdentifier.mockResolvedValue(makeClient());
+		clientRepo.getRedirectUris.mockResolvedValue([baseParams.redirectUri]);
+		tokenRepo.getClientScopeGrantsByNames.mockResolvedValue([
+			makeGrant({ clientScopeId: "client-scope-read", scopeName: "read:users" }),
+			makeGrant({ clientScopeId: "client-scope-write", scopeId: "scope-2", scopeName: "write:users" }),
+		]);
+		const service = createService({ clientRepo, tokenRepo, authorizationCodeRepo });
+
+		await service.authorize({ ...baseParams, nonce: "n-0S6_WzA2Mj" });
+
+		expect(authorizationCodeRepo.create).toHaveBeenCalledWith(
+			expect.objectContaining({
+				nonce: "n-0S6_WzA2Mj",
+				auth_time: "2026-04-06T13:10:00.000Z",
+			}),
+			expect.any(Array)
+		);
+	});
+
+	it("stores a null nonce when the request omits it", async () => {
+		const clientRepo = createClientRepoMock();
+		const tokenRepo = createTokenRepoMock();
+		const authorizationCodeRepo = createAuthorizationCodeRepoMock();
+		clientRepo.getByClientIdentifier.mockResolvedValue(makeClient());
+		clientRepo.getRedirectUris.mockResolvedValue([baseParams.redirectUri]);
+		tokenRepo.getClientScopeGrantsByNames.mockResolvedValue([
+			makeGrant({ clientScopeId: "client-scope-read", scopeName: "read:users" }),
+			makeGrant({ clientScopeId: "client-scope-write", scopeId: "scope-2", scopeName: "write:users" }),
+		]);
+		const service = createService({ clientRepo, tokenRepo, authorizationCodeRepo });
+
+		await service.authorize(baseParams);
+
+		expect(authorizationCodeRepo.create).toHaveBeenCalledWith(
+			expect.objectContaining({ nonce: null, auth_time: "2026-04-06T13:10:00.000Z" }),
+			expect.any(Array)
+		);
+	});
+
 	it("omits state and uses all grants when no scope parameter is provided", async () => {
 		const clientRepo = createClientRepoMock();
 		const tokenRepo = createTokenRepoMock();

@@ -121,6 +121,8 @@ function makeAuthorizationCode(overrides?: Partial<AuthorizationCodeWithScopeIds
 		codeChallenge: "W7n_wCYtNROQsx8qYdtHSxDymupaS0up7V1qp3otL4Q",
 		codeChallengeMethod: "S256",
 		subject: "user-123",
+		nonce: null,
+		authTime: null,
 		expiresAt: "2026-04-06T13:20:00.000Z",
 		usedAt: null,
 		createdAt: "2026-04-06T13:10:00.000Z",

@@ -13,6 +13,8 @@ function rowToAuthorizationCode(row: {
 	code_challenge: string;
 	code_challenge_method: string;
 	subject: string;
+	nonce: string | null;
+	auth_time: string | null;
 	expires_at: string;
 	used_at: string | null;
 	created_at: string;
@@ -25,6 +27,8 @@ function rowToAuthorizationCode(row: {
 		codeChallenge: row.code_challenge,
 		codeChallengeMethod: row.code_challenge_method,
 		subject: row.subject,
+		nonce: row.nonce,
+		authTime: row.auth_time,
 		expiresAt: row.expires_at,
 		usedAt: row.used_at,
 		createdAt: row.created_at,
@@ -39,8 +43,8 @@ export class AuthorizationCodeRepositoryD1 implements AuthorizationCodeRepositor
 			.prepare(
 				[
 					"INSERT INTO authorization_codes (",
-					"id, code_id, client_id, redirect_uri, code_challenge, code_challenge_method, subject, expires_at, used_at, created_at",
-					") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+					"id, code_id, client_id, redirect_uri, code_challenge, code_challenge_method, subject, nonce, auth_time, expires_at, used_at, created_at",
+					") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 				].join(" ")
 			)
 			.bind(
@@ -51,6 +55,8 @@ export class AuthorizationCodeRepositoryD1 implements AuthorizationCodeRepositor
 				row.code_challenge,
 				row.code_challenge_method,
 				row.subject,
+				row.nonce,
+				row.auth_time,
 				row.expires_at,
 				row.used_at,
 				row.created_at
@@ -71,7 +77,7 @@ export class AuthorizationCodeRepositoryD1 implements AuthorizationCodeRepositor
 		const row = await this.db
 			.prepare(
 				[
-					"SELECT id, code_id, client_id, redirect_uri, code_challenge, code_challenge_method, subject, expires_at, used_at, created_at",
+					"SELECT id, code_id, client_id, redirect_uri, code_challenge, code_challenge_method, subject, nonce, auth_time, expires_at, used_at, created_at",
 					"FROM authorization_codes",
 					"WHERE code_id = ?",
 				].join(" ")
@@ -85,6 +91,8 @@ export class AuthorizationCodeRepositoryD1 implements AuthorizationCodeRepositor
 				code_challenge: string;
 				code_challenge_method: string;
 				subject: string;
+				nonce: string | null;
+				auth_time: string | null;
 				expires_at: string;
 				used_at: string | null;
 				created_at: string;

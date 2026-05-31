@@ -6,6 +6,8 @@ export interface AuthorizationCode {
 	codeChallenge: string;
 	codeChallengeMethod: string;
 	subject: string;
+	nonce: string | null;
+	authTime: string | null;
 	expiresAt: string;
 	usedAt: string | null;
 	createdAt: string;
@@ -23,6 +25,8 @@ export interface AuthorizationCodeRow {
 	code_challenge: string;
 	code_challenge_method: string;
 	subject: string;
+	nonce: string | null;
+	auth_time: string | null;
 	expires_at: string;
 	used_at: string | null;
 	created_at: string;

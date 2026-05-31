@@ -57,11 +57,13 @@ describe("oauth-pending-cookie", () => {
 			fd.set("response_type", "code");
 			fd.set("scope", "openid profile");
 			fd.set("code_challenge", "abc123");
+			fd.set("nonce", "n-0S6_WzA2Mj");
 			fd.set("extra_field", "ignored");
 			expect(collectPendingAuthorizationParams(fd)).toEqual({
 				response_type: "code",
 				scope: "openid profile",
 				code_challenge: "abc123",
+				nonce: "n-0S6_WzA2Mj",
 			});
 		});
 
@@ -147,6 +149,7 @@ describe("oauth-pending-cookie", () => {
 				state: "random-state-value",
 				code_challenge: "s256-challenge",
 				code_challenge_method: "S256",
+				nonce: "n-0S6_WzA2Mj",
 			};
 			const encoded = await encodePendingAuthorizationCookie(params);
 			const decoded = await decodePendingAuthorizationCookie(encoded);

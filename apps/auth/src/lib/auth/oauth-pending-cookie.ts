@@ -9,6 +9,7 @@ export const AUTHORIZE_PARAM_KEYS = [
 	"state",
 	"code_challenge",
 	"code_challenge_method",
+	"nonce",
 ] as const;
 
 type AuthorizeParamKey = (typeof AUTHORIZE_PARAM_KEYS)[number];

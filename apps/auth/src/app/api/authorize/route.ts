@@ -119,7 +119,9 @@ async function handleAuthorize(
 			state: asString(source.get("state")),
 			codeChallenge: asString(source.get("code_challenge")),
 			codeChallengeMethod: asString(source.get("code_challenge_method")),
-			subject: session.user.username,
+			// OIDC: `sub` must be a stable identifier and match /userinfo's `sub` (user.id).
+			subject: session.user.id,
+			nonce: asString(source.get("nonce")),
 		});
 
 		const durationMs = Date.now() - logContext.startMs;

@@ -316,6 +316,8 @@ class InMemoryAuthorizationCodeRepo implements AuthorizationCodeRepository {
 			codeChallenge: stored.row.code_challenge,
 			codeChallengeMethod: stored.row.code_challenge_method,
 			subject: stored.row.subject,
+			nonce: stored.row.nonce,
+			authTime: stored.row.auth_time,
 			expiresAt: stored.row.expires_at,
 			usedAt: stored.row.used_at,
 			createdAt: stored.row.created_at,
