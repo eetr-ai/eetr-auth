@@ -279,6 +279,12 @@ export class PasskeyService {
 			throw new Error("Authentication challenge has expired.");
 		}
 
+		// If the device presents a credential we don't recognize, reject the sign-in. We do
+		// NOT delete or prune any stored credential here: a failed/unknown assertion is not
+		// proof a passkey is gone (it may be a transient error, a cancel, or a credential from
+		// a different device that simply isn't usable here), and auto-deleting on failure would
+		// let an attacker strip a victim's passkey and could lock users out. Removal is always
+		// an explicit, user-confirmed action in settings (see removePasskey / verifyAvailability).
 		const credentialRow = await this.repo.findCredentialById(response.id);
 		if (!credentialRow) {
 			throw new Error("Passkey not found.");
