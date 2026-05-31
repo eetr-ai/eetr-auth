@@ -28,7 +28,8 @@ function createAuthorizationCodeRepoMock() {
 	return {
 		create: vi.fn(),
 		getByCodeId: vi.fn(),
-		markUsed: vi.fn(),
+		// Default: the code is successfully consumed (won the single-use race).
+		markUsed: vi.fn().mockResolvedValue(true),
 		deleteUsedOrExpired: vi.fn(),
 	} satisfies AuthorizationCodeRepository;
 }
@@ -381,6 +382,40 @@ describe("OauthTokenService", () => {
 			});
 			expect(result.access_token).toMatch(/^at_[0-9a-f]{64}$/);
 			expect(result.refresh_token).toMatch(/^rt_[0-9a-f]{64}$/);
+		});
+
+		it("rejects with invalid_grant and issues no tokens when the code was already consumed (lost the race)", async () => {
+			const clientRepo = createClientRepoMock();
+			const authorizationCodeRepo = createAuthorizationCodeRepoMock();
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient());
+			authorizationCodeRepo.getByCodeId.mockResolvedValue(
+				makeAuthorizationCode({ codeChallenge: await toS256Challenge("verifier-123") })
+			);
+			tokenRepo.getClientScopeGrants.mockResolvedValue([
+				makeGrant({ clientScopeId: "client-scope-read", scopeName: "read:users" }),
+			]);
+			// The in-memory usedAt check passes, but the atomic consume loses the race.
+			authorizationCodeRepo.markUsed.mockResolvedValue(false);
+			const service = createService({ clientRepo, authorizationCodeRepo, tokenRepo, refreshTokenRepo });
+
+			await expect(
+				service.exchange({
+					grantType: "authorization_code",
+					clientId: "client-app-id",
+					clientSecret: "plain-secret",
+					code: "code_123",
+					redirectUri: "https://client.example.com/callback",
+					codeVerifier: "verifier-123",
+				})
+			).rejects.toMatchObject({
+				code: "invalid_grant",
+				message: "Authorization code has already been used.",
+				status: 400,
+			});
+			expect(tokenRepo.createAccessToken).not.toHaveBeenCalled();
+			expect(refreshTokenRepo.createRefreshToken).not.toHaveBeenCalled();
 		});
 	});
 

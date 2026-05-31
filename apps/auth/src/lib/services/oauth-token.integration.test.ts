@@ -294,12 +294,17 @@ class InMemoryAuthorizationCodeRepo implements AuthorizationCodeRepository {
 		};
 	}
 
-	async markUsed(id: string, usedAt: string): Promise<void> {
+	async markUsed(id: string, usedAt: string): Promise<boolean> {
+		// Conditional + atomic, mirroring the D1 `WHERE id = ? AND used_at IS NULL`:
+		// only the first consume of a given code wins.
 		for (const stored of this.codesByCodeId.values()) {
 			if (stored.row.id === id) {
+				if (stored.row.used_at) return false;
 				stored.row.used_at = usedAt;
+				return true;
 			}
 		}
+		return false;
 	}
 
 	async deleteUsedOrExpired(nowIso: string): Promise<number> {
@@ -498,5 +503,41 @@ describe("OAuth stateful flows", () => {
 			active: true,
 			tokenScopes: ["read:users", "write:users"],
 		});
+	});
+
+	it("rejects a second exchange of the same authorization code (single-use)", async () => {
+		const { authorizationService, tokenService } = buildHarness();
+		const codeVerifier = "verifier-123";
+
+		const authorization = await authorizationService.authorize({
+			responseType: "code",
+			clientId: "client-app-id",
+			redirectUri: "https://client.example.com/callback",
+			scope: "read:users",
+			state: "state-123",
+			codeChallenge: await toS256Challenge(codeVerifier),
+			codeChallengeMethod: "S256",
+			subject: "user-123",
+		});
+
+		const authorizationCode = new URL(authorization.redirectTo).searchParams.get("code");
+		if (!authorizationCode) {
+			throw new Error("Expected authorization code in redirect URL");
+		}
+
+		const exchangeOnce = () =>
+			tokenService.exchange({
+				grantType: "authorization_code",
+				clientId: "client-app-id",
+				clientSecret: "plain-secret",
+				code: authorizationCode,
+				redirectUri: "https://client.example.com/callback",
+				codeVerifier,
+			});
+
+		await exchangeOnce();
+		await expect(exchangeOnce()).rejects.toEqual(
+			new OAuthServiceError("invalid_grant", "Authorization code has already been used.", 400)
+		);
 	});
 });

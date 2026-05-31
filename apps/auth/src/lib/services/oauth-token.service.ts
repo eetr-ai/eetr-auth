@@ -477,8 +477,13 @@ export class OauthTokenService {
 		);
 
 		step = Date.now();
-		await this.authorizationCodeRepo.markUsed(authorizationCode.id, nowIso);
+		// Consume the code BEFORE issuing tokens. The conditional UPDATE is the real
+		// single-use guard; the earlier in-memory usedAt check is just a fast-path.
+		const consumed = await this.authorizationCodeRepo.markUsed(authorizationCode.id, nowIso);
 		logTokenStep("authorization_code_mark_used", step);
+		if (!consumed) {
+			throw new OAuthServiceError("invalid_grant", "Authorization code has already been used.", 400);
+		}
 		step = Date.now();
 		const result = await this.issueTokenPair({
 			clientId: client.id,

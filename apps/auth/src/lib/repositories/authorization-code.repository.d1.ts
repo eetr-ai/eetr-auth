@@ -109,11 +109,14 @@ export class AuthorizationCodeRepositoryD1 implements AuthorizationCodeRepositor
 		};
 	}
 
-	async markUsed(id: string, usedAt: string): Promise<void> {
-		await this.db
-			.prepare("UPDATE authorization_codes SET used_at = ? WHERE id = ?")
+	async markUsed(id: string, usedAt: string): Promise<boolean> {
+		// Conditional + atomic: only the request that flips used_at from NULL wins, so
+		// concurrent exchanges of the same code cannot both issue tokens (TOCTOU).
+		const result = await this.db
+			.prepare("UPDATE authorization_codes SET used_at = ? WHERE id = ? AND used_at IS NULL")
 			.bind(usedAt, id)
 			.run();
+		return Number(result.meta.changes ?? 0) > 0;
 	}
 
 	async deleteUsedOrExpired(nowIso: string): Promise<number> {
