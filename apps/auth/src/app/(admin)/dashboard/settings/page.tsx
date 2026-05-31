@@ -1,9 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { startRegistration } from "@simplewebauthn/browser";
 import type { PublicKeyCredentialCreationOptionsJSON } from "@simplewebauthn/types";
-import { UserCircle, Lock, ImageIcon, Upload, Fingerprint, Loader2 } from "lucide-react";
+import {
+	UserCircle,
+	Lock,
+	ImageIcon,
+	Upload,
+	Fingerprint,
+	Loader2,
+	Trash2,
+	Check,
+	X,
+	Pencil,
+} from "lucide-react";
 import { updateDisplayName, changePassword } from "@/app/actions/user-settings-actions";
 // updateUsername is intentionally omitted — username is read-only for users
 import { getCurrentUser, getUserById } from "@/app/actions/user-actions";
@@ -15,6 +26,23 @@ type UserInfo = {
 	email?: string | null;
 	avatarUrl?: string | null;
 };
+
+/** Safe, display-only passkey summary returned by GET /api/users/passkey. */
+type PasskeyItem = {
+	id: string;
+	name: string | null;
+	synced: boolean;
+	deviceBound: boolean;
+	createdAt: string;
+	lastUsedAt: string | null;
+};
+
+function formatDate(iso: string | null): string {
+	if (!iso) return "Never";
+	const d = new Date(iso);
+	if (Number.isNaN(d.getTime())) return "Unknown";
+	return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
 
 function SectionCard({ title, icon: Icon, children }: { title: string; icon: typeof UserCircle; children: React.ReactNode }) {
 	return (
@@ -44,6 +72,12 @@ const inputClass =
 const btnPrimary =
 	"rounded-full bg-brand px-5 py-2 text-sm font-medium text-white hover:bg-brand-muted disabled:opacity-50";
 
+const iconBtn =
+	"rounded-full p-1.5 text-muted-foreground hover:bg-brand-muted/30 hover:text-foreground disabled:opacity-50";
+
+const iconBtnDanger =
+	"rounded-full p-1.5 text-muted-foreground hover:bg-red-950/50 hover:text-red-200 disabled:opacity-50";
+
 export default function SettingsPage() {
 	const [user, setUser] = useState<UserInfo | null>(null);
 
@@ -60,10 +94,15 @@ export default function SettingsPage() {
 	const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
 	// Passkey
-	const [hasPasskey, setHasPasskey] = useState<boolean | null>(null);
+	const [passkeys, setPasskeys] = useState<PasskeyItem[] | null>(null);
 	const [passkeyPending, setPasskeyPending] = useState(false);
 	const [passkeyError, setPasskeyError] = useState<string | null>(null);
 	const [passkeySuccess, setPasskeySuccess] = useState<string | null>(null);
+	const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+	const [deletingId, setDeletingId] = useState<string | null>(null);
+	const [renamingId, setRenamingId] = useState<string | null>(null);
+	const [renameValue, setRenameValue] = useState("");
+	const [savingRenameId, setSavingRenameId] = useState<string | null>(null);
 
 	// Password
 	const [currentPassword, setCurrentPassword] = useState("");
@@ -84,13 +123,21 @@ export default function SettingsPage() {
 		});
 	}, []);
 
+	const loadPasskeys = useCallback(async () => {
+		try {
+			const res = await fetch("/api/users/passkey");
+			if (!res.ok) throw new Error("Failed to load passkeys.");
+			const data = (await res.json()) as { passkeys: PasskeyItem[] };
+			setPasskeys(data.passkeys ?? []);
+		} catch {
+			setPasskeys([]);
+		}
+	}, []);
+
 	useEffect(() => {
 		if (!user?.id) return;
-		fetch("/api/users/passkey/has")
-			.then((r) => r.json())
-			.then((data) => setHasPasskey(Boolean((data as { hasPasskey?: boolean }).hasPasskey)))
-			.catch(() => setHasPasskey(false));
-	}, [user?.id]);
+		void loadPasskeys();
+	}, [user?.id, loadPasskeys]);
 
 	const handleProfileSave = (e: React.FormEvent) => {
 		e.preventDefault();
@@ -154,16 +201,91 @@ export default function SettingsPage() {
 				const body = (await registerRes.json()) as { error_description?: string };
 				throw new Error(body.error_description ?? "Passkey registration failed.");
 			}
-			setHasPasskey(true);
-			setPasskeySuccess("Passkey enrolled successfully.");
+			await loadPasskeys();
+			setPasskeySuccess("Passkey added.");
 		} catch (err) {
 			if (err instanceof Error && err.name === "NotAllowedError") {
-				// user cancelled
+				// user cancelled or timed out — silent
+			} else if (err instanceof Error && err.name === "InvalidStateError") {
+				// excludeCredentials matched: this device/authenticator already holds a passkey.
+				setPasskeyError("This device already has a passkey for your account.");
 			} else {
 				setPasskeyError(err instanceof Error ? err.message : "Passkey enrollment failed.");
 			}
 		} finally {
 			setPasskeyPending(false);
+		}
+	};
+
+	const startRename = (pk: PasskeyItem) => {
+		setPasskeyError(null);
+		setPasskeySuccess(null);
+		setConfirmingDeleteId(null);
+		setRenamingId(pk.id);
+		setRenameValue(pk.name ?? "");
+	};
+
+	const cancelRename = () => {
+		setRenamingId(null);
+		setRenameValue("");
+	};
+
+	const handleRename = async (pk: PasskeyItem) => {
+		const name = renameValue.trim();
+		if (!name) {
+			setPasskeyError("Passkey name cannot be empty.");
+			return;
+		}
+		setPasskeyError(null);
+		setPasskeySuccess(null);
+		setSavingRenameId(pk.id);
+		try {
+			const res = await fetch(`/api/users/passkey/${encodeURIComponent(pk.id)}`, {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ name }),
+			});
+			if (!res.ok) {
+				const body = (await res.json()) as { error_description?: string };
+				throw new Error(body.error_description ?? "Failed to rename passkey.");
+			}
+			await loadPasskeys();
+			cancelRename();
+		} catch (err) {
+			setPasskeyError(err instanceof Error ? err.message : "Failed to rename passkey.");
+		} finally {
+			setSavingRenameId(null);
+		}
+	};
+
+	const requestDelete = (id: string) => {
+		setPasskeyError(null);
+		setPasskeySuccess(null);
+		setRenamingId(null);
+		setConfirmingDeleteId(id);
+	};
+
+	const cancelDelete = () => setConfirmingDeleteId(null);
+
+	const handleDelete = async (pk: PasskeyItem) => {
+		setPasskeyError(null);
+		setPasskeySuccess(null);
+		setDeletingId(pk.id);
+		try {
+			const res = await fetch(`/api/users/passkey/${encodeURIComponent(pk.id)}`, {
+				method: "DELETE",
+			});
+			if (!res.ok) {
+				const body = (await res.json()) as { error_description?: string };
+				throw new Error(body.error_description ?? "Failed to remove passkey.");
+			}
+			setConfirmingDeleteId(null);
+			await loadPasskeys();
+			setPasskeySuccess("Passkey removed.");
+		} catch (err) {
+			setPasskeyError(err instanceof Error ? err.message : "Failed to remove passkey.");
+		} finally {
+			setDeletingId(null);
 		}
 	};
 
@@ -271,22 +393,132 @@ export default function SettingsPage() {
 					</form>
 				</SectionCard>
 
-				{/* Passkey — above password */}
-				<SectionCard title="Passkey" icon={Fingerprint}>
+				{/* Passkeys — above password */}
+				<SectionCard title="Passkeys" icon={Fingerprint}>
 					<ErrorBanner message={passkeyError} />
 					<SuccessBanner message={passkeySuccess} />
-					{hasPasskey === null ? (
+					<p className="mb-4 text-sm text-muted-foreground">
+						Passkeys let you sign in without a password. Add one for each device you use.
+					</p>
+					{passkeys === null ? (
 						<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-					) : hasPasskey ? (
-						<div className="flex items-center gap-2 text-sm text-green-400">
-							<Fingerprint className="h-4 w-4" />
-							Passkey enrolled
-						</div>
 					) : (
 						<div className="space-y-3">
-							<p className="text-sm text-muted-foreground">
-								No passkey enrolled. Create one to sign in without a password.
-							</p>
+							{passkeys.length === 0 ? (
+								<p className="text-sm text-muted-foreground">No passkeys yet.</p>
+							) : (
+								<ul className="divide-y divide-brand-muted/40 overflow-hidden rounded-xl border border-brand-muted">
+									{passkeys.map((pk) => (
+										<li key={pk.id} className="flex items-center gap-3 p-3">
+											<Fingerprint className="h-5 w-5 shrink-0 text-muted-foreground" />
+											{renamingId === pk.id ? (
+												<div className="flex flex-1 items-center gap-2">
+													<input
+														autoFocus
+														value={renameValue}
+														onChange={(e) => setRenameValue(e.target.value)}
+														maxLength={60}
+														placeholder="Passkey name"
+														className={inputClass}
+														onKeyDown={(e) => {
+															if (e.key === "Enter") {
+																e.preventDefault();
+																void handleRename(pk);
+															} else if (e.key === "Escape") {
+																cancelRename();
+															}
+														}}
+													/>
+													<button
+														type="button"
+														aria-label="Save name"
+														disabled={savingRenameId === pk.id}
+														onClick={() => handleRename(pk)}
+														className={iconBtn}
+													>
+														{savingRenameId === pk.id ? (
+															<Loader2 className="h-4 w-4 animate-spin" />
+														) : (
+															<Check className="h-4 w-4" />
+														)}
+													</button>
+													<button
+														type="button"
+														aria-label="Cancel rename"
+														disabled={savingRenameId === pk.id}
+														onClick={cancelRename}
+														className={iconBtn}
+													>
+														<X className="h-4 w-4" />
+													</button>
+												</div>
+											) : (
+												<>
+													<div className="min-w-0 flex-1">
+														<div className="flex items-center gap-2">
+															<span className="truncate text-sm font-medium">
+																{pk.name ?? "Unnamed passkey"}
+															</span>
+															<span className="shrink-0 rounded-full border border-brand-muted px-2 py-0.5 text-xs text-muted-foreground">
+																{pk.synced ? "Synced" : "This device"}
+															</span>
+														</div>
+														<p className="mt-0.5 text-xs text-muted-foreground">
+															Added {formatDate(pk.createdAt)} · Last used {formatDate(pk.lastUsedAt)}
+														</p>
+													</div>
+													{confirmingDeleteId === pk.id ? (
+														<div className="flex shrink-0 items-center gap-2">
+															<span className="text-xs text-red-200">Remove?</span>
+															<button
+																type="button"
+																onClick={() => handleDelete(pk)}
+																disabled={deletingId === pk.id}
+																className="inline-flex items-center gap-1 rounded-full border border-red-800 bg-red-950/50 px-3 py-1 text-xs font-medium text-red-200 hover:bg-red-900/60 disabled:opacity-50"
+															>
+																{deletingId === pk.id ? (
+																	<Loader2 className="h-3.5 w-3.5 animate-spin" />
+																) : (
+																	<Check className="h-3.5 w-3.5" />
+																)}
+																Remove
+															</button>
+															<button
+																type="button"
+																onClick={cancelDelete}
+																disabled={deletingId === pk.id}
+																className="inline-flex items-center gap-1 rounded-full border border-brand-muted px-3 py-1 text-xs hover:bg-brand-muted/30 disabled:opacity-50"
+															>
+																<X className="h-3.5 w-3.5" />
+																Cancel
+															</button>
+														</div>
+													) : (
+														<div className="flex shrink-0 items-center gap-1">
+															<button
+																type="button"
+																aria-label="Rename passkey"
+																onClick={() => startRename(pk)}
+																className={iconBtn}
+															>
+																<Pencil className="h-4 w-4" />
+															</button>
+															<button
+																type="button"
+																aria-label="Remove passkey"
+																onClick={() => requestDelete(pk.id)}
+																className={iconBtnDanger}
+															>
+																<Trash2 className="h-4 w-4" />
+															</button>
+														</div>
+													)}
+												</>
+											)}
+										</li>
+									))}
+								</ul>
+							)}
 							<button
 								type="button"
 								disabled={passkeyPending}
@@ -294,9 +526,15 @@ export default function SettingsPage() {
 								className="flex items-center gap-2 rounded-full border border-brand-muted px-4 py-2 text-sm font-medium hover:bg-brand-muted/20 disabled:opacity-50"
 							>
 								{passkeyPending ? (
-									<><Loader2 className="h-4 w-4 animate-spin" />Waiting for device…</>
+									<>
+										<Loader2 className="h-4 w-4 animate-spin" />
+										Waiting for device…
+									</>
 								) : (
-									<><Fingerprint className="h-4 w-4" />Create a passkey</>
+									<>
+										<Fingerprint className="h-4 w-4" />
+										Add a passkey
+									</>
 								)}
 							</button>
 						</div>
