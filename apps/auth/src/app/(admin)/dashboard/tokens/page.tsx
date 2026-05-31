@@ -2,7 +2,7 @@
 
 import { ReducerAction, bootstrapProvider } from "@eetr/react-reducer-utils";
 import { useEffect } from "react";
-import { Loader2, Fingerprint, Ban, Trash2, Info, Eraser } from "lucide-react";
+import { Fingerprint } from "lucide-react";
 import {
 	listTokenActivity,
 	revokeTokenByValue,
@@ -11,19 +11,10 @@ import {
 } from "@/app/actions/token-actions";
 import { listEnvironments } from "@/app/actions/environment-actions";
 import type { Environment } from "@/lib/repositories/environment.repository";
-
-interface TokenActivityItem {
-	tokenType: "access" | "refresh";
-	tokenId: string;
-	clientId: string;
-	clientName: string | null;
-	environmentId: string;
-	expiresAt: string;
-	status: "active" | "expired" | "revoked";
-	scopeNames: string[];
-	createdAt: string | null;
-	rotatedFromTokenId: string | null;
-}
+import { FullPageSpinner } from "@/components/ui";
+import { TokensToolbar } from "./_components/tokens-toolbar";
+import { TokensTable } from "./_components/tokens-table";
+import type { TokenActivityItem } from "./_components/types";
 
 enum TokensPageActionType {
 	SET_TOKENS = "SET_TOKENS",
@@ -90,11 +81,6 @@ const { Provider: TokensPageStateProvider, useContextAccessors: useTokensPageSta
 		initialState
 	);
 
-function maskToken(token: string): string {
-	if (token.length <= 12) return token;
-	return `${token.slice(0, 8)}...${token.slice(-4)}`;
-}
-
 export default function TokensPage() {
 	return (
 		<TokensPageStateProvider>
@@ -105,8 +91,16 @@ export default function TokensPage() {
 
 function TokensPageContent() {
 	const { state, dispatch } = useTokensPageState();
-	const { tokens, environments, loading, environmentFilter, error, tokenActionKey, cleanupRunning, cleanupMessage } =
-		state;
+	const {
+		tokens,
+		environments,
+		loading,
+		environmentFilter,
+		error,
+		tokenActionKey,
+		cleanupRunning,
+		cleanupMessage,
+	} = state;
 
 	useEffect(() => {
 		async function load() {
@@ -209,11 +203,7 @@ function TokensPageContent() {
 			: tokens;
 
 	if (loading && tokens.length === 0) {
-		return (
-			<main className="flex min-h-screen items-center justify-center p-6">
-				<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-			</main>
-		);
+		return <FullPageSpinner />;
 	}
 
 	return (
@@ -227,123 +217,24 @@ function TokensPageContent() {
 				<p className="mb-4 shrink-0 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">{error}</p>
 			)}
 
-			<div className="mb-4 flex shrink-0 flex-wrap items-center gap-4">
-				<div className="flex items-center gap-2">
-					<label className="text-sm font-medium">Filter by environment</label>
-					<select
-						value={environmentFilter}
-						onChange={(event) =>
-							dispatch({
-								type: TokensPageActionType.SET_ENVIRONMENT_FILTER,
-								data: event.target.value,
-							})
-						}
-						className="rounded-xl border border-brand-muted bg-background px-3 py-1.5 text-sm focus:border-brand focus:outline-none"
-					>
-						<option value="">All</option>
-						{environments.map((environment) => (
-							<option key={environment.id} value={environment.id}>
-								{environment.name}
-							</option>
-						))}
-					</select>
-				</div>
-				<button
-					type="button"
-					onClick={handleRunCleanup}
-					disabled={cleanupRunning}
-					className="flex items-center gap-2 rounded-xl border border-brand-muted bg-background px-3 py-1.5 text-sm font-medium hover:bg-brand-muted/30 disabled:opacity-50"
-				>
-					{cleanupRunning ? (
-						<Loader2 className="h-4 w-4 animate-spin" />
-					) : (
-						<Eraser className="h-4 w-4" />
-					)}
-					{cleanupRunning ? "Cleaning up…" : "Run cleanup"}
-				</button>
-				{cleanupMessage && (
-					<span className="text-sm text-muted-foreground">{cleanupMessage}</span>
-				)}
-			</div>
+			<TokensToolbar
+				environments={environments}
+				environmentFilter={environmentFilter}
+				onEnvironmentFilterChange={(value) =>
+					dispatch({ type: TokensPageActionType.SET_ENVIRONMENT_FILTER, data: value })
+				}
+				cleanupRunning={cleanupRunning}
+				cleanupMessage={cleanupMessage}
+				onRunCleanup={handleRunCleanup}
+			/>
 
-			<div className="min-h-0 flex-1 overflow-auto rounded-xl border border-brand-muted">
-				<table className="w-full min-w-[900px] text-left text-sm">
-					<thead>
-						<tr className="border-b border-brand-muted bg-brand-muted/20">
-							<th className="px-4 py-3 font-medium">Type</th>
-							<th className="px-4 py-3 font-medium">Token</th>
-							<th className="px-4 py-3 font-medium">Client</th>
-							<th className="px-4 py-3 font-medium">Environment</th>
-							<th className="px-4 py-3 font-medium">Scopes</th>
-							<th className="px-4 py-3 font-medium">Status</th>
-							<th className="px-4 py-3 font-medium">Created</th>
-							<th className="px-4 py-3 font-medium">Expires</th>
-							<th className="px-4 py-3 font-medium">Rotated From</th>
-							<th className="px-4 py-3 font-medium">Actions</th>
-						</tr>
-					</thead>
-					<tbody>
-						{filteredTokens.map((token) => (
-							<tr key={`${token.tokenType}-${token.tokenId}`} className="border-b border-brand-muted/50">
-								<td className="px-4 py-3 uppercase">{token.tokenType}</td>
-								<td className="px-4 py-3 font-mono text-xs">{maskToken(token.tokenId)}</td>
-								<td className="px-4 py-3">
-									<div className="flex items-center gap-1.5">
-										<span>{token.clientName ?? token.clientId}</span>
-										<span className="relative group inline-flex">
-											<Info
-												className="h-3.5 w-3.5 text-muted-foreground shrink-0 cursor-help"
-												aria-label="Client ID"
-											/>
-											<span className="pointer-events-none absolute left-1/2 top-full z-10 mt-1 -translate-x-1/2 whitespace-nowrap rounded border border-brand-muted bg-background px-2 py-1.5 text-xs font-mono shadow-md opacity-0 transition-opacity group-hover:opacity-100">
-												{token.clientId}
-											</span>
-										</span>
-									</div>
-								</td>
-								<td className="px-4 py-3">
-									{envById[token.environmentId]?.name ?? token.environmentId}
-								</td>
-								<td className="px-4 py-3">
-									{token.scopeNames.length > 0
-										? token.scopeNames.join(" ")
-										: <span className="text-muted-foreground">none</span>}
-								</td>
-								<td className="px-4 py-3">{token.status}</td>
-								<td className="px-4 py-3">
-									{token.createdAt ? new Date(token.createdAt).toLocaleString() : "n/a"}
-								</td>
-								<td className="px-4 py-3">{new Date(token.expiresAt).toLocaleString()}</td>
-								<td className="px-4 py-3 font-mono text-xs">
-									{token.rotatedFromTokenId ? maskToken(token.rotatedFromTokenId) : "n/a"}
-								</td>
-								<td className="px-4 py-3">
-									<div className="flex items-center gap-2">
-										<button
-											type="button"
-											onClick={() => handleRevoke(token)}
-											disabled={tokenActionKey != null}
-											className="inline-flex items-center gap-1 rounded-full border border-amber-300 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-950/50"
-										>
-											<Ban className="h-3.5 w-3.5" />
-											Revoke
-										</button>
-										<button
-											type="button"
-											onClick={() => handleDelete(token)}
-											disabled={tokenActionKey != null}
-											className="inline-flex items-center gap-1 rounded-full border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-200 dark:hover:bg-red-950/50"
-										>
-											<Trash2 className="h-3.5 w-3.5" />
-											Delete
-										</button>
-									</div>
-								</td>
-							</tr>
-						))}
-					</tbody>
-				</table>
-			</div>
+			<TokensTable
+				tokens={filteredTokens}
+				envById={envById}
+				actionInProgress={tokenActionKey != null}
+				onRevoke={handleRevoke}
+				onDelete={handleDelete}
+			/>
 
 			{filteredTokens.length === 0 && (
 				<p className="mt-4 shrink-0 text-center text-sm text-muted-foreground">

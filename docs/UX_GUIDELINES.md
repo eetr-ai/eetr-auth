@@ -2,6 +2,20 @@
 
 Conventions for the `apps/auth` admin dashboard and sign-in flows. Follow these when adding or changing UI so the experience stays consistent. All UI is Next.js + React + Tailwind, with icons from `lucide-react`.
 
+## Shared component library
+
+Reusable primitives live in [apps/auth/src/components/ui](../apps/auth/src/components/ui) (import via `@/components/ui`). **Reach for these instead of re-typing the class strings below** — the class strings in this doc remain the underlying spec, but the primitives are the canonical way to apply them:
+
+- `Button` — `variant` of `primary` | `secondary` | `destructiveConfirm`, optional `loading` (swaps the leading icon to `Loader2` and disables) and `icon` (leading `lucide` icon).
+- `IconButton` — icon-only per-row action; `variant` of `default` | `danger`; requires `aria-label`.
+- `Banner` — `variant` of `error` | `success` | `info` | `warning`; renders nothing when `message` is falsy.
+- `SectionCard` (titled, icon heading) and `Card` (bare wrapper).
+- `Input`, `Label`, `FormField`.
+- `Spinner` and `FullPageSpinner`.
+- `InlineDeleteConfirm` — the inline destructive-confirmation control (see below).
+
+Page-specific sub-components are co-located in a `_components/` folder next to the route's `page.tsx`. State stays in the page; `_components/` children are presentational (props in, callbacks out) and do not declare `"use client"`. See [settings/page.tsx](../apps/auth/src/app/(admin)/dashboard/settings/page.tsx) and its `_components/` for the reference structure.
+
 ## Destructive actions
 
 **Do not use `window.confirm()` or any other browser dialog.** Confirmations must be inline, in the same row or card as the action that triggered them.
@@ -21,7 +35,9 @@ Flow:
 - Second click ("Delete") → run the mutation. Track in-flight state on `deletingUserId` and show a spinner on the confirm button.
 - "Cancel" or successful completion clears `confirmingDeleteUserId`.
 
-While a row is in the confirming state, hide the other action buttons for that row so there is only one decision to make. See [apps/auth/src/app/(admin)/dashboard/users/page.tsx](../apps/auth/src/app/(admin)/dashboard/users/page.tsx) for the reference implementation.
+While a row is in the confirming state, hide the other action buttons for that row so there is only one decision to make.
+
+Use the shared `InlineDeleteConfirm` component (`@/components/ui`) to render the confirmation — the page owns the `confirmingDeleteXId` / `deletingXId` state and renders `<InlineDeleteConfirm label="Delete X?" busy={deletingXId === row.id} onConfirm={…} onCancel={…} />` in place of the row's normal actions. See [users/page.tsx](../apps/auth/src/app/(admin)/dashboard/users/page.tsx) and its `_components/user-row.tsx`, or [settings/_components/passkey-list-item.tsx](../apps/auth/src/app/(admin)/dashboard/settings/_components/passkey-list-item.tsx), for reference usage. The markup it produces is:
 
 ```tsx
 {confirmingDeleteUserId === user.id ? (
