@@ -18,10 +18,18 @@ import {
 	X,
 	Pencil,
 	BadgeCheck,
+	Smartphone,
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { updateDisplayName, changePassword } from "@/app/actions/user-settings-actions";
 // updateUsername is intentionally omitted — username is read-only for users
 import { getCurrentUser, getUserById } from "@/app/actions/user-actions";
+import {
+	getTotpStatus,
+	beginTotpEnrollment,
+	confirmTotpEnrollment,
+	disableTotp,
+} from "@/app/actions/totp-actions";
 
 type UserInfo = {
 	id: string;
@@ -117,6 +125,20 @@ export default function SettingsPage() {
 	const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
 	const [passwordPending, startPasswordTransition] = useTransition();
 
+	// Authenticator app (TOTP)
+	const [totpStatus, setTotpStatus] = useState<{
+		enrolled: boolean;
+		createdAt: string | null;
+		lastUsedAt: string | null;
+	} | null>(null);
+	const [totpEnroll, setTotpEnroll] = useState<{ otpauthUri: string; secret: string } | null>(null);
+	const [totpCode, setTotpCode] = useState("");
+	const [totpError, setTotpError] = useState<string | null>(null);
+	const [totpSuccess, setTotpSuccess] = useState<string | null>(null);
+	const [totpBusy, setTotpBusy] = useState(false);
+	const [confirmingTotpRemove, setConfirmingTotpRemove] = useState(false);
+	const [totpRemoving, setTotpRemoving] = useState(false);
+
 	useEffect(() => {
 		getCurrentUser().then(async (session) => {
 			if (!session?.id) return;
@@ -143,6 +165,19 @@ export default function SettingsPage() {
 		if (!user?.id) return;
 		void loadPasskeys();
 	}, [user?.id, loadPasskeys]);
+
+	const loadTotpStatus = useCallback(async () => {
+		try {
+			setTotpStatus(await getTotpStatus());
+		} catch {
+			setTotpStatus({ enrolled: false, createdAt: null, lastUsedAt: null });
+		}
+	}, []);
+
+	useEffect(() => {
+		if (!user?.id) return;
+		void loadTotpStatus();
+	}, [user?.id, loadTotpStatus]);
 
 	const handleProfileSave = (e: React.FormEvent) => {
 		e.preventDefault();
@@ -342,6 +377,61 @@ export default function SettingsPage() {
 		}
 	};
 
+	const handleBeginTotp = async () => {
+		setTotpError(null);
+		setTotpSuccess(null);
+		setTotpBusy(true);
+		try {
+			const data = await beginTotpEnrollment();
+			setTotpEnroll(data);
+			setTotpCode("");
+		} catch (err) {
+			setTotpError(err instanceof Error ? err.message : "Failed to start enrollment.");
+		} finally {
+			setTotpBusy(false);
+		}
+	};
+
+	const handleConfirmTotp = async (e: React.FormEvent) => {
+		e.preventDefault();
+		setTotpError(null);
+		setTotpSuccess(null);
+		setTotpBusy(true);
+		try {
+			await confirmTotpEnrollment(totpCode);
+			setTotpEnroll(null);
+			setTotpCode("");
+			await loadTotpStatus();
+			setTotpSuccess("Authenticator app enabled.");
+		} catch (err) {
+			setTotpError(err instanceof Error ? err.message : "Failed to verify code.");
+		} finally {
+			setTotpBusy(false);
+		}
+	};
+
+	const cancelTotpEnroll = () => {
+		setTotpEnroll(null);
+		setTotpCode("");
+		setTotpError(null);
+	};
+
+	const handleRemoveTotp = async () => {
+		setTotpError(null);
+		setTotpSuccess(null);
+		setTotpRemoving(true);
+		try {
+			await disableTotp();
+			setConfirmingTotpRemove(false);
+			await loadTotpStatus();
+			setTotpSuccess("Authenticator app removed.");
+		} catch (err) {
+			setTotpError(err instanceof Error ? err.message : "Failed to remove authenticator app.");
+		} finally {
+			setTotpRemoving(false);
+		}
+	};
+
 	const handlePasswordSave = (e: React.FormEvent) => {
 		e.preventDefault();
 		setPasswordError(null);
@@ -382,7 +472,7 @@ export default function SettingsPage() {
 				Settings
 			</div>
 
-			<div className="mx-auto max-w-xl space-y-6">
+			<div className="mx-auto grid max-w-xl gap-6 lg:max-w-5xl lg:auto-rows-fr lg:grid-cols-2">
 				{/* Profile — name, username, avatar together */}
 				<SectionCard title="Profile" icon={UserCircle}>
 					<ErrorBanner message={profileError ?? avatarError} />
@@ -655,6 +745,138 @@ export default function SettingsPage() {
 						</button>
 					</form>
 				</SectionCard>
+
+				{/* Authenticator app (TOTP) — second MFA method alongside email */}
+				<SectionCard title="Authenticator app" icon={Smartphone}>
+					<ErrorBanner message={totpError} />
+					<SuccessBanner message={totpSuccess} />
+					<p className="mb-4 text-sm text-muted-foreground">
+						Use an authenticator app (like Google Authenticator) for two-factor sign-in codes.
+					</p>
+					{totpStatus === null ? (
+						<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+					) : totpStatus.enrolled ? (
+						<div className="flex items-center gap-3 rounded-xl border border-brand-muted p-3">
+							<Smartphone className="h-5 w-5 shrink-0 text-muted-foreground" />
+							<div className="min-w-0 flex-1">
+								<div className="flex items-center gap-2">
+									<span className="text-sm font-medium">Authenticator app</span>
+									<span className="shrink-0 rounded-full border border-green-300 bg-green-50 px-2 py-0.5 text-xs text-green-700 dark:border-green-800 dark:bg-green-950/50 dark:text-green-200">
+										Enabled
+									</span>
+								</div>
+								<p className="mt-0.5 text-xs text-muted-foreground">
+									Added {formatDate(totpStatus.createdAt)} · Last used {formatDate(totpStatus.lastUsedAt)}
+								</p>
+							</div>
+							{confirmingTotpRemove ? (
+								<div className="flex shrink-0 items-center gap-2">
+									<span className="text-xs text-red-700 dark:text-red-200">Remove?</span>
+									<button
+										type="button"
+										onClick={handleRemoveTotp}
+										disabled={totpRemoving}
+										className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200 dark:hover:bg-red-900/60"
+									>
+										{totpRemoving ? (
+											<Loader2 className="h-3.5 w-3.5 animate-spin" />
+										) : (
+											<Check className="h-3.5 w-3.5" />
+										)}
+										Remove
+									</button>
+									<button
+										type="button"
+										onClick={() => setConfirmingTotpRemove(false)}
+										disabled={totpRemoving}
+										className="inline-flex items-center gap-1 rounded-full border border-brand-muted px-3 py-1 text-xs hover:bg-brand-muted/30 disabled:opacity-50"
+									>
+										<X className="h-3.5 w-3.5" />
+										Cancel
+									</button>
+								</div>
+							) : (
+								<button
+									type="button"
+									aria-label="Remove authenticator app"
+									onClick={() => {
+										setTotpError(null);
+										setTotpSuccess(null);
+										setConfirmingTotpRemove(true);
+									}}
+									className={iconBtnDanger}
+								>
+									<Trash2 className="h-4 w-4" />
+								</button>
+							)}
+						</div>
+					) : totpEnroll ? (
+						<form onSubmit={handleConfirmTotp} className="space-y-4">
+							<p className="text-sm text-muted-foreground">
+								Scan this QR code with your authenticator app, then enter the 6-digit code it shows.
+							</p>
+							<div className="flex justify-center">
+								<div className="rounded-xl bg-white p-3">
+									<QRCodeSVG value={totpEnroll.otpauthUri} size={176} />
+								</div>
+							</div>
+							<div>
+								<p className="mb-1 text-xs text-muted-foreground">Can&apos;t scan? Enter this key manually:</p>
+								<code className="block break-all rounded-xl border border-brand-muted bg-brand-muted/20 px-3 py-2 text-sm tracking-wider">
+									{totpEnroll.secret}
+								</code>
+							</div>
+							<div>
+								<label className="mb-1 block text-sm text-muted-foreground">Verification code</label>
+								<input
+									type="text"
+									inputMode="numeric"
+									autoComplete="one-time-code"
+									pattern="[0-9]{6}"
+									maxLength={6}
+									required
+									value={totpCode}
+									onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+									className={`${inputClass} text-center tracking-[0.3em]`}
+									placeholder="000000"
+								/>
+							</div>
+							<div className="flex items-center gap-2">
+								<button type="submit" disabled={totpBusy || totpCode.length !== 6} className={btnPrimary}>
+									{totpBusy ? "Verifying…" : "Verify and enable"}
+								</button>
+								<button
+									type="button"
+									onClick={cancelTotpEnroll}
+									disabled={totpBusy}
+									className="rounded-full border border-brand-muted px-4 py-2 text-sm font-medium hover:bg-brand-muted/30 disabled:opacity-50"
+								>
+									Cancel
+								</button>
+							</div>
+						</form>
+					) : (
+						<button
+							type="button"
+							disabled={totpBusy}
+							onClick={handleBeginTotp}
+							className="flex items-center gap-2 rounded-full border border-brand-muted px-4 py-2 text-sm font-medium hover:bg-brand-muted/20 disabled:opacity-50"
+						>
+							{totpBusy ? (
+								<>
+									<Loader2 className="h-4 w-4 animate-spin" />
+									Preparing…
+								</>
+							) : (
+								<>
+									<Smartphone className="h-4 w-4" />
+									Add authenticator app
+								</>
+							)}
+						</button>
+					)}
+				</SectionCard>
+
 			</div>
 		</main>
 	);
