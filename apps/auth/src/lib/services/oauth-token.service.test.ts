@@ -6,6 +6,7 @@ import type { Client, ClientRepository } from "@/lib/repositories/client.reposit
 import type { EnvironmentRepository } from "@/lib/repositories/environment.repository";
 import type { RefreshTokenRecord, RefreshTokenRepository } from "@/lib/repositories/refresh-token.repository";
 import type { AccessTokenRecord, ClientScopeGrant, TokenRepository } from "@/lib/repositories/token.repository";
+import type { UserRecord, UserRepository } from "@/lib/repositories/admin.repository";
 import { OauthTokenService } from "@/lib/services/oauth-token.service";
 
 function createClientRepoMock() {
@@ -72,12 +73,39 @@ function createEnvRepoMock() {
 	} satisfies EnvironmentRepository;
 }
 
+function makeUser(overrides?: Partial<UserRecord>): UserRecord {
+	return {
+		id: "user-123",
+		username: "alice",
+		name: "Alice Example",
+		email: "alice@example.com",
+		emailVerifiedAt: "2026-01-01T00:00:00.000Z",
+		avatarKey: null,
+		isAdmin: false,
+		...overrides,
+	};
+}
+
+function createUserRepoMock(user: UserRecord | null = makeUser()) {
+	return {
+		create: vi.fn(),
+		list: vi.fn(),
+		findByUsername: vi.fn(),
+		findByEmail: vi.fn(),
+		getById: vi.fn().mockResolvedValue(user),
+		update: vi.fn(),
+		delete: vi.fn(),
+		deleteWithAudit: vi.fn(),
+	} satisfies UserRepository;
+}
+
 function createService(deps?: {
 	clientRepo?: ClientRepository;
 	authorizationCodeRepo?: AuthorizationCodeRepository;
 	tokenRepo?: TokenRepository;
 	refreshTokenRepo?: RefreshTokenRepository;
 	envRepo?: EnvironmentRepository;
+	userRepo?: UserRepository;
 	env?: CloudflareEnv;
 }) {
 	return new OauthTokenService({
@@ -86,6 +114,7 @@ function createService(deps?: {
 		tokenRepo: deps?.tokenRepo ?? createTokenRepoMock(),
 		refreshTokenRepo: deps?.refreshTokenRepo ?? createRefreshTokenRepoMock(),
 		envRepo: deps?.envRepo ?? createEnvRepoMock(),
+		userRepo: deps?.userRepo ?? createUserRepoMock(),
 		env: deps?.env ?? ({} as CloudflareEnv),
 	});
 }
@@ -678,6 +707,202 @@ describe("OauthTokenService", () => {
 
 			const payload = decodeJwtPart(result.access_token, 1);
 			expect(payload.environment).toBeUndefined();
+		});
+	});
+
+	describe("id_token issuance (OIDC)", () => {
+		let privateKeyPem: string;
+
+		beforeAll(async () => {
+			const { privateKey } = await generateKeyPair("RS256", { extractable: true });
+			privateKeyPem = await exportPKCS8(privateKey);
+		});
+
+		afterEach(() => {
+			vi.unstubAllEnvs();
+		});
+
+		function buildJwtService(deps: {
+			scopeGrants: ClientScopeGrant[];
+			authCodeOverrides?: Partial<AuthorizationCodeWithScopeIds>;
+			user?: UserRecord | null;
+			signing?: boolean;
+		}) {
+			const clientRepo = createClientRepoMock();
+			const authorizationCodeRepo = createAuthorizationCodeRepoMock();
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			const envRepo = createEnvRepoMock();
+			const userRepo = createUserRepoMock(deps.user === undefined ? makeUser() : deps.user);
+
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient());
+			clientRepo.getById.mockResolvedValue(makeClient());
+			envRepo.getById.mockResolvedValue({ id: "env-1", name: "production" });
+			authorizationCodeRepo.getByCodeId.mockResolvedValue(
+				makeAuthorizationCode({
+					codeChallenge: "PLACEHOLDER",
+					clientScopeIds: deps.scopeGrants.map((g) => g.clientScopeId),
+					nonce: "n-0S6_WzA2Mj",
+					authTime: "2026-04-06T13:00:00.000Z",
+					...deps.authCodeOverrides,
+				})
+			);
+			tokenRepo.getClientScopeGrants.mockResolvedValue(deps.scopeGrants);
+
+			const env: Record<string, unknown> = { ISSUER_BASE_URL: "https://auth.example.com" };
+			if (deps.signing !== false) {
+				env.JWT_PRIVATE_KEY = privateKeyPem;
+				env.JWT_KID = "kid-from-env";
+			}
+
+			const service = createService({
+				clientRepo,
+				authorizationCodeRepo,
+				tokenRepo,
+				refreshTokenRepo,
+				envRepo,
+				userRepo,
+				env: env as unknown as CloudflareEnv,
+			});
+			return { service, userRepo };
+		}
+
+		const OPENID_GRANTS: ClientScopeGrant[] = [
+			{ clientScopeId: "cs-openid", scopeId: "s-openid", scopeName: "openid" },
+			{ clientScopeId: "cs-profile", scopeId: "s-profile", scopeName: "profile" },
+			{ clientScopeId: "cs-email", scopeId: "s-email", scopeName: "email" },
+		];
+
+		async function expectedAtHash(accessToken: string): Promise<string> {
+			const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(accessToken));
+			return Buffer.from(new Uint8Array(digest).slice(0, 16)).toString("base64url");
+		}
+
+		it("issues an id_token with standard + scope-gated claims for the openid scope", async () => {
+			const { service } = buildJwtService({
+				scopeGrants: OPENID_GRANTS,
+				authCodeOverrides: { codeChallenge: await toS256Challenge("verifier-123") },
+			});
+
+			const result = await service.exchange({
+				grantType: "authorization_code",
+				clientId: "client-app-id",
+				clientSecret: "plain-secret",
+				code: "code_123",
+				redirectUri: "https://client.example.com/callback",
+				codeVerifier: "verifier-123",
+			});
+
+			expect(result.id_token).toBeDefined();
+			expect(result.id_token!.split(".")).toHaveLength(3);
+			const header = decodeJwtPart(result.id_token!, 0);
+			const payload = decodeJwtPart(result.id_token!, 1);
+			expect(header.alg).toBe("RS256");
+			expect(header.kid).toBe("kid-from-env");
+			expect(payload.iss).toBe("https://auth.example.com");
+			expect(payload.sub).toBe("user-123");
+			expect(payload.aud).toBe("client-app-id");
+			expect(payload.iat).toBe(Math.floor(new Date("2026-04-06T13:10:00.000Z").getTime() / 1000));
+			expect(payload.exp).toBe(Math.floor(new Date("2026-04-06T14:10:00.000Z").getTime() / 1000));
+			expect(payload.nonce).toBe("n-0S6_WzA2Mj");
+			expect(payload.auth_time).toBe(Math.floor(new Date("2026-04-06T13:00:00.000Z").getTime() / 1000));
+			expect(payload.at_hash).toBe(await expectedAtHash(result.access_token));
+			// profile + email scopes granted → their claims are present.
+			expect(payload.name).toBe("Alice Example");
+			expect(payload.preferred_username).toBe("alice");
+			expect(payload.email).toBe("alice@example.com");
+			expect(payload.email_verified).toBe(true);
+		});
+
+		it("gates profile/email claims on the granted scopes", async () => {
+			const { service } = buildJwtService({
+				scopeGrants: OPENID_GRANTS,
+				authCodeOverrides: { codeChallenge: await toS256Challenge("verifier-123") },
+			});
+
+			// Down-scope the request to openid only.
+			const result = await service.exchange({
+				grantType: "authorization_code",
+				clientId: "client-app-id",
+				clientSecret: "plain-secret",
+				code: "code_123",
+				redirectUri: "https://client.example.com/callback",
+				codeVerifier: "verifier-123",
+				scope: "openid",
+			});
+
+			const payload = decodeJwtPart(result.id_token!, 1);
+			expect(payload.sub).toBe("user-123");
+			expect(payload.at_hash).toBeDefined();
+			expect(payload.name).toBeUndefined();
+			expect(payload.preferred_username).toBeUndefined();
+			expect(payload.email).toBeUndefined();
+			expect(payload.email_verified).toBeUndefined();
+		});
+
+		it("omits the picture claim when the user has no avatar", async () => {
+			const { service } = buildJwtService({
+				scopeGrants: OPENID_GRANTS,
+				authCodeOverrides: { codeChallenge: await toS256Challenge("verifier-123") },
+				user: makeUser({ avatarKey: null }),
+			});
+
+			const result = await service.exchange({
+				grantType: "authorization_code",
+				clientId: "client-app-id",
+				clientSecret: "plain-secret",
+				code: "code_123",
+				redirectUri: "https://client.example.com/callback",
+				codeVerifier: "verifier-123",
+			});
+
+			const payload = decodeJwtPart(result.id_token!, 1);
+			expect(payload.picture).toBeUndefined();
+		});
+
+		it("does not issue an id_token when the openid scope is absent", async () => {
+			const { service } = buildJwtService({
+				scopeGrants: [
+					{ clientScopeId: "cs-read", scopeId: "s-read", scopeName: "read:users" },
+				],
+				authCodeOverrides: {
+					codeChallenge: await toS256Challenge("verifier-123"),
+					clientScopeIds: ["cs-read"],
+				},
+			});
+
+			const result = await service.exchange({
+				grantType: "authorization_code",
+				clientId: "client-app-id",
+				clientSecret: "plain-secret",
+				code: "code_123",
+				redirectUri: "https://client.example.com/callback",
+				codeVerifier: "verifier-123",
+			});
+
+			expect(result.id_token).toBeUndefined();
+		});
+
+		it("omits the id_token gracefully in opaque-token mode even when openid is requested", async () => {
+			const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+			const { service } = buildJwtService({
+				scopeGrants: OPENID_GRANTS,
+				authCodeOverrides: { codeChallenge: await toS256Challenge("verifier-123") },
+				signing: false,
+			});
+
+			const result = await service.exchange({
+				grantType: "authorization_code",
+				clientId: "client-app-id",
+				clientSecret: "plain-secret",
+				code: "code_123",
+				redirectUri: "https://client.example.com/callback",
+				codeVerifier: "verifier-123",
+			});
+
+			expect(result.id_token).toBeUndefined();
+			expect(result.access_token).toMatch(/^at_[0-9a-f]{64}$/);
+			expect(warn).toHaveBeenCalled();
 		});
 	});
 

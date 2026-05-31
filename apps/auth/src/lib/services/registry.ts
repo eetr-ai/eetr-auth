@@ -113,6 +113,7 @@ export function getServices(ctx: RequestContext): Services {
 			tokenRepo,
 			refreshTokenRepo,
 			envRepo,
+			userRepo,
 			env: ctx.env,
 		}),
 		tokenActivityLogService: new TokenActivityLogService({

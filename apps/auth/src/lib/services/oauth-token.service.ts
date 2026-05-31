@@ -12,6 +12,8 @@ import type {
 import type { AccessTokenActivity } from "@/lib/repositories/token.repository";
 import { OAuthServiceError } from "./oauth.types";
 import { resolveHmacKey, verifyClientSecretAgainstStored } from "@/lib/auth/secret-at-rest";
+import type { UserRepository } from "@/lib/repositories/admin.repository";
+import { getAvatarUrl } from "@/lib/users/profile";
 
 const JWKS_R2_KEY_DEFAULT = "jwks.json";
 
@@ -45,16 +47,29 @@ function scopesToString(scopes: string[]): string | undefined {
 	return scopes.length > 0 ? scopes.join(" ") : undefined;
 }
 
-async function toS256Challenge(value: string): Promise<string> {
-	const encoder = new TextEncoder();
-	const data = encoder.encode(value);
-	const digest = await crypto.subtle.digest("SHA-256", data);
-	const bytes = new Uint8Array(digest);
+function toBase64Url(bytes: Uint8Array): string {
 	let binary = "";
 	for (const byte of bytes) {
 		binary += String.fromCharCode(byte);
 	}
 	return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+async function toS256Challenge(value: string): Promise<string> {
+	const encoder = new TextEncoder();
+	const data = encoder.encode(value);
+	const digest = await crypto.subtle.digest("SHA-256", data);
+	return toBase64Url(new Uint8Array(digest));
+}
+
+/**
+ * OIDC `at_hash` (Core 1.0 §3.1.3.6): base64url of the left-most half of the
+ * hash of the access token's ASCII octets, using the hash paired with the
+ * id_token's signing alg (RS256 → SHA-256 → left 128 bits / 16 bytes).
+ */
+async function computeAtHash(accessToken: string): Promise<string> {
+	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(accessToken));
+	return toBase64Url(new Uint8Array(digest).slice(0, 16));
 }
 
 export interface OAuthTokenResponse {
@@ -63,6 +78,7 @@ export interface OAuthTokenResponse {
 	expires_in: number;
 	refresh_token: string;
 	scope?: string;
+	id_token?: string;
 }
 
 export interface TokenActivityItem {
@@ -130,6 +146,7 @@ export interface OauthTokenServiceDeps {
 	tokenRepo: TokenRepository;
 	refreshTokenRepo: RefreshTokenRepository;
 	envRepo: EnvironmentRepository;
+	userRepo: UserRepository;
 	env: CloudflareEnv;
 }
 
@@ -140,13 +157,15 @@ export class OauthTokenService {
 	private readonly tokenRepo: TokenRepository;
 	private readonly refreshTokenRepo: RefreshTokenRepository;
 	private readonly envRepo: EnvironmentRepository;
+	private readonly userRepo: UserRepository;
 
-	constructor({ clientRepo, authorizationCodeRepo, tokenRepo, refreshTokenRepo, envRepo, env }: OauthTokenServiceDeps) {
+	constructor({ clientRepo, authorizationCodeRepo, tokenRepo, refreshTokenRepo, envRepo, userRepo, env }: OauthTokenServiceDeps) {
 		this.clientRepo = clientRepo;
 		this.authorizationCodeRepo = authorizationCodeRepo;
 		this.tokenRepo = tokenRepo;
 		this.refreshTokenRepo = refreshTokenRepo;
 		this.envRepo = envRepo;
+		this.userRepo = userRepo;
 		this.env = env;
 	}
 
@@ -204,6 +223,10 @@ export class OauthTokenService {
 		subject: string | null;
 		rotatedFromRefreshTokenId?: string | null;
 		clientIdentifier?: string;
+		/** OIDC: when true and the `openid` scope was granted, also issue an id_token. */
+		issueIdToken?: boolean;
+		nonce?: string | null;
+		authTime?: string | null;
 	}): Promise<OAuthTokenResponse> {
 		const env = this.env as unknown as Record<string, unknown>;
 		// Prefer ctx.env; in next dev, .env.local is in process.env but may not be merged into ctx.env
@@ -233,6 +256,15 @@ export class OauthTokenService {
 				authAssets: authAssets ?? { get: async () => null },
 				jwksR2Key,
 			});
+		}
+
+		// Opaque-token mode cannot mint a signed id_token. In production JWT signing is
+		// configured, so this only happens in misconfigured/dev setups — warn and degrade
+		// gracefully (omit id_token) rather than break the token exchange.
+		if (params.issueIdToken && params.scopeNames.includes("openid")) {
+			console.warn(
+				"[oauth_token] openid scope requested but JWT signing is not configured; id_token omitted (opaque-token mode)."
+			);
 		}
 
 		const t0 = Date.now();
@@ -293,6 +325,9 @@ export class OauthTokenService {
 		privateKeyPem: string;
 		authAssets: { get(key: string): Promise<{ body: ReadableStream } | null> };
 		jwksR2Key: string;
+		issueIdToken?: boolean;
+		nonce?: string | null;
+		authTime?: string | null;
 	}): Promise<OAuthTokenResponse> {
 		const t0 = Date.now();
 		const now = new Date();
@@ -381,6 +416,26 @@ export class OauthTokenService {
 			params.clientScopeIds
 		);
 		logTokenStep("issue_create_refresh_token", t0);
+
+		// OIDC: when the `openid` scope was granted on an interactive (authorization_code)
+		// exchange, also mint a signed id_token using the same key/kid as the access token.
+		let idToken: string | undefined;
+		if (params.issueIdToken && params.scopeNames.includes("openid") && params.subject) {
+			idToken = await this.buildIdToken({
+				privateKey,
+				kid,
+				issuer: params.issuer,
+				subject: params.subject,
+				audience: params.clientIdentifier,
+				scopeNames: params.scopeNames,
+				nonce: params.nonce ?? null,
+				authTime: params.authTime ?? null,
+				accessToken: accessTokenJwt,
+				issuedAt: Math.floor(now.getTime() / 1000),
+				expiresAt: Math.floor(accessExpiresAt.getTime() / 1000),
+			});
+		}
+
 		logTokenStep("issue_token_pair_total", t0);
 
 		return {
@@ -389,7 +444,64 @@ export class OauthTokenService {
 			expires_in: ACCESS_TOKEN_TTL_SECONDS,
 			refresh_token: refreshToken,
 			scope: scopesToString(params.scopeNames),
+			...(idToken ? { id_token: idToken } : {}),
 		};
+	}
+
+	/**
+	 * Build a signed OIDC id_token (Core 1.0 §2, §3.1.3.6). Standard claims are always
+	 * present (`iss`, `sub`, `aud`, `exp`, `iat`, `at_hash`, plus `auth_time`/`nonce` when
+	 * available); profile/email claims are gated on the corresponding granted scopes and
+	 * mirror /userinfo so `sub` is consistent across both. `sub` is the user id.
+	 */
+	private async buildIdToken(params: {
+		privateKey: CryptoKey | Uint8Array;
+		kid: string;
+		issuer: string;
+		subject: string;
+		audience: string;
+		scopeNames: string[];
+		nonce: string | null;
+		authTime: string | null;
+		accessToken: string;
+		issuedAt: number;
+		expiresAt: number;
+	}): Promise<string> {
+		const user = await this.userRepo.getById(params.subject);
+		const claims: Record<string, unknown> = {
+			at_hash: await computeAtHash(params.accessToken),
+		};
+		if (params.nonce) {
+			claims.nonce = params.nonce;
+		}
+		if (params.authTime) {
+			const authTimeSeconds = Math.floor(new Date(params.authTime).getTime() / 1000);
+			if (Number.isFinite(authTimeSeconds)) {
+				claims.auth_time = authTimeSeconds;
+			}
+		}
+		if (user) {
+			if (params.scopeNames.includes("profile")) {
+				claims.name = user.name ?? user.username;
+				claims.preferred_username = user.username;
+				const picture = getAvatarUrl(user.avatarKey, this.env as unknown as Record<string, unknown>);
+				if (picture) {
+					claims.picture = picture;
+				}
+			}
+			if (params.scopeNames.includes("email")) {
+				claims.email = user.email ?? undefined;
+				claims.email_verified = Boolean(user.emailVerifiedAt);
+			}
+		}
+		return new SignJWT(claims)
+			.setProtectedHeader({ alg: "RS256", kid: params.kid })
+			.setIssuer(params.issuer)
+			.setSubject(params.subject)
+			.setAudience(params.audience)
+			.setIssuedAt(params.issuedAt)
+			.setExpirationTime(params.expiresAt)
+			.sign(params.privateKey as Parameters<SignJWT["sign"]>[0]);
 	}
 
 	private async exchangeClientCredentials(params: TokenRequestParams): Promise<OAuthTokenResponse> {
@@ -491,6 +603,11 @@ export class OauthTokenService {
 			scopeNames: selected.map((grant) => grant.scopeName),
 			subject: authorizationCode.subject,
 			clientIdentifier: client.clientId,
+			// OIDC: only the authorization_code grant issues an id_token, bound to the
+			// nonce/auth_time captured at /authorize time.
+			issueIdToken: true,
+			nonce: authorizationCode.nonce,
+			authTime: authorizationCode.authTime,
 		});
 		logTokenStep("authorization_code_total", t0);
 		return result;
