@@ -4,8 +4,13 @@ import { useCallback, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { startAuthentication, browserSupportsWebAuthnAutofill } from "@simplewebauthn/browser";
 import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/types";
-import { LogOut, ShieldCheck } from "lucide-react";
-import { beginSignInChallenge, clearSignInChallenge, signOutFromChallenge } from "@/app/actions/mfa-actions";
+import { LogOut, ShieldCheck, Smartphone, Mail } from "lucide-react";
+import {
+	beginSignInChallenge,
+	clearSignInChallenge,
+	signOutFromChallenge,
+	requestEmailMfaCode,
+} from "@/app/actions/mfa-actions";
 import { submitSignIn, submitPasskeySignIn } from "@/app/actions/sign-in-actions";
 
 type Props = {
@@ -14,8 +19,10 @@ type Props = {
 };
 
 export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
-	const [step, setStep] = useState<"password" | "otp">("password");
+	const [step, setStep] = useState<"password" | "choose" | "otp">("password");
 	const [otpPurpose, setOtpPurpose] = useState<"mfa" | "email_verification">("mfa");
+	const [mfaMethods, setMfaMethods] = useState<("totp" | "email")[]>([]);
+	const [mfaMethod, setMfaMethod] = useState<"totp" | "email">("totp");
 	const [username, setUsername] = useState("");
 	const [password, setPassword] = useState("");
 	const [otp, setOtp] = useState("");
@@ -118,9 +125,21 @@ export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
 				await submitSignIn({ username, password, callbackUrl });
 				return;
 			}
-			setOtpPurpose(r.challenge);
-			setStep("otp");
 			setOtp("");
+			if (r.challenge === "email_verification") {
+				setOtpPurpose("email_verification");
+				setStep("otp");
+				return;
+			}
+			// MFA challenge: one or two methods available for this user.
+			setOtpPurpose("mfa");
+			setMfaMethods(r.methods);
+			if (r.methods.length > 1) {
+				setStep("choose");
+			} else {
+				setMfaMethod(r.methods[0]);
+				setStep("otp");
+			}
 		});
 	};
 
@@ -128,8 +147,52 @@ export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
 		e.preventDefault();
 		setError(null);
 		startTransition(async () => {
-			await submitSignIn({ username, password, otp, callbackUrl });
+			await submitSignIn({
+				username,
+				password,
+				otp,
+				...(otpPurpose === "mfa" ? { mfaMethod } : {}),
+				callbackUrl,
+			});
 		});
+	};
+
+	// Sends an email MFA code (sets the challenge cookie server-side), then advances.
+	const sendEmailCodeThen = (next: () => void) => {
+		setError(null);
+		startTransition(async () => {
+			const r = await requestEmailMfaCode(username, password);
+			if (!r.ok) {
+				setError(r.error);
+				return;
+			}
+			setMfaMethod("email");
+			setOtp("");
+			next();
+		});
+	};
+
+	const onChooseMethod = (method: "totp" | "email") => {
+		if (method === "totp") {
+			setError(null);
+			setMfaMethod("totp");
+			setOtp("");
+			setStep("otp");
+			return;
+		}
+		sendEmailCodeThen(() => setStep("otp"));
+	};
+
+	// Toggle between methods from the code screen when the user has both.
+	const switchMethod = (method: "totp" | "email") => {
+		if (method === mfaMethod) return;
+		if (method === "totp") {
+			setError(null);
+			setMfaMethod("totp");
+			setOtp("");
+			return;
+		}
+		sendEmailCodeThen(() => {});
 	};
 
 	const onOtpSignOut = () => {
@@ -139,17 +202,71 @@ export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
 			await signOutFromChallenge();
 			setStep("password");
 			setOtpPurpose("mfa");
+			setMfaMethods([]);
+			setMfaMethod("totp");
 			setOtp("");
 		});
 	};
+
+	if (step === "choose") {
+		return (
+			<div className="space-y-6">
+				<p className="rounded-xl bg-brand-muted/30 px-3 py-2 text-sm text-foreground">
+					Choose how you&apos;d like to verify this sign-in.
+				</p>
+				{error ? (
+					<p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">{error}</p>
+				) : null}
+				<div className="space-y-3">
+					<button
+						type="button"
+						disabled={pending}
+						onClick={() => onChooseMethod("totp")}
+						className="flex w-full items-center gap-3 rounded-xl border border-brand-muted px-4 py-3 text-left hover:bg-brand-muted/20 focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-50"
+					>
+						<Smartphone className="h-5 w-5 shrink-0 text-muted-foreground" />
+						<span className="flex-1">
+							<span className="block text-sm font-medium text-foreground">Authenticator app</span>
+							<span className="block text-xs text-muted-foreground">Enter the code from your authenticator app.</span>
+						</span>
+					</button>
+					<button
+						type="button"
+						disabled={pending}
+						onClick={() => onChooseMethod("email")}
+						className="flex w-full items-center gap-3 rounded-xl border border-brand-muted px-4 py-3 text-left hover:bg-brand-muted/20 focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-50"
+					>
+						<Mail className="h-5 w-5 shrink-0 text-muted-foreground" />
+						<span className="flex-1">
+							<span className="block text-sm font-medium text-foreground">Email code</span>
+							<span className="block text-xs text-muted-foreground">
+								{pending ? "Sending…" : "Send a 6-digit code to your email."}
+							</span>
+						</span>
+					</button>
+				</div>
+				<button
+					type="button"
+					disabled={pending}
+					onClick={onOtpSignOut}
+					className="flex w-full items-center justify-center gap-2 text-sm text-muted-foreground underline hover:text-foreground"
+				>
+					<LogOut className="h-4 w-4" />
+					Sign out
+				</button>
+			</div>
+		);
+	}
 
 	if (step === "otp") {
 		return (
 			<form onSubmit={onOtpSubmit} className="space-y-6">
 				<p className="rounded-xl bg-brand-muted/30 px-3 py-2 text-sm text-foreground">
-					{otpPurpose === "mfa"
-						? "Enter the 6-digit sign-in code sent to your email."
-						: "Enter the 6-digit email verification code sent to your email."}
+					{otpPurpose === "email_verification"
+						? "Enter the 6-digit email verification code sent to your email."
+						: mfaMethod === "totp"
+							? "Enter the 6-digit code from your authenticator app."
+							: "Enter the 6-digit sign-in code sent to your email."}
 				</p>
 				<div className="space-y-2">
 					<label htmlFor="otp" className="block text-sm font-medium text-foreground">
@@ -181,6 +298,26 @@ export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
 					<ShieldCheck className="h-4 w-4" />
 					{pending ? "Signing in…" : "Verify and sign in"}
 				</button>
+				{otpPurpose === "mfa" && mfaMethods.length > 1 ? (
+					<button
+						type="button"
+						disabled={pending}
+						onClick={() => switchMethod(mfaMethod === "totp" ? "email" : "totp")}
+						className="flex w-full items-center justify-center gap-2 text-sm text-muted-foreground underline hover:text-foreground"
+					>
+						{mfaMethod === "totp" ? (
+							<>
+								<Mail className="h-4 w-4" />
+								Use an email code instead
+							</>
+						) : (
+							<>
+								<Smartphone className="h-4 w-4" />
+								Use your authenticator app
+							</>
+						)}
+					</button>
+				) : null}
 				<button
 					type="button"
 					disabled={pending}

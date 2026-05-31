@@ -5,6 +5,7 @@ import { TokenRepositoryD1 } from "@/lib/repositories/token.repository.d1";
 import { AuthorizationCodeRepositoryD1 } from "@/lib/repositories/authorization-code.repository.d1";
 import { UserRepositoryD1 } from "@/lib/repositories/admin.repository.d1";
 import { UserChallengeRepositoryD1 } from "@/lib/repositories/user-challenge.repository.d1";
+import { UserTotpRepositoryD1 } from "@/lib/repositories/user-totp.repository.d1";
 import { SiteSettingsRepositoryD1 } from "@/lib/repositories/site-settings.repository.d1";
 import { RefreshTokenRepositoryD1 } from "@/lib/repositories/refresh-token.repository.d1";
 import { EnvironmentRepositoryD1 } from "@/lib/repositories/environment.repository.d1";
@@ -25,6 +26,7 @@ import { TokenActivityLogService } from "./token-activity-log.service";
 import { AdminAuditLogService } from "./admin-audit-log.service";
 import { SiteSettingsService } from "./site-settings.service";
 import { UserChallengeService } from "./user-challenge.service";
+import { TotpService } from "./totp.service";
 import { PasskeyService } from "./passkey.service";
 import { TransactionalEmailService } from "./transactional-email.service";
 
@@ -39,6 +41,7 @@ export interface Services {
 	adminAuditLogService: AdminAuditLogService;
 	siteSettingsService: SiteSettingsService;
 	userChallengeService: UserChallengeService;
+	totpService: TotpService;
 	passkeyService: PasskeyService;
 }
 
@@ -64,6 +67,7 @@ export function getServices(ctx: RequestContext): Services {
 	const envRepo = new EnvironmentRepositoryD1(db);
 	const userRepo = new UserRepositoryD1(db);
 	const challengeRepo = new UserChallengeRepositoryD1(db);
+	const totpRepo = new UserTotpRepositoryD1(db);
 	const siteRepo = new SiteSettingsRepositoryD1(db);
 	const passkeyRepo = new PasskeyRepositoryD1(db);
 	const scopeRepo = new ScopeRepositoryD1(db);
@@ -124,6 +128,10 @@ export function getServices(ctx: RequestContext): Services {
 			siteSettings: siteSettingsService,
 			mail: transactionalEmailService,
 			env: ctx.env,
+		}),
+		totpService: new TotpService({
+			totpRepo,
+			siteRepo,
 		}),
 		passkeyService: new PasskeyService({
 			repo: passkeyRepo,

@@ -28,30 +28,49 @@ export async function signOutFromChallenge() {
 
 export async function beginSignInChallenge(username: string, password: string) {
 	return onPublicServerAction(async (_ctx, getServices) => {
-		const { userChallengeService, siteSettingsService } = getServices();
+		const { userChallengeService, siteSettingsService, totpService } = getServices();
 		const site = await siteSettingsService.get();
-		if (site.mfaEnabled && !site.mfaCanEnable) {
-			return { ok: false as const, error: "Configure Site URL and RESEND_API_KEY before using MFA." };
-		}
 		const user = await userChallengeService.verifyUsernamePassword(username, password);
 		if (!user) {
 			return { ok: false as const, error: "Invalid username or password." };
 		}
-		if (site.mfaEnabled) {
-			if (!user.email?.trim()) {
-				return { ok: false as const, error: "Your account has no email address; contact an administrator." };
+
+		const totpEnrolled = (await totpService.getStatus(user.id)).enrolled;
+		const siteWantsEmailMfa = site.mfaEnabled;
+		const emailMfaUsable = siteWantsEmailMfa && site.mfaCanEnable && !!user.email?.trim();
+
+		// Site mandates MFA (email) but it's unusable here and the user has no TOTP fallback.
+		if (siteWantsEmailMfa && !emailMfaUsable && !totpEnrolled) {
+			if (!site.mfaCanEnable) {
+				return { ok: false as const, error: "Configure Site URL and RESEND_API_KEY before using MFA." };
 			}
-			const jar = await cookies();
-			const challengeId = await userChallengeService.createMfaOtpAndSendEmail(user);
-			jar.set(MFA_CHALLENGE_COOKIE, challengeId, {
-				httpOnly: true,
-				sameSite: "lax",
-				secure: process.env.NODE_ENV === "production",
-				path: "/",
-				maxAge: MFA_COOKIE_MAX_AGE,
-			});
+			return { ok: false as const, error: "Your account has no email address; contact an administrator." };
+		}
+
+		const methods: ("totp" | "email")[] = [];
+		if (totpEnrolled) methods.push("totp");
+		if (emailMfaUsable) methods.push("email");
+
+		const jar = await cookies();
+
+		if (methods.length > 0) {
 			jar.delete(EMAIL_VERIFICATION_CHALLENGE_COOKIE);
-			return { ok: true as const, challenge: "mfa" as const };
+			// Send the email code now only when email is the user's sole option. With a
+			// choice available, defer until they pick email (requestEmailMfaCode) so we don't
+			// email users who will use their authenticator app.
+			if (methods.length === 1 && methods[0] === "email") {
+				const challengeId = await userChallengeService.createMfaOtpAndSendEmail(user);
+				jar.set(MFA_CHALLENGE_COOKIE, challengeId, {
+					httpOnly: true,
+					sameSite: "lax",
+					secure: process.env.NODE_ENV === "production",
+					path: "/",
+					maxAge: MFA_COOKIE_MAX_AGE,
+				});
+			} else {
+				jar.delete(MFA_CHALLENGE_COOKIE);
+			}
+			return { ok: true as const, challenge: "mfa" as const, methods };
 		}
 
 		if (user.isAdmin) {
@@ -60,7 +79,6 @@ export async function beginSignInChallenge(username: string, password: string) {
 		if (!user.email?.trim()) {
 			return { ok: false as const, error: "Your account has no email address; contact an administrator." };
 		}
-		const jar = await cookies();
 
 		if (user.emailVerifiedAt) {
 			jar.delete(MFA_CHALLENGE_COOKIE);
@@ -78,5 +96,38 @@ export async function beginSignInChallenge(username: string, password: string) {
 		});
 		jar.delete(MFA_CHALLENGE_COOKIE);
 		return { ok: true as const, challenge: "email_verification" as const };
+	});
+}
+
+/**
+ * Sends an email MFA code on demand — used when a user who has both TOTP and email
+ * available chooses the email option at the method picker. Re-verifies the password
+ * (anti-bombing) and sets the MFA challenge cookie.
+ */
+export async function requestEmailMfaCode(username: string, password: string) {
+	return onPublicServerAction(async (_ctx, getServices) => {
+		const { userChallengeService, siteSettingsService } = getServices();
+		const site = await siteSettingsService.get();
+		if (!site.mfaEnabled || !site.mfaCanEnable) {
+			return { ok: false as const, error: "Email codes are not available." };
+		}
+		const user = await userChallengeService.verifyUsernamePassword(username, password);
+		if (!user) {
+			return { ok: false as const, error: "Invalid username or password." };
+		}
+		if (!user.email?.trim()) {
+			return { ok: false as const, error: "Your account has no email address; contact an administrator." };
+		}
+		const jar = await cookies();
+		const challengeId = await userChallengeService.createMfaOtpAndSendEmail(user);
+		jar.set(MFA_CHALLENGE_COOKIE, challengeId, {
+			httpOnly: true,
+			sameSite: "lax",
+			secure: process.env.NODE_ENV === "production",
+			path: "/",
+			maxAge: MFA_COOKIE_MAX_AGE,
+		});
+		jar.delete(EMAIL_VERIFICATION_CHALLENGE_COOKIE);
+		return { ok: true as const };
 	});
 }

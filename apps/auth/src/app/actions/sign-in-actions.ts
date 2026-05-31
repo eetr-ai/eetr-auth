@@ -23,6 +23,7 @@ export async function submitSignIn(params: {
 	username: string;
 	password: string;
 	otp?: string;
+	mfaMethod?: "totp" | "email";
 	callbackUrl: string;
 }) {
 	const callbackUrl = params.callbackUrl?.trim() || "/";
@@ -31,6 +32,7 @@ export async function submitSignIn(params: {
 			username: params.username,
 			password: params.password,
 			...(params.otp?.trim() ? { otp: params.otp.trim() } : {}),
+			...(params.mfaMethod ? { mfaMethod: params.mfaMethod } : {}),
 			redirectTo: callbackUrl,
 		});
 	} catch (err) {

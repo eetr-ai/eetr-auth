@@ -1,5 +1,5 @@
 -- eetr-auth D1 schema (SQLite)
--- Current schema version: 0.2.0
+-- Current schema version: 0.3.0
 -- Apply with: npm run db:schema (fresh local), npm run db:schema:remote (fresh remote),
 -- or the db:migrate variants when upgrading an existing environment
 
@@ -213,6 +213,19 @@ CREATE TABLE IF NOT EXISTS user_challenges (
 
 CREATE INDEX IF NOT EXISTS idx_user_challenges_expires_at ON user_challenges(expires_at);
 CREATE INDEX IF NOT EXISTS idx_user_challenges_user_id_kind ON user_challenges(user_id, kind);
+
+-- Per-user authenticator-app (TOTP) MFA enrollment. `secret_enc` is the base32 TOTP
+-- secret encrypted at rest (AES-GCM, key derived from AUTH_SECRET). `confirmed_at` is
+-- NULL while pending and set once the user verifies their first code; only confirmed
+-- rows count as an active enrollment. One enrollment per user.
+CREATE TABLE IF NOT EXISTS user_totp (
+  user_id TEXT PRIMARY KEY,
+  secret_enc TEXT NOT NULL,
+  confirmed_at TEXT,
+  created_at TEXT NOT NULL,
+  last_used_at TEXT,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
 
 -- Passkey (WebAuthn) support: challenges, credentials, and sign-in exchange tokens
 CREATE TABLE IF NOT EXISTS passkey_challenges (
