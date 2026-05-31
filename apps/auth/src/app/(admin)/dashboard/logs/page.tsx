@@ -123,7 +123,7 @@ export default function LogsPage() {
 			</div>
 
 			{error && (
-				<p className="mb-4 shrink-0 rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">
+				<p className="mb-4 shrink-0 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
 					{error}
 				</p>
 			)}
@@ -334,9 +334,9 @@ export default function LogsPage() {
 									</td>
 									<td className="px-4 py-2">
 										{row.succeeded ? (
-											<span className="text-green-600">Yes</span>
+											<span className="text-green-600 dark:text-green-400">Yes</span>
 										) : (
-											<span className="text-red-600">No</span>
+											<span className="text-red-600 dark:text-red-400">No</span>
 										)}
 									</td>
 									<td className="px-4 py-2 font-mono text-xs">

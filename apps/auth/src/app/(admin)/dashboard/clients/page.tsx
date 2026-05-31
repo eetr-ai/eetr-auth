@@ -39,7 +39,7 @@ function DeleteClientButton({
 			type="button"
 			onClick={handleDelete}
 			disabled={deleting}
-			className="flex items-center gap-1 rounded-full border border-brand-muted px-2 py-1 text-xs text-red-200 hover:bg-red-950/50 disabled:opacity-50"
+			className="flex items-center gap-1 rounded-full border border-brand-muted px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50 dark:text-red-200 dark:hover:bg-red-950/50"
 		>
 			<Trash2 className="h-3 w-3" />
 			Delete
@@ -173,8 +173,8 @@ export default function ClientsPage() {
 			</div>
 
 			{createdSecret && (
-				<div className="mt-6 rounded-xl border border-amber-600/50 bg-amber-950/30 p-4">
-					<p className="mb-2 text-sm font-medium text-amber-200">
+				<div className="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-600/50 dark:bg-amber-950/30">
+					<p className="mb-2 text-sm font-medium text-amber-700 dark:text-amber-200">
 						Client created. Copy the credentials now — the secret will not be shown again.
 					</p>
 					<div className="space-y-2">
@@ -189,7 +189,7 @@ export default function ClientsPage() {
 								aria-label="Copy client ID"
 							>
 								{copied === "id" ? (
-									<Check className="h-4 w-4 text-green-400" />
+									<Check className="h-4 w-4 text-green-600 dark:text-green-400" />
 								) : (
 									<Copy className="h-4 w-4" />
 								)}
@@ -206,7 +206,7 @@ export default function ClientsPage() {
 								aria-label="Copy secret"
 							>
 								{copied === "secret" ? (
-									<Check className="h-4 w-4 text-green-400" />
+									<Check className="h-4 w-4 text-green-600 dark:text-green-400" />
 								) : (
 									<Copy className="h-4 w-4" />
 								)}
@@ -227,7 +227,7 @@ export default function ClientsPage() {
 				<div className="mt-6 rounded-xl border border-brand-muted p-6">
 					<h2 className="mb-4 text-lg font-medium">New client</h2>
 					{createError && (
-						<p className="mb-3 rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">
+						<p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
 							{createError}
 						</p>
 					)}
@@ -272,7 +272,7 @@ export default function ClientsPage() {
 									<button
 										type="button"
 										onClick={() => removeRedirectUri(i)}
-										className="rounded-full p-2 text-muted-foreground hover:bg-red-950/50 hover:text-red-200"
+										className="rounded-full p-2 text-muted-foreground hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/50 dark:hover:text-red-200"
 										aria-label="Remove"
 									>
 										<Trash2 className="h-4 w-4" />
