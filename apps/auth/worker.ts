@@ -1,4 +1,5 @@
 //DO NOT REMOVE THE FOLLOWING COMMENT
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment -- @ts-ignore is required: @ts-expect-error would fail once the file exists post-build
 // @ts-ignore — OpenNext writes `.open-next/worker.js` at build; absent before first `opennextjs-cloudflare build`
 import openNextWorker from "./.open-next/worker.js";
 import { OauthTokenService } from "./src/lib/services/oauth-token.service";
