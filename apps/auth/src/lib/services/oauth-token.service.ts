@@ -515,6 +515,9 @@ export class OauthTokenService {
 			throw new OAuthServiceError("invalid_grant", "Refresh token does not belong to this client.", 400);
 		}
 		if (token.revokedAt) {
+			// A revoked refresh token was presented → reuse (OAuth 2.1 §4.3.1). Cascade-revoke
+			// the whole rotation family so any sibling that is still live is killed too.
+			await this.refreshTokenRepo.revokeFamily(token.id, nowIso);
 			throw new OAuthServiceError("invalid_grant", "Refresh token has been revoked.", 400);
 		}
 		if (token.expiresAt <= nowIso) {
@@ -536,8 +539,16 @@ export class OauthTokenService {
 		);
 
 		step = Date.now();
-		await this.refreshTokenRepo.revoke(token.id, nowIso);
+		// Revoke the presented token BEFORE issuing its replacement. The conditional
+		// revoke is the real rotation guard; the earlier revokedAt check is a fast-path.
+		const revoked = await this.refreshTokenRepo.revoke(token.id, nowIso);
 		logTokenStep("refresh_token_revoke_old", step);
+		if (!revoked) {
+			// It was already revoked between our check and now → reuse of a rotated token.
+			// Cascade-revoke the whole rotation family (OAuth 2.1 §4.3.1 stolen-token response).
+			await this.refreshTokenRepo.revokeFamily(token.id, nowIso);
+			throw new OAuthServiceError("invalid_grant", "Refresh token has been revoked.", 400);
+		}
 		step = Date.now();
 		const result = await this.issueTokenPair({
 			clientId: client.id,

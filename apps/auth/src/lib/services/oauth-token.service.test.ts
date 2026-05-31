@@ -51,7 +51,9 @@ function createRefreshTokenRepoMock() {
 	return {
 		createRefreshToken: vi.fn(),
 		getByTokenId: vi.fn(),
-		revoke: vi.fn(),
+		// Default: the token is successfully revoked (won the rotation race).
+		revoke: vi.fn().mockResolvedValue(true),
+		revokeFamily: vi.fn().mockResolvedValue(0),
 		listRefreshTokenActivity: vi.fn(),
 		deleteByTokenId: vi.fn(),
 		deleteExpired: vi.fn(),
@@ -468,6 +470,36 @@ describe("OauthTokenService", () => {
 			);
 			expect(result.access_token).toMatch(/^at_[0-9a-f]{64}$/);
 			expect(result.refresh_token).toMatch(/^rt_[0-9a-f]{64}$/);
+		});
+
+		it("treats a lost revoke race as reuse: cascades to the family and issues no tokens", async () => {
+			const clientRepo = createClientRepoMock();
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient());
+			refreshTokenRepo.getByTokenId.mockResolvedValue(makeRefreshToken());
+			tokenRepo.getClientScopeGrants.mockResolvedValue([
+				makeGrant({ clientScopeId: "client-scope-read", scopeName: "read:users" }),
+			]);
+			// The in-memory revokedAt check passes, but the atomic revoke loses the race.
+			refreshTokenRepo.revoke.mockResolvedValue(false);
+			const service = createService({ clientRepo, tokenRepo, refreshTokenRepo });
+
+			await expect(
+				service.exchange({
+					grantType: "refresh_token",
+					clientId: "client-app-id",
+					clientSecret: "plain-secret",
+					refreshToken: "rt_existing",
+				})
+			).rejects.toMatchObject({
+				code: "invalid_grant",
+				message: "Refresh token has been revoked.",
+				status: 400,
+			});
+			expect(refreshTokenRepo.revokeFamily).toHaveBeenCalledWith("refresh-row-1", "2026-04-06T13:10:00.000Z");
+			expect(refreshTokenRepo.createRefreshToken).not.toHaveBeenCalled();
+			expect(tokenRepo.createAccessToken).not.toHaveBeenCalled();
 		});
 	});
 
