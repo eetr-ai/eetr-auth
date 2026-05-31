@@ -47,6 +47,16 @@ export function fallbackRpIdFromRpId(rpId: string): string | null {
 	return labels.slice(-2).join(".");
 }
 
+/** Safe, display-only view of a passkey for the management UI (no secrets). */
+export interface PasskeySummary {
+	id: string;
+	name: string | null;
+	synced: boolean; // backed up / synced across devices (e.g. iCloud, Google)
+	deviceBound: boolean; // single-device credential
+	createdAt: string;
+	lastUsedAt: string | null;
+}
+
 export interface PasskeyServiceDeps {
 	repo: PasskeyRepository;
 	userRepo: UserRepository;
@@ -350,6 +360,45 @@ export class PasskeyService {
 		}
 		log({ action: "exchange_token_consumed", userId: row.userId });
 		return row.userId;
+	}
+
+	// ── Management (list / rename / remove) ───────────────────────────────────
+
+	/**
+	 * Lists the user's passkeys as safe summaries. Never exposes the public key,
+	 * counter, or raw credential id — only what the management UI needs to display.
+	 */
+	async listPasskeys(userId: string): Promise<PasskeySummary[]> {
+		const rows = await this.repo.findCredentialsByUserId(userId);
+		return rows.map((r) => ({
+			id: r.id,
+			name: r.name,
+			synced: r.backedUp,
+			deviceBound: !r.backedUp,
+			createdAt: r.createdAt,
+			lastUsedAt: r.lastUsedAt,
+		}));
+	}
+
+	/**
+	 * Renames one of the user's passkeys. Scoped to the owner — returns false if the
+	 * passkey does not exist or is not owned by this user.
+	 */
+	async renamePasskey(userId: string, rowId: string, name: string): Promise<boolean> {
+		const trimmed = name.trim().slice(0, 60);
+		if (!trimmed) throw new Error("Passkey name cannot be empty.");
+		return this.repo.renameCredential(userId, rowId, trimmed);
+	}
+
+	/**
+	 * Removes one of the user's passkeys (server-side record only — the server cannot
+	 * delete the credential from the device/authenticator). Scoped to the owner —
+	 * returns false if the passkey does not exist or is not owned by this user.
+	 */
+	async removePasskey(userId: string, rowId: string): Promise<boolean> {
+		const removed = await this.repo.deleteCredentialForUser(userId, rowId);
+		if (removed) log({ action: "passkey_removed", userId, rowId });
+		return removed;
 	}
 
 	// ── Utilities ─────────────────────────────────────────────────────────────

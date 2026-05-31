@@ -532,4 +532,90 @@ describe("PasskeyService", () => {
 
 		await expect(service.consumeExchangeToken("exchange-1")).resolves.toBe("user-1");
 	});
+
+	it("listPasskeys returns safe summaries without secrets", async () => {
+		const repo = createRepoMock();
+		repo.findCredentialsByUserId.mockResolvedValue([
+			makeCredentialRow({
+				id: "row-synced",
+				backedUp: true,
+				name: "iPhone",
+				lastUsedAt: "2026-05-01T00:00:00.000Z",
+			}),
+			makeCredentialRow({ id: "row-bound", backedUp: false, name: null, lastUsedAt: null }),
+		]);
+		const service = createService({ repo });
+
+		const list = await service.listPasskeys("user-1");
+
+		expect(repo.findCredentialsByUserId).toHaveBeenCalledWith("user-1");
+		expect(list).toEqual([
+			{
+				id: "row-synced",
+				name: "iPhone",
+				synced: true,
+				deviceBound: false,
+				createdAt: "2026-04-06T13:20:00.000Z",
+				lastUsedAt: "2026-05-01T00:00:00.000Z",
+			},
+			{
+				id: "row-bound",
+				name: null,
+				synced: false,
+				deviceBound: true,
+				createdAt: "2026-04-06T13:20:00.000Z",
+				lastUsedAt: null,
+			},
+		]);
+		// No secret fields leak into the summary.
+		for (const item of list) {
+			expect(item).not.toHaveProperty("publicKey");
+			expect(item).not.toHaveProperty("counter");
+			expect(item).not.toHaveProperty("credentialId");
+		}
+	});
+
+	it("renamePasskey trims/caps the name and is scoped to the owner", async () => {
+		const repo = createRepoMock();
+		repo.renameCredential.mockResolvedValue(true);
+		const service = createService({ repo });
+
+		await expect(service.renamePasskey("user-1", "row-1", `  ${"y".repeat(80)}  `)).resolves.toBe(true);
+		expect(repo.renameCredential).toHaveBeenCalledWith("user-1", "row-1", "y".repeat(60));
+	});
+
+	it("renamePasskey rejects an empty name", async () => {
+		const repo = createRepoMock();
+		const service = createService({ repo });
+
+		await expect(service.renamePasskey("user-1", "row-1", "   ")).rejects.toThrow(
+			"Passkey name cannot be empty."
+		);
+		expect(repo.renameCredential).not.toHaveBeenCalled();
+	});
+
+	it("renamePasskey returns false when the passkey is not owned", async () => {
+		const repo = createRepoMock();
+		repo.renameCredential.mockResolvedValue(false);
+		const service = createService({ repo });
+
+		await expect(service.renamePasskey("user-1", "not-mine", "Laptop")).resolves.toBe(false);
+	});
+
+	it("removePasskey returns true and is scoped to the owner", async () => {
+		const repo = createRepoMock();
+		repo.deleteCredentialForUser.mockResolvedValue(true);
+		const service = createService({ repo });
+
+		await expect(service.removePasskey("user-1", "row-1")).resolves.toBe(true);
+		expect(repo.deleteCredentialForUser).toHaveBeenCalledWith("user-1", "row-1");
+	});
+
+	it("removePasskey returns false when the passkey is not owned", async () => {
+		const repo = createRepoMock();
+		repo.deleteCredentialForUser.mockResolvedValue(false);
+		const service = createService({ repo });
+
+		await expect(service.removePasskey("user-1", "not-mine")).resolves.toBe(false);
+	});
 });
