@@ -26,6 +26,7 @@ export interface AuthorizeRequestParams {
 	codeChallenge: string | null;
 	codeChallengeMethod: string | null;
 	subject: string;
+	nonce?: string | null;
 }
 
 export interface OauthAuthorizationServiceDeps {
@@ -120,6 +121,11 @@ export class OauthAuthorizationService {
 				code_challenge: params.codeChallenge,
 				code_challenge_method: params.codeChallengeMethod,
 				subject: params.subject,
+				// OIDC: bind the request nonce and record the authentication time so the
+				// token endpoint can emit `nonce`/`auth_time` in the id_token. auth_time is
+				// approximated at code-creation time (the user is confirmed authenticated here).
+				nonce: params.nonce ?? null,
+				auth_time: now.toISOString(),
 				expires_at: expiresAt.toISOString(),
 				used_at: null,
 				created_at: now.toISOString(),

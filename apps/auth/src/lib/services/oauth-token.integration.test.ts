@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { exportPKCS8, generateKeyPair } from "jose";
 
 import type {
 	AuthorizationCodeRepository,
@@ -20,6 +21,7 @@ import type {
 	ClientScopeGrant,
 	TokenRepository,
 } from "@/lib/repositories/token.repository";
+import type { UserRecord, UserRepository } from "@/lib/repositories/admin.repository";
 import { OauthAuthorizationService } from "@/lib/services/oauth-authorization.service";
 import { OauthTokenService } from "@/lib/services/oauth-token.service";
 import { OAuthServiceError } from "@/lib/services/oauth.types";
@@ -316,6 +318,8 @@ class InMemoryAuthorizationCodeRepo implements AuthorizationCodeRepository {
 			codeChallenge: stored.row.code_challenge,
 			codeChallengeMethod: stored.row.code_challenge_method,
 			subject: stored.row.subject,
+			nonce: stored.row.nonce,
+			authTime: stored.row.auth_time,
 			expiresAt: stored.row.expires_at,
 			usedAt: stored.row.used_at,
 			createdAt: stored.row.created_at,
@@ -348,7 +352,32 @@ class InMemoryAuthorizationCodeRepo implements AuthorizationCodeRepository {
 	}
 }
 
-function buildHarness() {
+class InMemoryUserRepo implements UserRepository {
+	constructor(private readonly usersById = new Map<string, UserRecord>()) {}
+
+	async create(): Promise<void> {}
+	async list(): Promise<UserRecord[]> {
+		return [...this.usersById.values()];
+	}
+	async findByUsername(): Promise<null> {
+		return null;
+	}
+	async findByEmail(): Promise<null> {
+		return null;
+	}
+	async getById(id: string): Promise<UserRecord | null> {
+		return this.usersById.get(id) ?? null;
+	}
+	async update(): Promise<void> {}
+	async delete(): Promise<void> {}
+	async deleteWithAudit(): Promise<void> {}
+}
+
+function buildHarness(options?: {
+	env?: CloudflareEnv;
+	user?: UserRecord;
+	extraGrants?: ClientScopeGrant[];
+}) {
 	const client = {
 		id: "client-row-1",
 		clientId: "client-app-id",
@@ -368,13 +397,26 @@ function buildHarness() {
 			[
 				{ clientScopeId: "client-scope-read", scopeId: "scope-read", scopeName: "read:users" },
 				{ clientScopeId: "client-scope-write", scopeId: "scope-write", scopeName: "write:users" },
+				...(options?.extraGrants ?? []),
 			],
 		],
 	]);
 	const tokenRepo = new InMemoryTokenRepo(clientRepo, envRepo, grants);
 	const refreshTokenRepo = new InMemoryRefreshTokenRepo();
 	const authorizationCodeRepo = new InMemoryAuthorizationCodeRepo();
-	const env = {} as CloudflareEnv;
+	const env = options?.env ?? ({} as CloudflareEnv);
+	const user =
+		options?.user ??
+		({
+			id: "user-123",
+			username: "alice",
+			name: "Alice Example",
+			email: "alice@example.com",
+			emailVerifiedAt: "2026-01-01T00:00:00.000Z",
+			avatarKey: null,
+			isAdmin: false,
+		} satisfies UserRecord);
+	const userRepo = new InMemoryUserRepo(new Map([[user.id, user]]));
 
 	const tokenService = new OauthTokenService({
 		clientRepo,
@@ -382,6 +424,7 @@ function buildHarness() {
 		tokenRepo,
 		refreshTokenRepo,
 		envRepo,
+		userRepo,
 		env,
 	});
 
@@ -624,5 +667,74 @@ describe("OAuth stateful flows", () => {
 				refreshToken: secondPair.refresh_token,
 			})
 		).rejects.toEqual(new OAuthServiceError("invalid_grant", "Refresh token has been revoked.", 400));
+	});
+
+	it("issues an id_token bound to the nonce whose sub matches the user id (full OIDC flow)", async () => {
+		const { privateKey } = await generateKeyPair("RS256", { extractable: true });
+		const privateKeyPem = await exportPKCS8(privateKey);
+		const user: UserRecord = {
+			id: "user-123",
+			username: "alice",
+			name: "Alice Example",
+			email: "alice@example.com",
+			emailVerifiedAt: "2026-01-01T00:00:00.000Z",
+			avatarKey: null,
+			isAdmin: false,
+		};
+		const { authorizationService, tokenService } = buildHarness({
+			user,
+			extraGrants: [
+				{ clientScopeId: "client-scope-openid", scopeId: "scope-openid", scopeName: "openid" },
+				{ clientScopeId: "client-scope-profile", scopeId: "scope-profile", scopeName: "profile" },
+				{ clientScopeId: "client-scope-email", scopeId: "scope-email", scopeName: "email" },
+			],
+			env: {
+				ISSUER_BASE_URL: "https://auth.example.com",
+				JWT_PRIVATE_KEY: privateKeyPem,
+				JWT_KID: "kid-from-env",
+			} as unknown as CloudflareEnv,
+		});
+		const codeVerifier = "verifier-123";
+
+		const authorization = await authorizationService.authorize({
+			responseType: "code",
+			clientId: "client-app-id",
+			redirectUri: "https://client.example.com/callback",
+			scope: "openid profile email",
+			state: "state-123",
+			codeChallenge: await toS256Challenge(codeVerifier),
+			codeChallengeMethod: "S256",
+			subject: user.id,
+			nonce: "n-0S6_WzA2Mj",
+		});
+		const authorizationCode = new URL(authorization.redirectTo).searchParams.get("code");
+		if (!authorizationCode) {
+			throw new Error("Expected authorization code in redirect URL");
+		}
+
+		const pair = await tokenService.exchange({
+			grantType: "authorization_code",
+			clientId: "client-app-id",
+			clientSecret: "plain-secret",
+			code: authorizationCode,
+			redirectUri: "https://client.example.com/callback",
+			codeVerifier,
+		});
+
+		expect(pair.id_token).toBeDefined();
+		const payload = JSON.parse(
+			Buffer.from(pair.id_token!.split(".")[1], "base64url").toString("utf8")
+		) as Record<string, unknown>;
+		expect(payload.nonce).toBe("n-0S6_WzA2Mj");
+		// sub equals the user id — the same identifier /userinfo resolves and returns.
+		expect(payload.sub).toBe(user.id);
+		expect(payload.aud).toBe("client-app-id");
+		expect(payload.email).toBe("alice@example.com");
+
+		// The access token's sub matches the id_token's sub (consistent identity).
+		const accessSub = JSON.parse(
+			Buffer.from(pair.access_token.split(".")[1], "base64url").toString("utf8")
+		).sub as string;
+		expect(accessSub).toBe(user.id);
 	});
 });

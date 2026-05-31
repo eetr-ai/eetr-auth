@@ -12,6 +12,37 @@ export class OAuthError extends Error {
 
 export type GrantType = "authorization_code" | "client_credentials" | "refresh_token";
 
+export interface AuthorizationUrlParams {
+  clientId: string;
+  redirectUri: string;
+  /** PKCE S256 challenge (required by this server). */
+  codeChallenge: string;
+  scope?: string;
+  state?: string;
+  /** OIDC nonce, bound into the issued id_token for replay protection. */
+  nonce?: string;
+}
+
+/**
+ * Build an authorization-request URL for the authorization_code + PKCE flow.
+ * Includes the OIDC `nonce` when provided so it is bound into the id_token.
+ */
+export function buildAuthorizationUrl(
+  authorizationEndpoint: string,
+  params: AuthorizationUrlParams
+): string {
+  const url = new URL(authorizationEndpoint);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("client_id", params.clientId);
+  url.searchParams.set("redirect_uri", params.redirectUri);
+  url.searchParams.set("code_challenge", params.codeChallenge);
+  url.searchParams.set("code_challenge_method", "S256");
+  if (params.scope) url.searchParams.set("scope", params.scope);
+  if (params.state) url.searchParams.set("state", params.state);
+  if (params.nonce) url.searchParams.set("nonce", params.nonce);
+  return url.toString();
+}
+
 export interface ExchangeTokenParams {
   grantType: GrantType;
   clientId: string;

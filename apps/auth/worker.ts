@@ -9,6 +9,7 @@ import { AuthorizationCodeRepositoryD1 } from "./src/lib/repositories/authorizat
 import { TokenRepositoryD1 } from "./src/lib/repositories/token.repository.d1";
 import { RefreshTokenRepositoryD1 } from "./src/lib/repositories/refresh-token.repository.d1";
 import { EnvironmentRepositoryD1 } from "./src/lib/repositories/environment.repository.d1";
+import { UserRepositoryD1 } from "./src/lib/repositories/admin.repository.d1";
 import { TokenActivityLogRepositoryD1 } from "./src/lib/repositories/token-activity-log.repository.d1";
 
 type CronMetadata = {
@@ -67,6 +68,7 @@ const worker = {
 				tokenRepo: new TokenRepositoryD1(db),
 				refreshTokenRepo: new RefreshTokenRepositoryD1(db),
 				envRepo: new EnvironmentRepositoryD1(db),
+				userRepo: new UserRepositoryD1(db),
 			});
 			const result = await oauthTokenService.cleanupTokenArtifacts(false);
 

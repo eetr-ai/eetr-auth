@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  buildAuthorizationUrl,
   exchangeToken,
   getUserInfo,
   introspectToken,
@@ -182,5 +183,44 @@ describe("getUserInfo", () => {
         message: "UserInfo request failed: 401",
       })
     );
+  });
+});
+describe("buildAuthorizationUrl", () => {
+  it("builds a PKCE authorization URL including the OIDC nonce", () => {
+    const url = new URL(
+      buildAuthorizationUrl("https://auth.example.com/api/authorize", {
+        clientId: "client-app",
+        redirectUri: "https://app.example.com/callback",
+        codeChallenge: "s256-challenge",
+        scope: "openid profile email",
+        state: "state-123",
+        nonce: "n-0S6_WzA2Mj",
+      })
+    );
+
+    expect(url.searchParams.get("response_type")).toBe("code");
+    expect(url.searchParams.get("client_id")).toBe("client-app");
+    expect(url.searchParams.get("redirect_uri")).toBe(
+      "https://app.example.com/callback"
+    );
+    expect(url.searchParams.get("code_challenge")).toBe("s256-challenge");
+    expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(url.searchParams.get("scope")).toBe("openid profile email");
+    expect(url.searchParams.get("state")).toBe("state-123");
+    expect(url.searchParams.get("nonce")).toBe("n-0S6_WzA2Mj");
+  });
+
+  it("omits optional params when not provided", () => {
+    const url = new URL(
+      buildAuthorizationUrl("https://auth.example.com/api/authorize", {
+        clientId: "client-app",
+        redirectUri: "https://app.example.com/callback",
+        codeChallenge: "s256-challenge",
+      })
+    );
+
+    expect(url.searchParams.has("scope")).toBe(false);
+    expect(url.searchParams.has("state")).toBe(false);
+    expect(url.searchParams.has("nonce")).toBe(false);
   });
 });

@@ -1,5 +1,5 @@
 -- eetr-auth D1 schema (SQLite)
--- Current schema version: 0.3.0
+-- Current schema version: 0.4.0
 -- Apply with: npm run db:schema (fresh local), npm run db:schema:remote (fresh remote),
 -- or the db:migrate variants when upgrading an existing environment
 
@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS schema_metadata (
 );
 
 INSERT INTO schema_metadata (key, value)
-VALUES ('schema_version', '0.3.0')
+VALUES ('schema_version', '0.4.0')
 ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 
 -- Environments (e.g. development, staging, production)
@@ -116,6 +116,8 @@ CREATE TABLE IF NOT EXISTS authorization_codes (
   code_challenge TEXT NOT NULL,
   code_challenge_method TEXT NOT NULL,
   subject TEXT NOT NULL,
+  nonce TEXT,
+  auth_time TEXT,
   expires_at TEXT NOT NULL,
   used_at TEXT,
   created_at TEXT NOT NULL,

@@ -7,7 +7,7 @@ const joseMocks = vi.hoisted(() => ({
 
 vi.mock("jose", () => joseMocks);
 
-import { decodeJwtPayload, validateJwt } from "../src/jwt.js";
+import { decodeJwtPayload, validateIdToken, validateJwt } from "../src/jwt.js";
 
 describe("validateJwt", () => {
   afterEach(() => {
@@ -51,6 +51,57 @@ describe("validateJwt", () => {
       issuer: undefined,
       clockTolerance: 5,
     });
+  });
+});
+
+describe("validateIdToken", () => {
+  afterEach(() => {
+    joseMocks.createRemoteJWKSet.mockReset();
+    joseMocks.jwtVerify.mockReset();
+  });
+
+  it("verifies the token and returns claims when the nonce matches", async () => {
+    joseMocks.createRemoteJWKSet.mockReturnValue(Symbol("jwks"));
+    joseMocks.jwtVerify.mockResolvedValue({
+      payload: { sub: "user-123", nonce: "n-0S6_WzA2Mj", email: "a@example.com" },
+    });
+
+    const claims = await validateIdToken(
+      "id-token",
+      "https://auth.example.com/jwks.json",
+      { audience: "client-app", issuer: "https://auth.example.com", nonce: "n-0S6_WzA2Mj" }
+    );
+
+    expect(claims.sub).toBe("user-123");
+    expect(claims.email).toBe("a@example.com");
+    // The nonce option must not be forwarded to jose (it has no such verify option).
+    expect(joseMocks.jwtVerify).toHaveBeenCalledWith("id-token", expect.anything(), {
+      audience: "client-app",
+      issuer: "https://auth.example.com",
+      clockTolerance: 5,
+    });
+  });
+
+  it("throws when the nonce does not match", async () => {
+    joseMocks.createRemoteJWKSet.mockReturnValue(Symbol("jwks"));
+    joseMocks.jwtVerify.mockResolvedValue({ payload: { sub: "user-123", nonce: "other" } });
+
+    await expect(
+      validateIdToken("id-token", "https://auth.example.com/jwks.json", {
+        nonce: "expected",
+      })
+    ).rejects.toThrow("id_token nonce mismatch");
+  });
+
+  it("propagates signature/claim verification failures from jose", async () => {
+    joseMocks.createRemoteJWKSet.mockReturnValue(Symbol("jwks"));
+    joseMocks.jwtVerify.mockRejectedValue(new Error("unexpected \"aud\" claim value"));
+
+    await expect(
+      validateIdToken("id-token", "https://auth.example.com/jwks.json", {
+        audience: "expected-client",
+      })
+    ).rejects.toThrow('unexpected "aud" claim value');
   });
 });
 

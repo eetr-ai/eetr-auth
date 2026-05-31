@@ -67,3 +67,16 @@ export interface TokenValidationResponse {
   client_id: string | null;
   expires_at: string | null;
 }
+
+/** Claims an issued OIDC id_token may carry (OpenID Connect Core 1.0). */
+export interface IDTokenClaims extends JWTPayload {
+  sub?: string;
+  auth_time?: number;
+  nonce?: string;
+  at_hash?: string;
+  name?: string;
+  preferred_username?: string;
+  picture?: string;
+  email?: string;
+  email_verified?: boolean;
+}
