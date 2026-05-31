@@ -76,16 +76,17 @@ export function getServices(ctx: RequestContext): Services {
 	const adminClientsRepo = new SiteAdminApiClientsRepositoryD1(db);
 	const avatarCdnBaseUrl = getAvatarCdnBaseUrl(resolvedEnv);
 	const hashMethod = resolveHashMethod(resolvedEnv);
+	const adminAuditLogService = new AdminAuditLogService({ logRepo: adminAuditLogRepo });
 	const siteSettingsService = new SiteSettingsService({
 		siteRepo,
 		adminClientsRepo,
 		clientRepo,
+		adminAuditLogService,
 		avatarCdnBaseUrl,
 		resendApiKey: resolveOptionalEnvString(resolvedEnv, "RESEND_API_KEY"),
 		authUrl: resolveOptionalEnvString(resolvedEnv, "AUTH_URL") ?? "",
 	});
 	const transactionalEmailService = new TransactionalEmailService(ctx);
-	const adminAuditLogService = new AdminAuditLogService({ logRepo: adminAuditLogRepo });
 
 	return {
 		userService: new UserService({
@@ -95,10 +96,11 @@ export function getServices(ctx: RequestContext): Services {
 			argonHasher: ctx.env.ARGON_HASHER,
 			hashMethod,
 		}),
-		environmentService: new EnvironmentService({ envRepo }),
-		scopeService: new ScopeService({ scopeRepo }),
+		environmentService: new EnvironmentService({ envRepo, adminAuditLogService }),
+		scopeService: new ScopeService({ scopeRepo, adminAuditLogService }),
 		clientService: new ClientService({
 			clientRepo,
+			adminAuditLogService,
 			env: ctx.env,
 		}),
 		siteSettingsService,

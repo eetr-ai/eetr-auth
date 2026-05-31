@@ -1,6 +1,8 @@
 import type { ClientRepository } from "@/lib/repositories/client.repository";
 import type { SiteAdminApiClientsRepository } from "@/lib/repositories/site-admin-api-clients.repository";
 import type { SiteSettingsRepository } from "@/lib/repositories/site-settings.repository";
+import type { AdminAuditLogService } from "./admin-audit-log.service";
+import { AUDIT_ACTION, AUDIT_RESOURCE } from "./audit-actions";
 
 export const DEFAULT_SITE_TITLE = "Eetr Auth";
 export const DEFAULT_LOGO_PATH = "/eetr-auth-logo.png";
@@ -42,6 +44,7 @@ export interface SiteSettingsServiceDependencies {
 	siteRepo: SiteSettingsRepository;
 	adminClientsRepo: SiteAdminApiClientsRepository;
 	clientRepo: ClientRepository;
+	adminAuditLogService: AdminAuditLogService;
 	avatarCdnBaseUrl: string;
 	resendApiKey: string | null;
 	authUrl: string;
@@ -51,6 +54,7 @@ export class SiteSettingsService {
 	private readonly siteRepo: SiteSettingsRepository;
 	private readonly adminClientsRepo: SiteAdminApiClientsRepository;
 	private readonly clientRepo: ClientRepository;
+	private readonly adminAuditLogService: AdminAuditLogService;
 	private readonly avatarCdnBaseUrl: string;
 	private readonly resendApiKey: string | null;
 	private readonly authUrl: string;
@@ -59,6 +63,7 @@ export class SiteSettingsService {
 		siteRepo,
 		adminClientsRepo,
 		clientRepo,
+		adminAuditLogService,
 		avatarCdnBaseUrl,
 		resendApiKey,
 		authUrl,
@@ -66,6 +71,7 @@ export class SiteSettingsService {
 		this.siteRepo = siteRepo;
 		this.adminClientsRepo = adminClientsRepo;
 		this.clientRepo = clientRepo;
+		this.adminAuditLogService = adminAuditLogService;
 		this.avatarCdnBaseUrl = avatarCdnBaseUrl.replace(/\/+$/, "");
 		this.resendApiKey = resendApiKey;
 		this.authUrl = authUrl.trim().replace(/\/+$/, "");
@@ -124,12 +130,15 @@ export class SiteSettingsService {
 		};
 	}
 
-	async updateSiteFields(input: {
-		siteTitle?: string | null;
-		siteUrl?: string | null;
-		cdnUrl?: string | null;
-		mfaEnabled?: boolean;
-	}): Promise<SiteSettingsDto> {
+	async updateSiteFields(
+		input: {
+			siteTitle?: string | null;
+			siteUrl?: string | null;
+			cdnUrl?: string | null;
+			mfaEnabled?: boolean;
+		},
+		actorUserId: string | null = null
+	): Promise<SiteSettingsDto> {
 		const current = await this.siteRepo.get();
 		const siteTitle = input.siteTitle !== undefined ? normalizeOptional(input.siteTitle) : undefined;
 		const siteUrl = input.siteUrl !== undefined ? normalizeOptional(input.siteUrl) : undefined;
@@ -165,11 +174,38 @@ export class SiteSettingsService {
 			...(cdnUrl !== undefined ? { cdnUrl } : {}),
 			...(input.mfaEnabled !== undefined ? { mfaEnabled: input.mfaEnabled } : {}),
 		});
+		const changedFields = [
+			...(siteTitle !== undefined ? ["siteTitle"] : []),
+			...(siteUrl !== undefined ? ["siteUrl"] : []),
+			...(cdnUrl !== undefined ? ["cdnUrl"] : []),
+			...(input.mfaEnabled !== undefined ? ["mfaEnabled"] : []),
+		];
+		if (changedFields.length > 0) {
+			await this.adminAuditLogService.logAction({
+				actorUserId,
+				action: AUDIT_ACTION.siteSettingsUpdate,
+				resourceType: AUDIT_RESOURCE.siteSettings,
+				details: {
+					changedFields,
+					...(siteTitle !== undefined ? { siteTitle } : {}),
+					...(siteUrl !== undefined ? { siteUrl } : {}),
+					...(cdnUrl !== undefined ? { cdnUrl } : {}),
+					...(input.mfaEnabled !== undefined ? { mfaEnabled: input.mfaEnabled } : {}),
+				},
+			});
+		}
 		return this.get();
 	}
 
-	async setLogoKey(logoKey: string | null): Promise<SiteSettingsDto> {
-		await this.siteRepo.update({ logoKey: logoKey === null ? null : logoKey.trim() || null });
+	async setLogoKey(logoKey: string | null, actorUserId: string | null = null): Promise<SiteSettingsDto> {
+		const nextLogoKey = logoKey === null ? null : logoKey.trim() || null;
+		await this.siteRepo.update({ logoKey: nextLogoKey });
+		await this.adminAuditLogService.logAction({
+			actorUserId,
+			action: AUDIT_ACTION.siteLogoUpdate,
+			resourceType: AUDIT_RESOURCE.siteSettings,
+			details: { logoKey: nextLogoKey, cleared: nextLogoKey === null },
+		});
 		return this.get();
 	}
 
@@ -177,7 +213,7 @@ export class SiteSettingsService {
 		return this.adminClientsRepo.listClientRowIds();
 	}
 
-	async setAdminApiClientRowIds(ids: string[]): Promise<void> {
+	async setAdminApiClientRowIds(ids: string[], actorUserId: string | null = null): Promise<void> {
 		const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
 		for (const id of unique) {
 			const client = await this.clientRepo.getById(id);
@@ -186,5 +222,11 @@ export class SiteSettingsService {
 			}
 		}
 		await this.adminClientsRepo.setClientRowIds(unique);
+		await this.adminAuditLogService.logAction({
+			actorUserId,
+			action: AUDIT_ACTION.siteAdminApiClientsUpdate,
+			resourceType: AUDIT_RESOURCE.siteSettings,
+			details: { clientRowIds: unique },
+		});
 	}
 }

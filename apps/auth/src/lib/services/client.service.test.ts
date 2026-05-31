@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Client, ClientRepository } from "@/lib/repositories/client.repository";
+import type { AdminAuditLogRepository } from "@/lib/repositories/admin-audit-log.repository";
 import { ClientService } from "@/lib/services/client.service";
+import { AdminAuditLogService } from "@/lib/services/admin-audit-log.service";
 
 function createClientRepoMock() {
 	return {
@@ -19,9 +21,15 @@ function createClientRepoMock() {
 	} satisfies ClientRepository;
 }
 
-function createService(repo?: ClientRepository, env?: CloudflareEnv) {
+function createAuditLogService(insert = vi.fn()): AdminAuditLogService {
+	const logRepo: AdminAuditLogRepository = { insert, listLogs: vi.fn() };
+	return new AdminAuditLogService({ logRepo });
+}
+
+function createService(repo?: ClientRepository, env?: CloudflareEnv, adminAuditLogService?: AdminAuditLogService) {
 	return new ClientService({
 		clientRepo: repo ?? createClientRepoMock(),
+		adminAuditLogService: adminAuditLogService ?? createAuditLogService(),
 		env:
 			env ??
 			({
@@ -316,6 +324,130 @@ describe("ClientService", () => {
 			const service = createService(repo);
 
 			await expect(service.rotateSecret("missing")).resolves.toBeNull();
+		});
+	});
+
+	describe("audit logging", () => {
+		it("records client.create attributed to the creating admin without leaking the secret", async () => {
+			const repo = createClientRepoMock();
+			repo.getById.mockResolvedValue(makeClient());
+			repo.getRedirectUris.mockResolvedValue(["https://client.example.com/callback"]);
+			repo.getClientScopes.mockResolvedValue([{ scopeId: "scope-read" }]);
+			const insert = vi.fn();
+			const service = createService(repo, undefined, createAuditLogService(insert));
+
+			const result = await service.create({
+				environmentId: "env-1",
+				createdBy: "user-1",
+				name: "Primary Client",
+				redirectUris: ["https://client.example.com/callback"],
+				scopeIds: ["scope-read"],
+			});
+
+			expect(insert).toHaveBeenCalledTimes(1);
+			const row = insert.mock.calls[0][0];
+			expect(row).toMatchObject({
+				actor_user_id: "user-1",
+				action: "client.create",
+				resource_type: "client",
+				resource_id: "client-row-1",
+			});
+			expect(row.details).not.toContain(result.clientSecret);
+			expect(JSON.parse(row.details)).toEqual({
+				clientId: "progression_aaaaaaaaaaaaaaaaaaaaaaaa",
+				name: "Primary Client",
+				environmentId: "env-1",
+				redirectUris: ["https://client.example.com/callback"],
+				scopeIds: ["scope-read"],
+			});
+		});
+
+		it("records client.update for a redirect URI change", async () => {
+			const repo = createClientRepoMock();
+			repo.getById.mockResolvedValue(makeClient());
+			repo.getRedirectUris.mockResolvedValue(["https://example.com/callback"]);
+			repo.getClientScopes.mockResolvedValue([]);
+			const insert = vi.fn();
+			const service = createService(repo, undefined, createAuditLogService(insert));
+
+			await service.updateRedirectUris("client-row-1", ["https://example.com/callback"], "admin-1");
+			expect(insert).toHaveBeenCalledWith(
+				expect.objectContaining({
+					actor_user_id: "admin-1",
+					action: "client.update",
+					resource_type: "client",
+					resource_id: "client-row-1",
+					details: JSON.stringify({
+						clientId: "progression_aaaaaaaaaaaaaaaaaaaaaaaa",
+						field: "redirectUris",
+						redirectUris: ["https://example.com/callback"],
+					}),
+				})
+			);
+		});
+
+		it("records client.update with from/to for a name change", async () => {
+			const repo = createClientRepoMock();
+			repo.getById.mockResolvedValue(makeClient({ name: "Old Name" }));
+			repo.getRedirectUris.mockResolvedValue([]);
+			repo.getClientScopes.mockResolvedValue([]);
+			const insert = vi.fn();
+			const service = createService(repo, undefined, createAuditLogService(insert));
+
+			await service.updateName("client-row-1", "New Name", "admin-1");
+			expect(insert).toHaveBeenCalledWith(
+				expect.objectContaining({
+					action: "client.update",
+					details: JSON.stringify({
+						clientId: "progression_aaaaaaaaaaaaaaaaaaaaaaaa",
+						field: "name",
+						from: "Old Name",
+						to: "New Name",
+					}),
+				})
+			);
+		});
+
+		it("records client.delete and skips logging when the client is missing", async () => {
+			const repo = createClientRepoMock();
+			repo.getById.mockResolvedValueOnce(makeClient()).mockResolvedValueOnce(null);
+			const insert = vi.fn();
+			const service = createService(repo, undefined, createAuditLogService(insert));
+
+			await service.delete("client-row-1", "admin-1");
+			expect(insert).toHaveBeenCalledWith(
+				expect.objectContaining({
+					actor_user_id: "admin-1",
+					action: "client.delete",
+					resource_type: "client",
+					resource_id: "client-row-1",
+				})
+			);
+
+			insert.mockClear();
+			await service.delete("missing", "admin-1");
+			expect(insert).not.toHaveBeenCalled();
+		});
+
+		it("records client.secret_rotate without leaking the new secret", async () => {
+			const repo = createClientRepoMock();
+			repo.getById
+				.mockResolvedValueOnce(makeClient())
+				.mockResolvedValueOnce(makeClient({ clientSecret: "h1:new-stored-secret" }));
+			const insert = vi.fn();
+			const service = createService(repo, undefined, createAuditLogService(insert));
+
+			const result = await service.rotateSecret("client-row-1", "admin-1");
+			expect(insert).toHaveBeenCalledTimes(1);
+			const row = insert.mock.calls[0][0];
+			expect(row).toMatchObject({
+				actor_user_id: "admin-1",
+				action: "client.secret_rotate",
+				resource_type: "client",
+				resource_id: "client-row-1",
+			});
+			expect(row.details).not.toContain(result?.clientSecret);
+			expect(JSON.parse(row.details)).toEqual({ clientId: "progression_aaaaaaaaaaaaaaaaaaaaaaaa" });
 		});
 	});
 });

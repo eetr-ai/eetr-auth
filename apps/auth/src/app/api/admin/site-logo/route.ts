@@ -67,7 +67,7 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 	});
 
 	const { siteSettingsService } = getServices();
-	const dto = await siteSettingsService.setLogoKey(logoKey);
+	const dto = await siteSettingsService.setLogoKey(logoKey, session.user.id);
 
 	return NextResponse.json(
 		{
