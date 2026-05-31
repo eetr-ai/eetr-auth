@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withApiContext } from "@/lib/context/with-api-context";
 import { authenticateSessionOrBearerUser } from "@/lib/auth/authenticate-session-or-bearer-user";
+import { deviceNameFromUserAgent } from "@/lib/passkey/device-name";
 import type { RegistrationResponseJSON } from "@simplewebauthn/types";
 
 function toErrorResponse(error: unknown) {
@@ -43,7 +44,7 @@ export const POST = withApiContext(async (req, _ctx, getServices) => {
 		);
 	}
 
-	const body = payload as { challengeId?: unknown; registrationResponse?: unknown };
+	const body = payload as { challengeId?: unknown; registrationResponse?: unknown; name?: unknown };
 
 	if (typeof body.challengeId !== "string" || body.challengeId.trim().length === 0) {
 		return NextResponse.json(
@@ -58,12 +59,17 @@ export const POST = withApiContext(async (req, _ctx, getServices) => {
 		);
 	}
 
+	// Prefer a client-supplied label; otherwise derive one from the User-Agent.
+	const clientName = typeof body.name === "string" ? body.name : null;
+	const name = clientName?.trim() || deviceNameFromUserAgent(req.headers.get("user-agent"));
+
 	try {
 		const { passkeyService } = getServices();
 		const credential = await passkeyService.verifyAndStoreRegistration(
 			authResult.user.userId,
 			body.challengeId.trim(),
-			body.registrationResponse as RegistrationResponseJSON
+			body.registrationResponse as RegistrationResponseJSON,
+			name
 		);
 		return NextResponse.json(credential, { status: 201 });
 	} catch (error) {

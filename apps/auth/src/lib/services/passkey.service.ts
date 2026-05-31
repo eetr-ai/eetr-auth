@@ -145,7 +145,8 @@ export class PasskeyService {
 	async verifyAndStoreRegistration(
 		userId: string,
 		challengeId: string,
-		response: RegistrationResponseJSON
+		response: RegistrationResponseJSON,
+		name?: string | null
 	): Promise<PasskeyCredentialRow> {
 		const challengeRow = await this.repo.getChallengeById(challengeId);
 		if (!challengeRow || challengeRow.kind !== "registration" || challengeRow.userId !== userId) {
@@ -184,7 +185,7 @@ export class PasskeyService {
 			deviceType: credentialDeviceType,
 			backedUp: credentialBackedUp,
 			transports: response.response.transports ? JSON.stringify(response.response.transports) : null,
-			name: null,
+			name: name?.trim() ? name.trim().slice(0, 60) : null,
 			lastUsedAt: null,
 			createdAt: new Date().toISOString(),
 		};
