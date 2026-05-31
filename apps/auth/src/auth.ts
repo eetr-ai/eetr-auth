@@ -33,11 +33,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 				username: { label: "Username", type: "text" },
 				password: { label: "Password", type: "password" },
 				otp: { label: "One-time code", type: "text" },
+				mfaMethod: { label: "MFA method", type: "text" },
 			},
 			async authorize(credentials) {
 				const username = credentials?.username as string | undefined;
 				const password = credentials?.password as string | undefined;
 				const otp = (credentials?.otp as string | undefined)?.trim() ?? "";
+				const mfaMethod = (credentials?.mfaMethod as string | undefined)?.trim() ?? "";
 				const usernameNorm = username?.trim() ?? "";
 				signInAuthorizeLog({
 					outcome: "attempt",
@@ -101,58 +103,98 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 				const siteRow = await siteRepo.get();
 				const mfaEnabled = siteRow?.mfaEnabled ?? false;
 				const siteUrl = siteRow?.siteUrl?.trim();
-				const mfaActive = mfaEnabled && !!siteUrl;
+				const emailMfaActive = mfaEnabled && !!siteUrl && !!user.email?.trim();
 				const requiresEmailVerification = !user.isAdmin && !user.emailVerifiedAt;
 
-				if (mfaActive) {
-					if (!user.email?.trim()) {
-						signInAuthorizeLog({
-							outcome: "failure",
-							reason: "mfa_enabled_no_user_email",
-							userId: user.id,
-							username: user.username,
-						});
-						return null;
-					}
+				const requestCtx: RequestContext = { env, cf, ctx };
+				const { userChallengeService: challengeSvc, totpService } = getServices(requestCtx);
+				// TOTP is per-user opt-in: an enrolled authenticator requires MFA even when
+				// the site-wide email toggle is off.
+				const totpEnrolled = await totpService.isEnrolled(user.id);
+				const mfaRequired = totpEnrolled || emailMfaActive;
+				let usedMfaMethod: "totp" | "email" | null = null;
+
+				if (mfaRequired) {
+					// Use the explicitly chosen method; otherwise fall back to the sole
+					// available one (preferring TOTP when both are present).
+					const requested = mfaMethod === "totp" || mfaMethod === "email" ? mfaMethod : null;
+					const method: "totp" | "email" = requested ?? (totpEnrolled ? "totp" : "email");
+
 					if (!otp) {
 						signInAuthorizeLog({
 							outcome: "failure",
 							reason: "mfa_otp_required_submit_code",
 							userId: user.id,
 							username: user.username,
+							mfaMethod: method,
 						});
 						return null;
 					}
-					const jar = await cookies();
-					const challengeId = jar.get(MFA_CHALLENGE_COOKIE)?.value;
-					if (!challengeId) {
-						signInAuthorizeLog({
-							outcome: "failure",
-							reason: "mfa_challenge_cookie_missing",
-							userId: user.id,
-							username: user.username,
-							hint: "Call beginSignInChallenge first so the MFA cookie is set",
-						});
-						return null;
-					}
-					const requestCtx: RequestContext = { env, cf, ctx };
-					const { userChallengeService: challengeSvc } = getServices(requestCtx);
-					const mfaResult = await challengeSvc.verifyMfaOtpAndConsume(challengeId, user.id, otp);
-					if (!mfaResult.ok) {
-						signInAuthorizeLog({
-							outcome: "failure",
-							reason: "mfa_otp_verify_failed",
-							mfaFailure: mfaResult.reason,
-							userId: user.id,
-							username: user.username,
-							challengeIdPrefix: challengeId.slice(0, 8),
-						});
-						return null;
-					}
-					jar.delete(MFA_CHALLENGE_COOKIE);
-					if (requiresEmailVerification) {
-						await challengeSvc.markEmailVerified(user.id);
-						user.emailVerifiedAt = new Date().toISOString();
+
+					if (method === "totp") {
+						if (!totpEnrolled) {
+							signInAuthorizeLog({
+								outcome: "failure",
+								reason: "mfa_totp_not_enrolled",
+								userId: user.id,
+								username: user.username,
+							});
+							return null;
+						}
+						const totpOk = await totpService.verifyCode(user.id, otp);
+						if (!totpOk) {
+							signInAuthorizeLog({
+								outcome: "failure",
+								reason: "mfa_totp_verify_failed",
+								userId: user.id,
+								username: user.username,
+							});
+							return null;
+						}
+						usedMfaMethod = "totp";
+						// A TOTP code does not prove email ownership, so it does not satisfy
+						// email verification.
+					} else {
+						if (!emailMfaActive) {
+							signInAuthorizeLog({
+								outcome: "failure",
+								reason: "mfa_email_not_available",
+								userId: user.id,
+								username: user.username,
+							});
+							return null;
+						}
+						const jar = await cookies();
+						const challengeId = jar.get(MFA_CHALLENGE_COOKIE)?.value;
+						if (!challengeId) {
+							signInAuthorizeLog({
+								outcome: "failure",
+								reason: "mfa_challenge_cookie_missing",
+								userId: user.id,
+								username: user.username,
+								hint: "Call beginSignInChallenge / requestEmailMfaCode first so the MFA cookie is set",
+							});
+							return null;
+						}
+						const mfaResult = await challengeSvc.verifyMfaOtpAndConsume(challengeId, user.id, otp);
+						if (!mfaResult.ok) {
+							signInAuthorizeLog({
+								outcome: "failure",
+								reason: "mfa_otp_verify_failed",
+								mfaFailure: mfaResult.reason,
+								userId: user.id,
+								username: user.username,
+								challengeIdPrefix: challengeId.slice(0, 8),
+							});
+							return null;
+						}
+						jar.delete(MFA_CHALLENGE_COOKIE);
+						usedMfaMethod = "email";
+						// Completing the email OTP also proves email ownership.
+						if (requiresEmailVerification) {
+							await challengeSvc.markEmailVerified(user.id);
+							user.emailVerifiedAt = new Date().toISOString();
+						}
 					}
 				} else if (requiresEmailVerification) {
 					if (!user.email?.trim()) {
@@ -184,8 +226,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 						});
 						return null;
 					}
-					const requestCtx: RequestContext = { env, cf, ctx };
-					const { userChallengeService: challengeSvc } = getServices(requestCtx);
 					const verificationResult = await challengeSvc.verifyEmailVerificationOtpAndConsume(
 						challengeId,
 						user.id,
@@ -211,7 +251,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 					userId: user.id,
 					username: user.username,
 					isAdmin: user.isAdmin,
-					mfaUsed: mfaActive,
+					mfaUsed: mfaRequired,
+					mfaMethod: usedMfaMethod,
 				});
 				return {
 					id: user.id,
@@ -232,8 +273,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 				const exchangeToken = (credentials?.exchangeToken as string | undefined)?.trim() ?? "";
 				if (!exchangeToken) return null;
 
-				const { env, cf, ctx } = await getCloudflareContext({ async: true });
-				const requestCtx: RequestContext = { env, cf, ctx };
+				const { env } = await getCloudflareContext({ async: true });
 				const db = getDb(env);
 				const repo = new UserRepositoryD1(db);
 				const passkeySvc = new PasskeyService({

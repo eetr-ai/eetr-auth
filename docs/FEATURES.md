@@ -36,9 +36,19 @@
 - Check if a user has a registered passkey via API
 
 ### Multi-Factor Authentication (MFA)
-- Time-based OTP sent via email (not TOTP app — server generates and emails the code)
-- Configurable max attempt limit via `MFA_OTP_MAX_ATTEMPTS`
-- Challenge-response model with short-lived tokens
+Two MFA methods are supported, chosen per user at sign-in by availability:
+- **Email OTP** — site-wide: when an admin enables MFA, every user with an email
+  receives a server-generated 6-digit code by email. Configurable max attempt limit
+  via `MFA_OTP_MAX_ATTEMPTS`; challenge-response model with short-lived tokens.
+- **Authenticator app (TOTP)** — per-user opt-in: a user enrolls an RFC 6238
+  authenticator (e.g. Google Authenticator) from account settings. The base32 secret
+  is stored encrypted at rest (AES-GCM, key derived from `AUTH_SECRET`). Enrolling
+  turns on MFA for that user even when the site-wide email toggle is off.
+
+At sign-in, the available methods are computed for the user: with **one** method it is
+used directly; with **both** (site email MFA on *and* an authenticator enrolled) the
+user picks at a chooser, and can switch to an email code as a fallback. The email code
+is only sent once email is actually chosen.
 
 ### Email Verification
 - New user email verification flow
