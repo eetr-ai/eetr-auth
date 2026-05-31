@@ -472,7 +472,7 @@ export default function SettingsPage() {
 				Settings
 			</div>
 
-			<div className="mx-auto grid max-w-xl gap-6 lg:max-w-5xl lg:auto-rows-fr lg:grid-cols-2">
+			<div className="mx-auto grid max-w-xl gap-6 lg:max-w-5xl lg:grid-cols-2">
 				{/* Profile — name, username, avatar together */}
 				<SectionCard title="Profile" icon={UserCircle}>
 					<ErrorBanner message={profileError ?? avatarError} />
