@@ -17,15 +17,20 @@ export const metadata: Metadata = {
 	description: "Eetr Auth — identity and OAuth administration",
 };
 
+// Runs before paint to apply the user's saved theme (light/dark/system) so the
+// page never flashes the wrong colors on load. Kept inline and dependency-free.
+const themeScript = `(function(){try{var t=localStorage.getItem('theme')||'system';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);var c=document.documentElement.classList;c.toggle('dark',d);c.toggle('light',!d);}catch(e){}})();`;
+
 export default function RootLayout({
 	children,
 }: Readonly<{
 	children: React.ReactNode;
 }>) {
 	return (
-		<html lang="en">
+		<html lang="en" suppressHydrationWarning>
 			<head>
 				<link rel="icon" href="/favicon.ico" sizes="any" />
+				<script dangerouslySetInnerHTML={{ __html: themeScript }} />
 			</head>
 			<body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>{children}</body>
 		</html>
