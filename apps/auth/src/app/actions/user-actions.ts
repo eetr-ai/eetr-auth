@@ -61,9 +61,22 @@ export async function updateUser(
 		throw new Error("Unauthorized");
 	}
 
+	// Whitelist the mutable fields explicitly (mirrors the admin bearer API) so a crafted
+	// RPC body can't smuggle unknown columns into the update. isAdmin stays allowed but is
+	// gated by onAdminServerAction and audited distinctly in the service.
+	const sanitized = {
+		...(updates.username !== undefined ? { username: updates.username } : {}),
+		...(updates.name !== undefined ? { name: updates.name } : {}),
+		...(updates.email !== undefined ? { email: updates.email } : {}),
+		...(updates.emailVerifiedAt !== undefined ? { emailVerifiedAt: updates.emailVerifiedAt } : {}),
+		...(updates.password !== undefined ? { password: updates.password } : {}),
+		...(updates.isAdmin !== undefined ? { isAdmin: updates.isAdmin } : {}),
+		...(updates.avatarKey !== undefined ? { avatarKey: updates.avatarKey } : {}),
+	};
+
 	return onAdminServerAction(async (_ctx, getServices) => {
 		const { userService } = getServices();
-		return userService.updateUser(id, updates, session.user.id);
+		return userService.updateUser(id, sanitized, session.user.id);
 	});
 }
 

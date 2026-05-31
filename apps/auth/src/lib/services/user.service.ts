@@ -225,6 +225,22 @@ export class UserService {
 			});
 		}
 
+		// An admin-rights change is high-value: log it distinctly (in addition to the
+		// generic user.update above) so privilege escalations are easy to find/alert on.
+		if (patch.isAdmin !== undefined && patch.isAdmin !== current.isAdmin) {
+			await this.adminAuditLogService.logAction({
+				actorUserId,
+				action: patch.isAdmin ? AUDIT_ACTION.userAdminGrant : AUDIT_ACTION.userAdminRevoke,
+				resourceType: AUDIT_RESOURCE.user,
+				resourceId: id,
+				details: {
+					username: updated.username,
+					from: current.isAdmin,
+					to: patch.isAdmin,
+				},
+			});
+		}
+
 		return this.withAvatarUrl(updated);
 	}
 

@@ -291,6 +291,50 @@ describe("UserService", () => {
 			expect(details.changedFields).toEqual(["password"]);
 		});
 
+		it("writes a distinct user.admin_grant audit entry when granting admin", async () => {
+			const user = makeUserRecord({ id: "user-1", isAdmin: false });
+			vi.mocked(mockRepo.getById)
+				.mockResolvedValueOnce(user)
+				.mockResolvedValueOnce({ ...user, isAdmin: true });
+			const insert = vi.fn();
+			const service = createService(mockRepo, createAuditLogService(insert));
+			await service.updateUser("user-1", { isAdmin: true }, "actor-2");
+
+			// Generic user.update first, then the privilege-specific entry.
+			expect(insert).toHaveBeenCalledTimes(2);
+			expect(insert.mock.calls[1]?.[0]).toEqual(
+				expect.objectContaining({
+					action: "user.admin_grant",
+					resource_type: "user",
+					resource_id: "user-1",
+					actor_user_id: "actor-2",
+				})
+			);
+			const details = JSON.parse(insert.mock.calls[1]?.[0]?.details ?? "{}");
+			expect(details).toMatchObject({ from: false, to: true });
+		});
+
+		it("writes a distinct user.admin_revoke audit entry when removing admin", async () => {
+			const user = makeUserRecord({ id: "user-1", isAdmin: true });
+			vi.mocked(mockRepo.getById)
+				.mockResolvedValueOnce(user)
+				.mockResolvedValueOnce({ ...user, isAdmin: false });
+			vi.mocked(mockRepo.list).mockResolvedValue([
+				makeUserRecord({ id: "user-1", isAdmin: true }),
+				makeUserRecord({ id: "user-2", isAdmin: true }),
+			]);
+			const insert = vi.fn();
+			const service = createService(mockRepo, createAuditLogService(insert));
+			await service.updateUser("user-1", { isAdmin: false }, "actor-2");
+
+			expect(insert).toHaveBeenCalledTimes(2);
+			expect(insert.mock.calls[1]?.[0]).toEqual(
+				expect.objectContaining({ action: "user.admin_revoke", resource_id: "user-1" })
+			);
+			const details = JSON.parse(insert.mock.calls[1]?.[0]?.details ?? "{}");
+			expect(details).toMatchObject({ from: true, to: false });
+		});
+
 		it("does not write an audit entry when nothing changes", async () => {
 			const user = makeUserRecord();
 			vi.mocked(mockRepo.getById)
