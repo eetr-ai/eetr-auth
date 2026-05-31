@@ -618,4 +618,114 @@ describe("PasskeyService", () => {
 
 		await expect(service.removePasskey("user-1", "not-mine")).resolves.toBe(false);
 	});
+
+	it("generateAvailabilityChallenge returns null when the passkey is not owned", async () => {
+		const repo = createRepoMock();
+		repo.findCredentialByRowIdForUser.mockResolvedValue(null);
+		const service = createService({ repo });
+
+		await expect(service.generateAvailabilityChallenge("user-1", "not-mine")).resolves.toBeNull();
+		expect(repo.findCredentialByRowIdForUser).toHaveBeenCalledWith("not-mine", "user-1");
+		expect(repo.insertChallenge).not.toHaveBeenCalled();
+	});
+
+	it("generateAvailabilityChallenge stores a user-bound challenge scoped to the credential", async () => {
+		const repo = createRepoMock();
+		repo.findCredentialByRowIdForUser.mockResolvedValue(makeCredentialRow({ id: "row-1" }));
+		generateAuthenticationOptionsMock.mockResolvedValue({
+			challenge: "availability-challenge",
+		} as never);
+		const service = createService({
+			repo,
+			env: { ISSUER_BASE_URL: "https://auth.example.com" } as CloudflareEnv,
+		});
+
+		const result = await service.generateAvailabilityChallenge("user-1", "row-1");
+
+		expect(result?.challengeId).toBeTypeOf("string");
+		// Challenge is scoped to exactly the requested credential.
+		const optsArg = generateAuthenticationOptionsMock.mock.calls[0][0] as unknown as {
+			allowCredentials: { id: Buffer }[];
+		};
+		expect(optsArg.allowCredentials).toHaveLength(1);
+		expect(optsArg.allowCredentials[0].id.toString("base64url")).toBe("credential-base64url");
+		// Challenge row is bound to the user (so verify can re-check ownership).
+		expect(repo.insertChallenge).toHaveBeenCalledWith(
+			expect.objectContaining({ userId: "user-1", kind: "authentication", challenge: "availability-challenge" })
+		);
+	});
+
+	it("verifyAvailability rejects a challenge not bound to the user", async () => {
+		const repo = createRepoMock();
+		repo.getChallengeById.mockResolvedValue({
+			id: "challenge-1",
+			userId: "someone-else",
+			challenge: "availability-challenge",
+			kind: "authentication",
+			expiresAt: "2026-04-06T13:25:00.000Z",
+		});
+		const service = createService({ repo });
+
+		await expect(
+			service.verifyAvailability("user-1", "challenge-1", {
+				id: "credential-base64url",
+			} as AuthenticationResponseJSON)
+		).rejects.toThrow("Invalid or expired authentication challenge.");
+		expect(repo.updateCredentialCounter).not.toHaveBeenCalled();
+	});
+
+	it("verifyAvailability rejects a credential owned by another user", async () => {
+		const repo = createRepoMock();
+		repo.getChallengeById.mockResolvedValue({
+			id: "challenge-1",
+			userId: "user-1",
+			challenge: "availability-challenge",
+			kind: "authentication",
+			expiresAt: "2099-01-01T00:00:00.000Z",
+		});
+		repo.findCredentialById.mockResolvedValue(makeCredentialRow({ userId: "someone-else" }));
+		const service = createService({ repo });
+
+		await expect(
+			service.verifyAvailability("user-1", "challenge-1", {
+				id: "credential-base64url",
+			} as AuthenticationResponseJSON)
+		).rejects.toThrow("Passkey not found.");
+		expect(repo.updateCredentialCounter).not.toHaveBeenCalled();
+	});
+
+	it("verifyAvailability updates last use and issues no exchange token on success", async () => {
+		const repo = createRepoMock();
+		repo.getChallengeById.mockResolvedValue({
+			id: "challenge-1",
+			userId: "user-1",
+			challenge: "availability-challenge",
+			kind: "authentication",
+			expiresAt: "2099-01-01T00:00:00.000Z",
+		});
+		repo.findCredentialById.mockResolvedValue(makeCredentialRow({ userId: "user-1" }));
+		verifyAuthenticationResponseMock.mockResolvedValue({
+			verified: true,
+			authenticationInfo: { newCounter: 11 },
+		} as never);
+		const service = createService({
+			repo,
+			env: { ISSUER_BASE_URL: "https://auth.example.com" } as CloudflareEnv,
+		});
+
+		await expect(
+			service.verifyAvailability("user-1", "challenge-1", {
+				id: "credential-base64url",
+			} as AuthenticationResponseJSON)
+		).resolves.toBe(true);
+
+		expect(repo.updateCredentialCounter).toHaveBeenCalledWith(
+			"credential-base64url",
+			11,
+			expect.any(String)
+		);
+		expect(repo.deleteChallenge).toHaveBeenCalledWith("challenge-1");
+		// Availability check must not mint a sign-in token.
+		expect(repo.insertExchangeToken).not.toHaveBeenCalled();
+	});
 });

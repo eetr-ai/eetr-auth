@@ -1,8 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { startRegistration } from "@simplewebauthn/browser";
-import type { PublicKeyCredentialCreationOptionsJSON } from "@simplewebauthn/types";
+import { startRegistration, startAuthentication } from "@simplewebauthn/browser";
+import type {
+	PublicKeyCredentialCreationOptionsJSON,
+	PublicKeyCredentialRequestOptionsJSON,
+} from "@simplewebauthn/types";
 import {
 	UserCircle,
 	Lock,
@@ -14,6 +17,7 @@ import {
 	Check,
 	X,
 	Pencil,
+	BadgeCheck,
 } from "lucide-react";
 import { updateDisplayName, changePassword } from "@/app/actions/user-settings-actions";
 // updateUsername is intentionally omitted — username is read-only for users
@@ -103,6 +107,7 @@ export default function SettingsPage() {
 	const [renamingId, setRenamingId] = useState<string | null>(null);
 	const [renameValue, setRenameValue] = useState("");
 	const [savingRenameId, setSavingRenameId] = useState<string | null>(null);
+	const [verifyingId, setVerifyingId] = useState<string | null>(null);
 
 	// Password
 	const [currentPassword, setCurrentPassword] = useState("");
@@ -286,6 +291,54 @@ export default function SettingsPage() {
 			setPasskeyError(err instanceof Error ? err.message : "Failed to remove passkey.");
 		} finally {
 			setDeletingId(null);
+		}
+	};
+
+	const handleVerify = async (pk: PasskeyItem) => {
+		setPasskeyError(null);
+		setPasskeySuccess(null);
+		setConfirmingDeleteId(null);
+		setVerifyingId(pk.id);
+		try {
+			const challengeRes = await fetch("/api/users/passkey/verify/challenge", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ id: pk.id }),
+			});
+			if (!challengeRes.ok) {
+				const body = (await challengeRes.json()) as { error_description?: string };
+				throw new Error(body.error_description ?? "Failed to start verification.");
+			}
+			const { challengeId, options } = (await challengeRes.json()) as {
+				challengeId: string;
+				options: PublicKeyCredentialRequestOptionsJSON;
+			};
+
+			const authResponse = await startAuthentication(options);
+
+			const verifyRes = await fetch("/api/users/passkey/verify", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ challengeId, authenticationResponse: authResponse }),
+			});
+			if (!verifyRes.ok) {
+				const body = (await verifyRes.json()) as { error_description?: string };
+				throw new Error(body.error_description ?? "Verification failed.");
+			}
+			await loadPasskeys();
+			setPasskeySuccess(`"${pk.name ?? "Passkey"}" works on this device.`);
+		} catch (err) {
+			if (err instanceof Error && err.name === "NotAllowedError") {
+				// The device couldn't produce this credential (or the user cancelled). We can't be
+				// certain it's gone, so we guide rather than auto-delete.
+				setPasskeyError(
+					"Couldn't use this passkey on this device. If you no longer have it, remove it."
+				);
+			} else {
+				setPasskeyError(err instanceof Error ? err.message : "Verification failed.");
+			}
+		} finally {
+			setVerifyingId(null);
 		}
 	};
 
@@ -497,7 +550,22 @@ export default function SettingsPage() {
 														<div className="flex shrink-0 items-center gap-1">
 															<button
 																type="button"
+																aria-label="Verify passkey on this device"
+																title="Verify on this device"
+																disabled={verifyingId === pk.id}
+																onClick={() => handleVerify(pk)}
+																className={iconBtn}
+															>
+																{verifyingId === pk.id ? (
+																	<Loader2 className="h-4 w-4 animate-spin" />
+																) : (
+																	<BadgeCheck className="h-4 w-4" />
+																)}
+															</button>
+															<button
+																type="button"
 																aria-label="Rename passkey"
+																disabled={verifyingId === pk.id}
 																onClick={() => startRename(pk)}
 																className={iconBtn}
 															>
@@ -506,6 +574,7 @@ export default function SettingsPage() {
 															<button
 																type="button"
 																aria-label="Remove passkey"
+																disabled={verifyingId === pk.id}
 																onClick={() => requestDelete(pk.id)}
 																className={iconBtnDanger}
 															>
