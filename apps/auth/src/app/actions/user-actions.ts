@@ -1,7 +1,7 @@
 "use server";
 
 import { auth, signOut } from "@/auth";
-import { onServerAction } from "@/lib/context/on-server-action";
+import { onAdminServerAction } from "@/lib/context/on-server-action";
 
 export async function getCurrentUser() {
 	const session = await auth();
@@ -13,14 +13,14 @@ export async function logout() {
 }
 
 export async function getUserById(id: string) {
-	return onServerAction(async (_ctx, getServices) => {
+	return onAdminServerAction(async (_ctx, getServices) => {
 		const { userService } = getServices();
 		return userService.getById(id);
 	});
 }
 
 export async function listUsers() {
-	return onServerAction(async (_ctx, getServices) => {
+	return onAdminServerAction(async (_ctx, getServices) => {
 		const { userService } = getServices();
 		return userService.listUsers();
 	});
@@ -38,7 +38,7 @@ export async function createUser(
 		throw new Error("Unauthorized");
 	}
 
-	return onServerAction(async (_ctx, getServices) => {
+	return onAdminServerAction(async (_ctx, getServices) => {
 		const { userService } = getServices();
 		return userService.createUser(username, password, isAdmin, name, email, session.user.id);
 	});
@@ -61,9 +61,22 @@ export async function updateUser(
 		throw new Error("Unauthorized");
 	}
 
-	return onServerAction(async (_ctx, getServices) => {
+	// Whitelist the mutable fields explicitly (mirrors the admin bearer API) so a crafted
+	// RPC body can't smuggle unknown columns into the update. isAdmin stays allowed but is
+	// gated by onAdminServerAction and audited distinctly in the service.
+	const sanitized = {
+		...(updates.username !== undefined ? { username: updates.username } : {}),
+		...(updates.name !== undefined ? { name: updates.name } : {}),
+		...(updates.email !== undefined ? { email: updates.email } : {}),
+		...(updates.emailVerifiedAt !== undefined ? { emailVerifiedAt: updates.emailVerifiedAt } : {}),
+		...(updates.password !== undefined ? { password: updates.password } : {}),
+		...(updates.isAdmin !== undefined ? { isAdmin: updates.isAdmin } : {}),
+		...(updates.avatarKey !== undefined ? { avatarKey: updates.avatarKey } : {}),
+	};
+
+	return onAdminServerAction(async (_ctx, getServices) => {
 		const { userService } = getServices();
-		return userService.updateUser(id, updates, session.user.id);
+		return userService.updateUser(id, sanitized, session.user.id);
 	});
 }
 
@@ -73,7 +86,7 @@ export async function deleteUser(id: string) {
 		throw new Error("Unauthorized");
 	}
 
-	return onServerAction(async (_ctx, getServices) => {
+	return onAdminServerAction(async (_ctx, getServices) => {
 		const { userService } = getServices();
 		await userService.deleteUser(id, session.user.id);
 		return { ok: true };

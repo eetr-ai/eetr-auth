@@ -12,6 +12,10 @@ export const AUDIT_ACTION = {
 	userPasswordChange: "user.password_change",
 	userPasswordReset: "user.password_reset",
 	userDelete: "user.delete",
+	/** Privilege change: a user was granted admin rights. High-value — audited distinctly. */
+	userAdminGrant: "user.admin_grant",
+	/** Privilege change: a user's admin rights were removed. */
+	userAdminRevoke: "user.admin_revoke",
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION];

@@ -230,12 +230,41 @@ class InMemoryRefreshTokenRepo implements RefreshTokenRepository {
 		};
 	}
 
-	async revoke(id: string, revokedAt: string): Promise<void> {
+	async revoke(id: string, revokedAt: string): Promise<boolean> {
+		// Conditional + atomic, mirroring `WHERE id = ? AND revoked_at IS NULL`.
 		for (const stored of this.refreshTokensByTokenId.values()) {
 			if (stored.row.id === id) {
+				if (stored.row.revoked_at) return false;
 				stored.row.revoked_at = revokedAt;
+				return true;
 			}
 		}
+		return false;
+	}
+
+	async revokeFamily(rootId: string, revokedAt: string): Promise<number> {
+		const byId = new Map([...this.refreshTokensByTokenId.values()].map((s) => [s.row.id, s]));
+		const familyIds = new Set<string>();
+		const queue: string[] = [rootId];
+		while (queue.length > 0) {
+			const current = queue.shift() as string;
+			if (familyIds.has(current)) continue;
+			familyIds.add(current);
+			const stored = byId.get(current);
+			if (stored?.row.rotated_from_id) queue.push(stored.row.rotated_from_id);
+			for (const candidate of byId.values()) {
+				if (candidate.row.rotated_from_id === current) queue.push(candidate.row.id);
+			}
+		}
+		let count = 0;
+		for (const id of familyIds) {
+			const stored = byId.get(id);
+			if (stored && !stored.row.revoked_at) {
+				stored.row.revoked_at = revokedAt;
+				count += 1;
+			}
+		}
+		return count;
 	}
 
 	async listRefreshTokenActivity(): Promise<RefreshTokenActivity[]> {
@@ -294,12 +323,17 @@ class InMemoryAuthorizationCodeRepo implements AuthorizationCodeRepository {
 		};
 	}
 
-	async markUsed(id: string, usedAt: string): Promise<void> {
+	async markUsed(id: string, usedAt: string): Promise<boolean> {
+		// Conditional + atomic, mirroring the D1 `WHERE id = ? AND used_at IS NULL`:
+		// only the first consume of a given code wins.
 		for (const stored of this.codesByCodeId.values()) {
 			if (stored.row.id === id) {
+				if (stored.row.used_at) return false;
 				stored.row.used_at = usedAt;
+				return true;
 			}
 		}
+		return false;
 	}
 
 	async deleteUsedOrExpired(nowIso: string): Promise<number> {
@@ -498,5 +532,97 @@ describe("OAuth stateful flows", () => {
 			active: true,
 			tokenScopes: ["read:users", "write:users"],
 		});
+	});
+
+	it("rejects a second exchange of the same authorization code (single-use)", async () => {
+		const { authorizationService, tokenService } = buildHarness();
+		const codeVerifier = "verifier-123";
+
+		const authorization = await authorizationService.authorize({
+			responseType: "code",
+			clientId: "client-app-id",
+			redirectUri: "https://client.example.com/callback",
+			scope: "read:users",
+			state: "state-123",
+			codeChallenge: await toS256Challenge(codeVerifier),
+			codeChallengeMethod: "S256",
+			subject: "user-123",
+		});
+
+		const authorizationCode = new URL(authorization.redirectTo).searchParams.get("code");
+		if (!authorizationCode) {
+			throw new Error("Expected authorization code in redirect URL");
+		}
+
+		const exchangeOnce = () =>
+			tokenService.exchange({
+				grantType: "authorization_code",
+				clientId: "client-app-id",
+				clientSecret: "plain-secret",
+				code: authorizationCode,
+				redirectUri: "https://client.example.com/callback",
+				codeVerifier,
+			});
+
+		await exchangeOnce();
+		await expect(exchangeOnce()).rejects.toEqual(
+			new OAuthServiceError("invalid_grant", "Authorization code has already been used.", 400)
+		);
+	});
+
+	it("reusing a rotated refresh token revokes the entire rotation family", async () => {
+		const { authorizationService, tokenService } = buildHarness();
+		const codeVerifier = "verifier-123";
+
+		const authorization = await authorizationService.authorize({
+			responseType: "code",
+			clientId: "client-app-id",
+			redirectUri: "https://client.example.com/callback",
+			scope: "read:users",
+			state: "state-123",
+			codeChallenge: await toS256Challenge(codeVerifier),
+			codeChallengeMethod: "S256",
+			subject: "user-123",
+		});
+		const authorizationCode = new URL(authorization.redirectTo).searchParams.get("code");
+		if (!authorizationCode) {
+			throw new Error("Expected authorization code in redirect URL");
+		}
+
+		// Build a chain: firstPair → secondPair (rotated from first).
+		const firstPair = await tokenService.exchange({
+			grantType: "authorization_code",
+			clientId: "client-app-id",
+			clientSecret: "plain-secret",
+			code: authorizationCode,
+			redirectUri: "https://client.example.com/callback",
+			codeVerifier,
+		});
+		const secondPair = await tokenService.exchange({
+			grantType: "refresh_token",
+			clientId: "client-app-id",
+			clientSecret: "plain-secret",
+			refreshToken: firstPair.refresh_token,
+		});
+
+		// Reuse the already-rotated firstPair token → reuse detected, cascade-revoke the family.
+		await expect(
+			tokenService.exchange({
+				grantType: "refresh_token",
+				clientId: "client-app-id",
+				clientSecret: "plain-secret",
+				refreshToken: firstPair.refresh_token,
+			})
+		).rejects.toEqual(new OAuthServiceError("invalid_grant", "Refresh token has been revoked.", 400));
+
+		// The cascade must have revoked secondPair too, even though it was the live token.
+		await expect(
+			tokenService.exchange({
+				grantType: "refresh_token",
+				clientId: "client-app-id",
+				clientSecret: "plain-secret",
+				refreshToken: secondPair.refresh_token,
+			})
+		).rejects.toEqual(new OAuthServiceError("invalid_grant", "Refresh token has been revoked.", 400));
 	});
 });

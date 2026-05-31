@@ -32,6 +32,12 @@ describe("hashPassword", () => {
 		);
 	});
 
+	it("defaults to argon (not MD5) when no hashMethod is given, failing closed without a binding", async () => {
+		await expect(hashPassword("password")).rejects.toThrow(
+			"HASH_METHOD=argon requires ARGON_HASHER binding"
+		);
+	});
+
 	it("throws when the argon hasher hash endpoint returns non-ok", async () => {
 		const fetch = vi.fn(async () => new Response("service failed", { status: 503, statusText: "Unavailable" }));
 

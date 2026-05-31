@@ -95,11 +95,54 @@ export class RefreshTokenRepositoryD1 implements RefreshTokenRepository {
 		};
 	}
 
-	async revoke(id: string, revokedAt: string): Promise<void> {
-		await this.db
-			.prepare("UPDATE refresh_tokens SET revoked_at = ? WHERE id = ?")
+	async revoke(id: string, revokedAt: string): Promise<boolean> {
+		// Conditional + atomic: only the request that flips revoked_at from NULL wins, so
+		// two concurrent rotations of the same token cannot both issue a new pair (TOCTOU).
+		const result = await this.db
+			.prepare("UPDATE refresh_tokens SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL")
 			.bind(revokedAt, id)
 			.run();
+		return Number(result.meta.changes ?? 0) > 0;
+	}
+
+	async revokeFamily(rootId: string, revokedAt: string): Promise<number> {
+		// Collect the whole rotation family: ancestors (via rotated_from_id) and
+		// descendants (rows pointing back) reachable from rootId. BFS over the lineage
+		// rather than a recursive CTE — explicit, portable, and easy to mirror in tests.
+		const familyIds = new Set<string>();
+		const queue: string[] = [rootId];
+		while (queue.length > 0) {
+			const current = queue.shift() as string;
+			if (familyIds.has(current)) continue;
+			familyIds.add(current);
+
+			const parentRow = await this.db
+				.prepare("SELECT rotated_from_id FROM refresh_tokens WHERE id = ?")
+				.bind(current)
+				.first<{ rotated_from_id: string | null }>();
+			if (parentRow?.rotated_from_id && !familyIds.has(parentRow.rotated_from_id)) {
+				queue.push(parentRow.rotated_from_id);
+			}
+
+			const childRows = await this.db
+				.prepare("SELECT id FROM refresh_tokens WHERE rotated_from_id = ?")
+				.bind(current)
+				.all<{ id: string }>();
+			for (const child of childRows.results ?? []) {
+				if (!familyIds.has(child.id)) queue.push(child.id);
+			}
+		}
+
+		const ids = [...familyIds];
+		if (ids.length === 0) return 0;
+		const placeholders = ids.map(() => "?").join(", ");
+		const result = await this.db
+			.prepare(
+				`UPDATE refresh_tokens SET revoked_at = ? WHERE revoked_at IS NULL AND id IN (${placeholders})`
+			)
+			.bind(revokedAt, ...ids)
+			.run();
+		return Number(result.meta.changes ?? 0);
 	}
 
 	async listRefreshTokenActivity(clientId?: string): Promise<RefreshTokenActivity[]> {

@@ -41,7 +41,17 @@ export interface RefreshTokenActivity {
 export interface RefreshTokenRepository {
 	createRefreshToken(row: RefreshTokenRow, clientScopeIds: string[]): Promise<void>;
 	getByTokenId(refreshTokenId: string): Promise<RefreshTokenRecord | null>;
-	revoke(id: string, revokedAt: string): Promise<void>;
+	/**
+	 * Atomically revoke a single token. Returns true only if THIS call transitioned it
+	 * from active → revoked; false if it was already revoked (concurrent rotation / reuse).
+	 */
+	revoke(id: string, revokedAt: string): Promise<boolean>;
+	/**
+	 * Revoke the entire rotation family reachable from `rootId` (all ancestors and
+	 * descendants linked via `rotated_from_id`). Used to cascade-revoke on detected
+	 * refresh-token reuse (OAuth 2.1 §4.3.1). Returns how many members it revoked.
+	 */
+	revokeFamily(rootId: string, revokedAt: string): Promise<number>;
 	listRefreshTokenActivity(clientId?: string): Promise<RefreshTokenActivity[]>;
 	deleteByTokenId(refreshTokenId: string): Promise<boolean>;
 	deleteExpired(nowIso: string): Promise<number>;

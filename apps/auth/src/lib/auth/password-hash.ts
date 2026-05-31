@@ -57,7 +57,9 @@ export interface HashPasswordOptions {
 }
 
 export async function hashPassword(plain: string, options?: HashPasswordOptions): Promise<string> {
-	const method = options?.hashMethod ?? "md5";
+	// Default argon: a caller that forgets to pass hashMethod fails closed (argon requires
+	// the ARGON_HASHER binding and throws below) rather than silently producing MD5.
+	const method = options?.hashMethod ?? "argon";
 	if (method === "argon") {
 		if (!options?.argonHasher) {
 			throw new Error("HASH_METHOD=argon requires ARGON_HASHER binding");
@@ -123,7 +125,8 @@ export async function verifyPassword(
 	storedHash: string,
 	options?: VerifyPasswordOptions
 ): Promise<VerifyPasswordResult> {
-	const method = options?.hashMethod ?? "md5";
+	// Default argon (fail closed): without an explicit md5 opt-in, never accept bare MD5.
+	const method = options?.hashMethod ?? "argon";
 	const argonHasher = options?.argonHasher;
 	const kind = storedHashKind(storedHash);
 	logPasswordVerify({

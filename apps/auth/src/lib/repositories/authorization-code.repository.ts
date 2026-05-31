@@ -31,6 +31,11 @@ export interface AuthorizationCodeRow {
 export interface AuthorizationCodeRepository {
 	create(row: AuthorizationCodeRow, clientScopeIds: string[]): Promise<void>;
 	getByCodeId(codeId: string): Promise<AuthorizationCodeWithScopeIds | null>;
-	markUsed(id: string, usedAt: string): Promise<void>;
+	/**
+	 * Atomically consume the code. Returns true only if THIS call transitioned it from
+	 * unused → used; false if it was already used (lost the race / replay). Callers must
+	 * issue tokens only when this returns true.
+	 */
+	markUsed(id: string, usedAt: string): Promise<boolean>;
 	deleteUsedOrExpired(nowIso: string): Promise<number>;
 }

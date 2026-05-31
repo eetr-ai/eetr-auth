@@ -28,7 +28,8 @@ function createAuthorizationCodeRepoMock() {
 	return {
 		create: vi.fn(),
 		getByCodeId: vi.fn(),
-		markUsed: vi.fn(),
+		// Default: the code is successfully consumed (won the single-use race).
+		markUsed: vi.fn().mockResolvedValue(true),
 		deleteUsedOrExpired: vi.fn(),
 	} satisfies AuthorizationCodeRepository;
 }
@@ -50,7 +51,9 @@ function createRefreshTokenRepoMock() {
 	return {
 		createRefreshToken: vi.fn(),
 		getByTokenId: vi.fn(),
-		revoke: vi.fn(),
+		// Default: the token is successfully revoked (won the rotation race).
+		revoke: vi.fn().mockResolvedValue(true),
+		revokeFamily: vi.fn().mockResolvedValue(0),
 		listRefreshTokenActivity: vi.fn(),
 		deleteByTokenId: vi.fn(),
 		deleteExpired: vi.fn(),
@@ -382,6 +385,40 @@ describe("OauthTokenService", () => {
 			expect(result.access_token).toMatch(/^at_[0-9a-f]{64}$/);
 			expect(result.refresh_token).toMatch(/^rt_[0-9a-f]{64}$/);
 		});
+
+		it("rejects with invalid_grant and issues no tokens when the code was already consumed (lost the race)", async () => {
+			const clientRepo = createClientRepoMock();
+			const authorizationCodeRepo = createAuthorizationCodeRepoMock();
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient());
+			authorizationCodeRepo.getByCodeId.mockResolvedValue(
+				makeAuthorizationCode({ codeChallenge: await toS256Challenge("verifier-123") })
+			);
+			tokenRepo.getClientScopeGrants.mockResolvedValue([
+				makeGrant({ clientScopeId: "client-scope-read", scopeName: "read:users" }),
+			]);
+			// The in-memory usedAt check passes, but the atomic consume loses the race.
+			authorizationCodeRepo.markUsed.mockResolvedValue(false);
+			const service = createService({ clientRepo, authorizationCodeRepo, tokenRepo, refreshTokenRepo });
+
+			await expect(
+				service.exchange({
+					grantType: "authorization_code",
+					clientId: "client-app-id",
+					clientSecret: "plain-secret",
+					code: "code_123",
+					redirectUri: "https://client.example.com/callback",
+					codeVerifier: "verifier-123",
+				})
+			).rejects.toMatchObject({
+				code: "invalid_grant",
+				message: "Authorization code has already been used.",
+				status: 400,
+			});
+			expect(tokenRepo.createAccessToken).not.toHaveBeenCalled();
+			expect(refreshTokenRepo.createRefreshToken).not.toHaveBeenCalled();
+		});
 	});
 
 	describe("refresh token exchange", () => {
@@ -433,6 +470,36 @@ describe("OauthTokenService", () => {
 			);
 			expect(result.access_token).toMatch(/^at_[0-9a-f]{64}$/);
 			expect(result.refresh_token).toMatch(/^rt_[0-9a-f]{64}$/);
+		});
+
+		it("treats a lost revoke race as reuse: cascades to the family and issues no tokens", async () => {
+			const clientRepo = createClientRepoMock();
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient());
+			refreshTokenRepo.getByTokenId.mockResolvedValue(makeRefreshToken());
+			tokenRepo.getClientScopeGrants.mockResolvedValue([
+				makeGrant({ clientScopeId: "client-scope-read", scopeName: "read:users" }),
+			]);
+			// The in-memory revokedAt check passes, but the atomic revoke loses the race.
+			refreshTokenRepo.revoke.mockResolvedValue(false);
+			const service = createService({ clientRepo, tokenRepo, refreshTokenRepo });
+
+			await expect(
+				service.exchange({
+					grantType: "refresh_token",
+					clientId: "client-app-id",
+					clientSecret: "plain-secret",
+					refreshToken: "rt_existing",
+				})
+			).rejects.toMatchObject({
+				code: "invalid_grant",
+				message: "Refresh token has been revoked.",
+				status: 400,
+			});
+			expect(refreshTokenRepo.revokeFamily).toHaveBeenCalledWith("refresh-row-1", "2026-04-06T13:10:00.000Z");
+			expect(refreshTokenRepo.createRefreshToken).not.toHaveBeenCalled();
+			expect(tokenRepo.createAccessToken).not.toHaveBeenCalled();
 		});
 	});
 
