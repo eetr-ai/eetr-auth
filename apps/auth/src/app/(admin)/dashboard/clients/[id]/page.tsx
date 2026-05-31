@@ -454,14 +454,14 @@ function ClientDetailPageContent() {
 			</div>
 
 			{error && (
-				<p className="mb-4 rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">
+				<p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
 					{error}
 				</p>
 			)}
 
 			{rotatedSecret && (
-				<div className="mb-6 rounded-xl border border-amber-600/50 bg-amber-950/30 p-4">
-					<p className="mb-2 text-sm font-medium text-amber-200">
+				<div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-600/50 dark:bg-amber-950/30">
+					<p className="mb-2 text-sm font-medium text-amber-700 dark:text-amber-200">
 						New client secret. Copy it now — it will not be shown again.
 					</p>
 					<div className="flex items-center gap-2">
@@ -475,7 +475,7 @@ function ClientDetailPageContent() {
 							aria-label="Copy secret"
 						>
 							{copied ? (
-								<Check className="h-4 w-4 text-green-400" />
+								<Check className="h-4 w-4 text-green-600 dark:text-green-400" />
 							) : (
 								<Copy className="h-4 w-4" />
 							)}
@@ -544,7 +544,7 @@ function ClientDetailPageContent() {
 						<button
 							type="button"
 							onClick={handleDelete}
-							className="flex items-center gap-2 rounded-full border border-red-800 px-3 py-2 text-sm font-medium text-red-200 hover:bg-red-950/50"
+							className="flex items-center gap-2 rounded-full border border-red-300 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-200 dark:hover:bg-red-950/50"
 						>
 							<Trash2 className="h-4 w-4" />
 							Delete client
@@ -567,7 +567,7 @@ function ClientDetailPageContent() {
 								<button
 									type="button"
 									onClick={() => removeUri(i)}
-									className="rounded-full p-2 text-muted-foreground hover:bg-red-950/50 hover:text-red-200"
+									className="rounded-full p-2 text-muted-foreground hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/50 dark:hover:text-red-200"
 									aria-label="Remove"
 								>
 									<Trash2 className="h-4 w-4" />
@@ -666,7 +666,7 @@ function ClientDetailPageContent() {
 													type="button"
 													onClick={() => handleRevokeToken(token)}
 													disabled={tokenActionKey != null}
-													className="inline-flex items-center gap-1 rounded-full border border-amber-700 px-2 py-1 text-xs text-amber-200 hover:bg-amber-950/50 disabled:opacity-50"
+													className="inline-flex items-center gap-1 rounded-full border border-amber-300 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-950/50"
 												>
 													<Ban className="h-3.5 w-3.5" />
 													Revoke
@@ -675,7 +675,7 @@ function ClientDetailPageContent() {
 													type="button"
 													onClick={() => handleDeleteToken(token)}
 													disabled={tokenActionKey != null}
-													className="inline-flex items-center gap-1 rounded-full border border-red-800 px-2 py-1 text-xs text-red-200 hover:bg-red-950/50 disabled:opacity-50"
+													className="inline-flex items-center gap-1 rounded-full border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-200 dark:hover:bg-red-950/50"
 												>
 													<Trash2 className="h-3.5 w-3.5" />
 													Delete

@@ -13,6 +13,7 @@ import {
 	ClipboardList,
 } from "lucide-react";
 import { logout } from "@/app/actions/user-actions";
+import { ThemeSwitcher } from "@/app/theme-switcher";
 
 const navItems = [
 	{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -69,6 +70,9 @@ export function AdminNav({
 				})}
 			</nav>
 			<div className="shrink-0 border-t border-brand-muted p-4 space-y-2">
+				<div className="flex justify-center pb-1">
+					<ThemeSwitcher />
+				</div>
 				{(() => {
 					const href = "/dashboard/settings";
 					const isActive = pathname === href || pathname.startsWith(href);

@@ -70,7 +70,7 @@ export default function PasskeyPrompt() {
 
 	if (status === "enrolled") {
 		return (
-			<div className="mt-6 flex items-center gap-2 rounded-xl border border-brand-muted bg-green-950/30 p-4 text-sm text-green-300">
+			<div className="mt-6 flex items-center gap-2 rounded-xl border border-brand-muted bg-green-50 p-4 text-sm text-green-700 dark:bg-green-950/30 dark:text-green-300">
 				<Fingerprint className="h-4 w-4" />
 				Passkey enrolled. You can use it next time to sign in faster.
 			</div>
@@ -87,7 +87,7 @@ export default function PasskeyPrompt() {
 						Create a passkey on this device to sign in without a password.
 					</p>
 					{error && (
-						<p className="mt-2 rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">{error}</p>
+						<p className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">{error}</p>
 					)}
 					<div className="mt-3 flex items-center gap-3">
 						<button

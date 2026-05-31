@@ -31,7 +31,7 @@ While a row is in the confirming state, hide the other action buttons for that r
       type="button"
       onClick={() => confirmDelete(user)}
       disabled={deletingUserId === user.id}
-      className="inline-flex items-center gap-1 rounded-full border border-red-800 bg-red-950/50 px-3 py-1 text-xs font-medium text-red-200 hover:bg-red-900/60 disabled:opacity-50"
+      className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200 dark:hover:bg-red-900/60"
     >
       {deletingUserId === user.id
         ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -61,8 +61,8 @@ For full-page destructive actions (e.g. deleting the current client from its det
 |---|---|---|
 | Primary | The main call-to-action on a form or page. | `rounded-full bg-brand px-5 py-2 text-sm font-medium text-white hover:bg-brand-muted disabled:opacity-50` |
 | Secondary / ghost | Neutral actions, dismissals, tertiary options. | `rounded-full border border-brand-muted px-4 py-2 text-sm font-medium hover:bg-brand-muted/30 disabled:opacity-50` |
-| Destructive confirm | The "yes, do it" button in a confirmation. | `rounded-full border border-red-800 bg-red-950/50 px-3 py-1 text-xs font-medium text-red-200 hover:bg-red-900/60` |
-| Icon-only | Per-row actions (edit, trash). Always include `aria-label`. | `rounded-full p-1.5 text-muted-foreground hover:bg-brand-muted/30 hover:text-foreground` (destructive icon: swap to `hover:bg-red-950/50 hover:text-red-200`) |
+| Destructive confirm | The "yes, do it" button in a confirmation. | `rounded-full border border-red-300 bg-red-50 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200 dark:hover:bg-red-900/60` |
+| Icon-only | Per-row actions (edit, trash). Always include `aria-label`. | `rounded-full p-1.5 text-muted-foreground hover:bg-brand-muted/30 hover:text-foreground` (destructive icon: swap to `hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/50 dark:hover:text-red-200`) |
 
 All buttons are pill-shaped (`rounded-full`). Never use sharp-cornered buttons.
 
@@ -72,9 +72,9 @@ Error and success messages appear as inline banners inside the section they rela
 
 ```tsx
 // error
-<p className="mb-3 rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">{message}</p>
+<p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">{message}</p>
 // success
-<p className="mb-3 rounded-xl bg-green-950/50 px-3 py-2 text-sm text-green-200">{message}</p>
+<p className="mb-3 rounded-xl bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-950/50 dark:text-green-200">{message}</p>
 ```
 
 Clear the message when the user starts a new attempt at the same action so stale errors do not linger.
@@ -139,10 +139,35 @@ Prefer semantic tokens over raw Tailwind colors where they exist:
 - Backgrounds: `bg-background`.
 - Text: `text-foreground`, `text-muted-foreground`.
 - Accents: `border-brand`, `border-brand-muted`, `bg-brand`, `bg-brand-muted`.
-- Destructive: the `red-800 / red-900 / red-950 / red-200` ramp.
-- Success: the `green-950 / green-300 / green-400` ramp.
+- Destructive: red ramp (see below).
+- Success: green/emerald ramp (see below).
 
 Do not introduce new color ramps without a strong reason.
+
+## Light and dark theme
+
+The app supports light, dark, and system themes, chosen with the `ThemeSwitcher`
+([apps/auth/src/app/theme-switcher.tsx](../apps/auth/src/app/theme-switcher.tsx))
+and persisted to `localStorage`. The choice resolves to a `light`/`dark` class on
+`<html>`; an inline script in [layout.tsx](../apps/auth/src/app/layout.tsx) applies
+it before paint to avoid a flash. Tailwind's `dark:` variant is wired to that
+`.dark` class in [globals.css](../apps/auth/src/app/globals.css) (`@custom-variant`).
+
+Rules when adding UI:
+
+- **Semantic tokens adapt automatically.** `bg-background`, `text-foreground`,
+  `text-muted-foreground`, `border-brand-muted`, etc. resolve via CSS variables
+  that flip per theme — use them and you get both themes for free.
+- **Raw color ramps need both shades.** When you reach for a raw Tailwind color
+  (red/green/emerald/amber for states), write the **light** value as the base
+  class and add a `dark:` counterpart for the dark value. Carry any `hover:`
+  prefix into the dark variant too (`hover:bg-red-100 dark:hover:bg-red-900/60`).
+  - Error text/bg: `bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-200`
+  - Success: `bg-green-50 text-green-700 dark:bg-green-950/50 dark:text-green-200`
+  - Warning: `bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-200`
+  - Inline status icons: `text-green-600 dark:text-green-400` (and the red equivalent)
+- **`text-white` on `bg-brand` buttons stays as-is** — the brand color is dark
+  blue in both themes, so white label text is correct either way.
 
 ## State management
 

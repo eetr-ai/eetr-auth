@@ -32,13 +32,13 @@ export function CancelPasswordResetClient({ token }: Props) {
 	}
 	if (phase === "ok") {
 		return (
-			<p className="rounded-xl bg-emerald-950/40 px-3 py-2 text-center text-sm text-emerald-100">
+			<p className="rounded-xl bg-emerald-50 px-3 py-2 text-center text-sm text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
 				This password reset has been cancelled. The link in the email no longer works.
 			</p>
 		);
 	}
 	return (
-		<p className="rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">
+		<p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
 			{message ?? "Something went wrong."}
 		</p>
 	);

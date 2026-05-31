@@ -110,7 +110,7 @@ export default function AuditLogPage() {
 			</div>
 
 			{error && (
-				<p className="mb-4 shrink-0 rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">
+				<p className="mb-4 shrink-0 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
 					{error}
 				</p>
 			)}

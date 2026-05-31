@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { signOut, auth } from "@/auth";
 import { getPublicSiteSettings } from "@/lib/public-site-settings";
 import { SignInForm } from "@/app/sign-in-form";
+import { ThemeSwitcher } from "@/app/theme-switcher";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,9 @@ export default async function HomePage({
 
 	return (
 		<div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 text-foreground">
+			<div className="fixed right-4 top-4">
+				<ThemeSwitcher />
+			</div>
 			<div className="w-full max-w-sm space-y-8 rounded-xl border border-brand-muted bg-background p-8">
 				<div className="flex flex-col items-center gap-3">
 					{/* eslint-disable-next-line @next/next/no-img-element -- CDN or /public paths from site settings */}
@@ -66,17 +70,17 @@ export default async function HomePage({
 					) : null}
 				</div>
 				{error === "CredentialsSignin" && (
-					<p className="rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">
+					<p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
 						Invalid username or password.
 					</p>
 				)}
 				{error === "AuthError" && (
-					<p className="rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">
+					<p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
 						Something went wrong. Please try again.
 					</p>
 				)}
 				{reset === "success" && (
-					<p className="rounded-xl bg-emerald-950/50 px-3 py-2 text-sm text-emerald-200">
+					<p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200">
 						Your password was updated. You can sign in below.
 					</p>
 				)}

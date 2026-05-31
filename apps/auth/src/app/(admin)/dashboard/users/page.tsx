@@ -306,14 +306,14 @@ function UsersPageContent() {
 		}
 		if (user.emailVerifiedAt) {
 			return (
-				<span className="inline-flex items-center gap-1 rounded-full bg-emerald-950/50 px-2 py-0.5 text-xs text-emerald-200">
+				<span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200">
 					<BadgeCheck className="h-3.5 w-3.5" />
 					Verified
 				</span>
 			);
 		}
 		return (
-			<span className="inline-flex items-center gap-1 rounded-full bg-amber-950/50 px-2 py-0.5 text-xs text-amber-200">
+			<span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700 dark:bg-amber-950/50 dark:text-amber-200">
 				<BadgeX className="h-3.5 w-3.5" />
 				Unverified
 			</span>
@@ -339,7 +339,7 @@ function UsersPageContent() {
 				<section className="rounded-xl border border-brand-muted p-6">
 					<h2 className="mb-4 text-lg font-medium">Create user</h2>
 					{error && (
-						<p className="mb-3 rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">{error}</p>
+						<p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">{error}</p>
 					)}
 					<form onSubmit={handleCreate} className="grid gap-3 md:grid-cols-6">
 						<input
@@ -517,14 +517,14 @@ function UsersPageContent() {
 										<div className="flex items-center gap-2">
 											{confirmingDeleteUserId === user.id ? (
 												<>
-													<span className="text-xs text-red-200">
+													<span className="text-xs text-red-700 dark:text-red-200">
 														Delete {user.username || user.email || "user"}?
 													</span>
 													<button
 														type="button"
 														onClick={() => confirmDelete(user)}
 														disabled={deletingUserId === user.id}
-														className="inline-flex items-center gap-1 rounded-full border border-red-800 bg-red-950/50 px-3 py-1 text-xs font-medium text-red-200 hover:bg-red-900/60 disabled:opacity-50"
+														className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200 dark:hover:bg-red-900/60"
 													>
 														{deletingUserId === user.id ? (
 															<Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -585,7 +585,7 @@ function UsersPageContent() {
 													<button
 														type="button"
 														onClick={() => requestDelete(user)}
-														className="rounded-full p-1.5 text-muted-foreground hover:bg-red-950/50 hover:text-red-200"
+														className="rounded-full p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/50 dark:hover:text-red-200"
 														aria-label="Delete user"
 													>
 														<Trash2 className="h-4 w-4" />

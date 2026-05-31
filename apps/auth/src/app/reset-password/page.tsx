@@ -30,7 +30,7 @@ export default async function ResetPasswordPage({
 				{token?.trim() ? (
 					<ResetPasswordForm token={token.trim()} />
 				) : (
-					<p className="rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">
+					<p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
 						Missing or invalid reset link. Request a new link from the forgot password page.
 					</p>
 				)}

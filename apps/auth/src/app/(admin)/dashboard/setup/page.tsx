@@ -520,7 +520,7 @@ function SetupPageContent() {
 			>
 				<h2 className="mb-4 text-lg font-medium">Site identity</h2>
 				{siteError && (
-					<p className="mb-3 rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">
+					<p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
 						{siteError}
 					</p>
 				)}
@@ -682,7 +682,7 @@ function SetupPageContent() {
 					OAuth clients allowed to use the future admin API. Credentials are not shown here.
 				</p>
 				{adminClientsError && (
-					<p className="mb-3 rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">
+					<p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
 						{adminClientsError}
 					</p>
 				)}
@@ -743,7 +743,7 @@ function SetupPageContent() {
 			>
 					<h2 className="mb-4 text-lg font-medium">Environments</h2>
 					{envError && (
-						<p className="mb-3 rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">
+						<p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
 							{envError}
 						</p>
 					)}
@@ -832,7 +832,7 @@ function SetupPageContent() {
 											<button
 												type="button"
 												onClick={() => handleDeleteEnv(env.id)}
-												className="rounded-full p-1.5 text-muted-foreground hover:bg-red-950/50 hover:text-red-200"
+												className="rounded-full p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/50 dark:hover:text-red-200"
 												aria-label="Delete"
 											>
 												<Trash2 className="h-4 w-4" />
@@ -860,7 +860,7 @@ function SetupPageContent() {
 			>
 					<h2 className="mb-4 text-lg font-medium">Scopes</h2>
 					{scopeError && (
-						<p className="mb-3 rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">
+						<p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
 							{scopeError}
 						</p>
 					)}
@@ -895,7 +895,7 @@ function SetupPageContent() {
 								<button
 									type="button"
 									onClick={() => handleDeleteScope(scope.id)}
-									className="rounded-full p-1.5 text-muted-foreground hover:bg-red-950/50 hover:text-red-200"
+									className="rounded-full p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/50 dark:hover:text-red-200"
 									aria-label="Delete"
 								>
 									<Trash2 className="h-4 w-4" />

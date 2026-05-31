@@ -62,12 +62,12 @@ function SectionCard({ title, icon: Icon, children }: { title: string; icon: typ
 
 function ErrorBanner({ message }: { message: string | null }) {
 	if (!message) return null;
-	return <p className="mb-3 rounded-xl bg-red-950/50 px-3 py-2 text-sm text-red-200">{message}</p>;
+	return <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">{message}</p>;
 }
 
 function SuccessBanner({ message }: { message: string | null }) {
 	if (!message) return null;
-	return <p className="mb-3 rounded-xl bg-green-950/50 px-3 py-2 text-sm text-green-200">{message}</p>;
+	return <p className="mb-3 rounded-xl bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-950/50 dark:text-green-200">{message}</p>;
 }
 
 const inputClass =
@@ -80,7 +80,7 @@ const iconBtn =
 	"rounded-full p-1.5 text-muted-foreground hover:bg-brand-muted/30 hover:text-foreground disabled:opacity-50";
 
 const iconBtnDanger =
-	"rounded-full p-1.5 text-muted-foreground hover:bg-red-950/50 hover:text-red-200 disabled:opacity-50";
+	"rounded-full p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-700 disabled:opacity-50 dark:hover:bg-red-950/50 dark:hover:text-red-200";
 
 export default function SettingsPage() {
 	const [user, setUser] = useState<UserInfo | null>(null);
@@ -522,12 +522,12 @@ export default function SettingsPage() {
 													</div>
 													{confirmingDeleteId === pk.id ? (
 														<div className="flex shrink-0 items-center gap-2">
-															<span className="text-xs text-red-200">Remove?</span>
+															<span className="text-xs text-red-700 dark:text-red-200">Remove?</span>
 															<button
 																type="button"
 																onClick={() => handleDelete(pk)}
 																disabled={deletingId === pk.id}
-																className="inline-flex items-center gap-1 rounded-full border border-red-800 bg-red-950/50 px-3 py-1 text-xs font-medium text-red-200 hover:bg-red-900/60 disabled:opacity-50"
+																className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200 dark:hover:bg-red-900/60"
 															>
 																{deletingId === pk.id ? (
 																	<Loader2 className="h-3.5 w-3.5 animate-spin" />
