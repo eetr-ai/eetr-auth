@@ -3,6 +3,7 @@ import type { UserRecord, UserRepository } from "@/lib/repositories/admin.reposi
 import { hashPassword } from "@/lib/auth/password-hash";
 import { normalizeOptionalProfileField } from "@/lib/users/profile";
 import type { AdminAuditLogService } from "./admin-audit-log.service";
+import { AUDIT_ACTION, AUDIT_RESOURCE } from "./audit-actions";
 
 interface UpdateUserInput {
 	username?: string;
@@ -116,8 +117,8 @@ export class UserService {
 		);
 		await this.adminAuditLogService.logAction({
 			actorUserId,
-			action: "user.create",
-			resourceType: "user",
+			action: AUDIT_ACTION.userCreate,
+			resourceType: AUDIT_RESOURCE.user,
 			resourceId: id,
 			details: {
 				username: normalizedUsername,
@@ -214,8 +215,8 @@ export class UserService {
 			const passwordOnly = changedFields.length === 1 && changedFields[0] === "password";
 			await this.adminAuditLogService.logAction({
 				actorUserId,
-				action: passwordOnly ? "user.password_change" : "user.update",
-				resourceType: "user",
+				action: passwordOnly ? AUDIT_ACTION.userPasswordChange : AUDIT_ACTION.userUpdate,
+				resourceType: AUDIT_RESOURCE.user,
 				resourceId: id,
 				details: {
 					username: updated.username,
@@ -249,8 +250,8 @@ export class UserService {
 
 		const auditRow = this.adminAuditLogService.buildRow({
 			actorUserId,
-			action: "user.delete",
-			resourceType: "user",
+			action: AUDIT_ACTION.userDelete,
+			resourceType: AUDIT_RESOURCE.user,
 			resourceId: id,
 			details: {
 				username: current.username,

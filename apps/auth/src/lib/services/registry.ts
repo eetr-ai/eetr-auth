@@ -127,6 +127,7 @@ export function getServices(ctx: RequestContext): Services {
 			siteRepo,
 			siteSettings: siteSettingsService,
 			mail: transactionalEmailService,
+			auditLog: adminAuditLogService,
 			env: ctx.env,
 		}),
 		totpService: new TotpService({
