@@ -33,9 +33,14 @@ export async function createUser(
 	name?: string | null,
 	email?: string | null
 ) {
+	const session = await auth();
+	if (!session?.user?.id) {
+		throw new Error("Unauthorized");
+	}
+
 	return onServerAction(async (_ctx, getServices) => {
 		const { userService } = getServices();
-		return userService.createUser(username, password, isAdmin, name, email);
+		return userService.createUser(username, password, isAdmin, name, email, session.user.id);
 	});
 }
 

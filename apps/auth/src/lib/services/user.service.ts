@@ -3,6 +3,7 @@ import type { UserRecord, UserRepository } from "@/lib/repositories/admin.reposi
 import { hashPassword } from "@/lib/auth/password-hash";
 import { normalizeOptionalProfileField } from "@/lib/users/profile";
 import type { AdminAuditLogService } from "./admin-audit-log.service";
+import { AUDIT_ACTION, AUDIT_RESOURCE } from "./audit-actions";
 
 interface UpdateUserInput {
 	username?: string;
@@ -90,7 +91,8 @@ export class UserService {
 		password: string,
 		isAdmin = true,
 		name?: string | null,
-		email?: string | null
+		email?: string | null,
+		actorUserId: string | null = null
 	): Promise<UserRecord> {
 		const normalizedUsername = username.trim();
 		if (!normalizedUsername) {
@@ -113,6 +115,18 @@ export class UserService {
 			passwordHash,
 			isAdmin
 		);
+		await this.adminAuditLogService.logAction({
+			actorUserId,
+			action: AUDIT_ACTION.userCreate,
+			resourceType: AUDIT_RESOURCE.user,
+			resourceId: id,
+			details: {
+				username: normalizedUsername,
+				email: normalizedEmail,
+				name: normalizedName,
+				isAdmin,
+			},
+		});
 		return this.withAvatarUrl({
 			id,
 			username: normalizedUsername,
@@ -192,6 +206,25 @@ export class UserService {
 		if (!updated) {
 			throw new Error("User not found");
 		}
+
+		// Never log the password value — only that it changed.
+		const changedFields = Object.keys(patch).map((field) =>
+			field === "passwordHash" ? "password" : field
+		);
+		if (changedFields.length > 0) {
+			const passwordOnly = changedFields.length === 1 && changedFields[0] === "password";
+			await this.adminAuditLogService.logAction({
+				actorUserId,
+				action: passwordOnly ? AUDIT_ACTION.userPasswordChange : AUDIT_ACTION.userUpdate,
+				resourceType: AUDIT_RESOURCE.user,
+				resourceId: id,
+				details: {
+					username: updated.username,
+					changedFields,
+				},
+			});
+		}
+
 		return this.withAvatarUrl(updated);
 	}
 
@@ -217,8 +250,8 @@ export class UserService {
 
 		const auditRow = this.adminAuditLogService.buildRow({
 			actorUserId,
-			action: "user.delete",
-			resourceType: "user",
+			action: AUDIT_ACTION.userDelete,
+			resourceType: AUDIT_RESOURCE.user,
 			resourceId: id,
 			details: {
 				username: current.username,

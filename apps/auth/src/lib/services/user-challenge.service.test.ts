@@ -6,6 +6,7 @@ import type { UserChallengeRepository, UserChallengeRow } from "@/lib/repositori
 import { hashPassword, verifyPassword } from "@/lib/auth/password-hash";
 import { verifyPasswordResetJwt } from "@/lib/auth/password-reset-jwt";
 import { UserChallengeService } from "@/lib/services/user-challenge.service";
+import { AdminAuditLogService } from "@/lib/services/admin-audit-log.service";
 
 vi.mock("@/lib/auth/password-hash", () => ({
 	hashPassword: vi.fn(),
@@ -74,12 +75,17 @@ function createMailMock() {
 	};
 }
 
+function createAuditLogMock(insert = vi.fn()) {
+	return new AdminAuditLogService({ logRepo: { insert, listLogs: vi.fn() } });
+}
+
 function createService(deps?: {
 	userRepo?: UserRepository;
 	challengeRepo?: UserChallengeRepository;
 	siteRepo?: SiteSettingsRepository;
 	siteSettings?: ReturnType<typeof createSiteSettingsMock>;
 	mail?: ReturnType<typeof createMailMock>;
+	auditLog?: AdminAuditLogService;
 	env?: CloudflareEnv;
 }) {
 	return new UserChallengeService({
@@ -88,6 +94,7 @@ function createService(deps?: {
 		siteRepo: deps?.siteRepo ?? createSiteRepoMock(),
 		siteSettings: deps?.siteSettings ?? createSiteSettingsMock(),
 		mail: deps?.mail ?? createMailMock(),
+		auditLog: deps?.auditLog ?? createAuditLogMock(),
 		env:
 			deps?.env ??
 			({
@@ -430,6 +437,41 @@ describe("UserChallengeService", () => {
 				"challenge-1",
 				"2026-04-06T13:10:00.000Z"
 			);
+		});
+
+		it("writes a user.password_reset audit entry on success", async () => {
+			const challengeRepo = createChallengeRepoMock();
+			const insert = vi.fn();
+			verifyPasswordResetJwtMock.mockResolvedValue({ challengeId: "challenge-1", userId: "user-1" });
+			challengeRepo.getById.mockResolvedValue(makeChallenge({ kind: "password_reset" }));
+			hashPasswordMock.mockResolvedValue("$argon2id$new-hash");
+			const service = createService({ challengeRepo, auditLog: createAuditLogMock(insert) });
+
+			await service.completePasswordReset("token", "new-password");
+
+			expect(insert).toHaveBeenCalledWith(
+				expect.objectContaining({
+					action: "user.password_reset",
+					resource_type: "user",
+					resource_id: "user-1",
+					actor_user_id: "user-1",
+				})
+			);
+		});
+
+		it("does not write an audit entry when the reset link is rejected", async () => {
+			const challengeRepo = createChallengeRepoMock();
+			const insert = vi.fn();
+			verifyPasswordResetJwtMock.mockResolvedValue({ challengeId: "challenge-1", userId: "user-1" });
+			challengeRepo.getById.mockResolvedValue(
+				makeChallenge({ kind: "password_reset", consumedAt: "2026-04-06T13:15:00.000Z" })
+			);
+			const service = createService({ challengeRepo, auditLog: createAuditLogMock(insert) });
+
+			await expect(service.completePasswordReset("token", "new-password")).rejects.toThrow(
+				"already been used"
+			);
+			expect(insert).not.toHaveBeenCalled();
 		});
 	});
 

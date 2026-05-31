@@ -30,18 +30,21 @@ function createUserRepoMock(): UserRepository {
 	};
 }
 
-function createAuditLogService(): AdminAuditLogService {
+function createAuditLogService(insert = vi.fn()): AdminAuditLogService {
 	const logRepo: AdminAuditLogRepository = {
-		insert: vi.fn(),
+		insert,
 		listLogs: vi.fn(),
 	};
 	return new AdminAuditLogService({ logRepo });
 }
 
-function createService(userRepository: UserRepository): UserService {
+function createService(
+	userRepository: UserRepository,
+	adminAuditLogService: AdminAuditLogService = createAuditLogService()
+): UserService {
 	return new UserService({
 		userRepository,
-		adminAuditLogService: createAuditLogService(),
+		adminAuditLogService,
 		avatarCdnBaseUrl: "https://cdn.example.com",
 		argonHasher: { fetch: vi.fn() } as unknown as Fetcher,
 		hashMethod: "argon",
@@ -147,6 +150,20 @@ describe("UserService", () => {
 			const calledUsername = vi.mocked(mockRepo.create).mock.calls[0]?.[1];
 			expect(calledUsername).toBe("alice");
 		});
+
+		it("writes a user.create audit log entry with the acting user", async () => {
+			const insert = vi.fn();
+			const service = createService(mockRepo, createAuditLogService(insert));
+			await service.createUser("alice", "secret", false, "Alice", "alice@example.com", "actor-1");
+			expect(insert).toHaveBeenCalledWith(
+				expect.objectContaining({
+					action: "user.create",
+					resource_type: "user",
+					resource_id: "new-user-id",
+					actor_user_id: "actor-1",
+				})
+			);
+		});
 	});
 
 	describe("updateUser", () => {
@@ -231,6 +248,58 @@ describe("UserService", () => {
 				"user-1",
 				expect.objectContaining({ passwordHash: "hashed-password" })
 			);
+		});
+
+		it("writes a user.update audit log entry listing changed fields", async () => {
+			const user = makeUserRecord();
+			vi.mocked(mockRepo.getById)
+				.mockResolvedValueOnce(user)
+				.mockResolvedValueOnce({ ...user, name: "Alice B" });
+			const insert = vi.fn();
+			const service = createService(mockRepo, createAuditLogService(insert));
+			await service.updateUser("user-1", { name: "Alice B", email: "new@example.com" }, "actor-1");
+			expect(insert).toHaveBeenCalledWith(
+				expect.objectContaining({
+					action: "user.update",
+					resource_type: "user",
+					resource_id: "user-1",
+					actor_user_id: "actor-1",
+				})
+			);
+			const details = JSON.parse(vi.mocked(insert).mock.calls[0]?.[0]?.details ?? "{}");
+			expect(details.changedFields).toEqual(expect.arrayContaining(["name", "email"]));
+			expect(details.changedFields).not.toContain("password");
+		});
+
+		it("writes a user.password_change audit entry when only the password changes", async () => {
+			const user = makeUserRecord();
+			vi.mocked(mockRepo.getById)
+				.mockResolvedValueOnce(user)
+				.mockResolvedValueOnce(user);
+			const insert = vi.fn();
+			const service = createService(mockRepo, createAuditLogService(insert));
+			// Self-service password change: actor and target are the same user.
+			await service.updateUser("user-1", { password: "new-password" }, "user-1");
+			expect(insert).toHaveBeenCalledWith(
+				expect.objectContaining({
+					action: "user.password_change",
+					resource_id: "user-1",
+					actor_user_id: "user-1",
+				})
+			);
+			const details = JSON.parse(vi.mocked(insert).mock.calls[0]?.[0]?.details ?? "{}");
+			expect(details.changedFields).toEqual(["password"]);
+		});
+
+		it("does not write an audit entry when nothing changes", async () => {
+			const user = makeUserRecord();
+			vi.mocked(mockRepo.getById)
+				.mockResolvedValueOnce(user)
+				.mockResolvedValueOnce(user);
+			const insert = vi.fn();
+			const service = createService(mockRepo, createAuditLogService(insert));
+			await service.updateUser("user-1", {}, "actor-1");
+			expect(insert).not.toHaveBeenCalled();
 		});
 
 		it("does not hash a blank password string", async () => {

@@ -20,6 +20,8 @@ import {
 } from "@/lib/email/transactional-html";
 import { TransactionalEmailService } from "./transactional-email.service";
 import { SiteSettingsService } from "./site-settings.service";
+import type { AdminAuditLogService } from "./admin-audit-log.service";
+import { AUDIT_ACTION, AUDIT_RESOURCE } from "./audit-actions";
 
 const MFA_OTP_TTL_MS = 10 * 60 * 1000;
 const EMAIL_VERIFICATION_TTL_MS = 10 * 60 * 1000;
@@ -67,6 +69,7 @@ export interface UserChallengeServiceDeps {
 	siteRepo: SiteSettingsRepository;
 	siteSettings: UserChallengeServiceSiteSettings;
 	mail: UserChallengeServiceMail;
+	auditLog: AdminAuditLogService;
 	env: CloudflareEnv;
 }
 
@@ -113,15 +116,17 @@ export class UserChallengeService {
 	private readonly siteRepo: SiteSettingsRepository;
 	private readonly siteSettings: UserChallengeServiceSiteSettings;
 	private readonly mail: UserChallengeServiceMail;
+	private readonly auditLog: AdminAuditLogService;
 	private readonly env: Record<string, unknown>;
 	private readonly cfEnv: CloudflareEnv;
 
-	constructor({ userRepo, challengeRepo, siteRepo, siteSettings, mail, env }: UserChallengeServiceDeps) {
+	constructor({ userRepo, challengeRepo, siteRepo, siteSettings, mail, auditLog, env }: UserChallengeServiceDeps) {
 		this.userRepo = userRepo;
 		this.challengeRepo = challengeRepo;
 		this.siteRepo = siteRepo;
 		this.siteSettings = siteSettings;
 		this.mail = mail;
+		this.auditLog = auditLog;
 		this.cfEnv = env;
 		this.env = env as unknown as Record<string, unknown>;
 	}
@@ -470,6 +475,14 @@ export class UserChallengeService {
 		});
 		await this.userRepo.update(userId, { passwordHash: hash });
 		await this.challengeRepo.markConsumed(challengeId, new Date().toISOString());
+		// Self-service reset: the user whose password changed is also the actor.
+		await this.auditLog.logAction({
+			actorUserId: userId,
+			action: AUDIT_ACTION.userPasswordReset,
+			resourceType: AUDIT_RESOURCE.user,
+			resourceId: userId,
+			details: { challengeId },
+		});
 		logPasswordReset({ step: "complete_success", challengeId, userId });
 	}
 
