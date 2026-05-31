@@ -27,6 +27,10 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    # Needed by vitest-coverage-report-action to post/update the PR coverage comment.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 
@@ -38,5 +42,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Test
-        run: npm test
+      - name: Test with coverage
+        run: npm run test:coverage
+
+      - name: Report coverage — apps/auth
+        if: always()
+        uses: davelosert/vitest-coverage-report-action@v2
+        with:
+          name: apps/auth
+          working-directory: apps/auth
+
+      - name: Report coverage — eetr-auth-client
+        if: always()
+        uses: davelosert/vitest-coverage-report-action@v2
+        with:
+          name: eetr-auth-client
+          working-directory: packages/eetr-auth-client

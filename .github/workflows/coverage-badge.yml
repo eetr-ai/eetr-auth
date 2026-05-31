@@ -1,0 +1,68 @@
+name: Coverage Badge
+
+# Recomputes the README coverage badge whenever main changes.
+#
+# One-time setup (see README "Coverage" section):
+#   1. Create a public GitHub Gist with any placeholder file; note its ID
+#      (the hash in the gist URL).
+#   2. Create a PAT (classic) with ONLY the `gist` scope, and add it as the
+#      repo secret `GIST_SECRET`.
+#   3. Replace `__GIST_ID__` below with the gist ID, and point the README
+#      badge URL at the same gist.
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  coverage-badge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test with coverage
+        run: npm run test:coverage
+
+      - name: Compute aggregate line coverage
+        id: cov
+        run: |
+          PCT=$(node -e "
+            const fs = require('fs');
+            const files = [
+              'apps/auth/coverage/coverage-summary.json',
+              'packages/eetr-auth-client/coverage/coverage-summary.json',
+            ];
+            let covered = 0, total = 0;
+            for (const f of files) {
+              const lines = JSON.parse(fs.readFileSync(f, 'utf8')).total.lines;
+              covered += lines.covered;
+              total += lines.total;
+            }
+            console.log(total === 0 ? '0' : (covered / total * 100).toFixed(2));
+          ")
+          echo "pct=$PCT" >> "$GITHUB_OUTPUT"
+          echo "Aggregate line coverage: $PCT%"
+
+      - name: Write coverage badge to gist
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: __GIST_ID__
+          filename: eetr-auth-coverage.json
+          label: coverage
+          message: ${{ steps.cov.outputs.pct }}%
+          valColorRange: ${{ steps.cov.outputs.pct }}
+          minColorRange: 50
+          maxColorRange: 90
