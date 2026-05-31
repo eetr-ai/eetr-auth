@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { signOut, auth } from "@/auth";
 import { getPublicSiteSettings } from "@/lib/public-site-settings";
 import { SignInForm } from "@/app/sign-in-form";
+import { ThemeSwitcher } from "@/app/theme-switcher";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,9 @@ export default async function HomePage({
 
 	return (
 		<div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 text-foreground">
+			<div className="fixed right-4 top-4">
+				<ThemeSwitcher />
+			</div>
 			<div className="w-full max-w-sm space-y-8 rounded-xl border border-brand-muted bg-background p-8">
 				<div className="flex flex-col items-center gap-3">
 					{/* eslint-disable-next-line @next/next/no-img-element -- CDN or /public paths from site settings */}
