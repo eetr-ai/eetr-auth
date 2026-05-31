@@ -1,25 +1,19 @@
 import { NextResponse } from "next/server";
 import { withApiContext } from "@/lib/context/with-api-context";
 import { authenticateSessionOrBearerUser } from "@/lib/auth/authenticate-session-or-bearer-user";
-import { deviceNameFromUserAgent } from "@/lib/passkey/device-name";
-import type { RegistrationResponseJSON } from "@simplewebauthn/types";
+import type { AuthenticationResponseJSON } from "@simplewebauthn/types";
 
 function toErrorResponse(error: unknown) {
 	const message = error instanceof Error ? error.message : "Unexpected error.";
 	if (
-		message === "Invalid or expired registration challenge." ||
-		message === "Registration challenge has expired." ||
-		message === "Passkey registration could not be verified."
+		message === "Invalid or expired authentication challenge." ||
+		message === "Authentication challenge has expired." ||
+		message === "Passkey not found." ||
+		message === "Passkey authentication could not be verified."
 	) {
 		return NextResponse.json(
 			{ error: "invalid_request", error_description: message },
 			{ status: 400 }
-		);
-	}
-	if (/unique constraint/i.test(message)) {
-		return NextResponse.json(
-			{ error: "conflict", error_description: "This passkey credential is already registered." },
-			{ status: 409 }
 		);
 	}
 	return NextResponse.json(
@@ -28,6 +22,9 @@ function toErrorResponse(error: unknown) {
 	);
 }
 
+// POST /api/users/passkey/verify — verify the assertion for an availability challenge.
+// Body: { challengeId, authenticationResponse }. Issues no token; only confirms the
+// passkey works on this device and records the use.
 export const POST = withApiContext(async (req, _ctx, getServices) => {
 	const authResult = await authenticateSessionOrBearerUser(req, getServices);
 	if ("response" in authResult) {
@@ -44,34 +41,28 @@ export const POST = withApiContext(async (req, _ctx, getServices) => {
 		);
 	}
 
-	const body = payload as { challengeId?: unknown; registrationResponse?: unknown; name?: unknown };
-
+	const body = payload as { challengeId?: unknown; authenticationResponse?: unknown };
 	if (typeof body.challengeId !== "string" || body.challengeId.trim().length === 0) {
 		return NextResponse.json(
 			{ error: "invalid_request", error_description: "challengeId is required." },
 			{ status: 400 }
 		);
 	}
-	if (!body.registrationResponse || typeof body.registrationResponse !== "object") {
+	if (!body.authenticationResponse || typeof body.authenticationResponse !== "object") {
 		return NextResponse.json(
-			{ error: "invalid_request", error_description: "registrationResponse is required." },
+			{ error: "invalid_request", error_description: "authenticationResponse is required." },
 			{ status: 400 }
 		);
 	}
 
-	// Prefer a client-supplied label; otherwise derive one from the User-Agent.
-	const clientName = typeof body.name === "string" ? body.name : null;
-	const name = clientName?.trim() || deviceNameFromUserAgent(req.headers.get("user-agent"));
-
 	try {
 		const { passkeyService } = getServices();
-		const credential = await passkeyService.verifyAndStoreRegistration(
+		await passkeyService.verifyAvailability(
 			authResult.user.userId,
 			body.challengeId.trim(),
-			body.registrationResponse as RegistrationResponseJSON,
-			name
+			body.authenticationResponse as AuthenticationResponseJSON
 		);
-		return NextResponse.json(credential, { status: 201 });
+		return NextResponse.json({ ok: true }, { status: 200 });
 	} catch (error) {
 		return toErrorResponse(error);
 	}

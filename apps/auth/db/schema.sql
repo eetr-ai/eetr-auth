@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS schema_metadata (
 );
 
 INSERT INTO schema_metadata (key, value)
-VALUES ('schema_version', '0.2.0')
+VALUES ('schema_version', '0.3.0')
 ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 
 -- Environments (e.g. development, staging, production)
@@ -235,6 +235,8 @@ CREATE TABLE IF NOT EXISTS user_passkeys (
   device_type TEXT NOT NULL DEFAULT 'singleDevice',
   backed_up INTEGER NOT NULL DEFAULT 0,
   transports TEXT,
+  name TEXT,
+  last_used_at TEXT,
   created_at TEXT NOT NULL,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );

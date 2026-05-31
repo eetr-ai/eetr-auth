@@ -42,8 +42,11 @@ function createRepoMock() {
 		insertCredential: vi.fn(),
 		findCredentialById: vi.fn(),
 		findCredentialsByUserId: vi.fn(),
+		findCredentialByRowIdForUser: vi.fn(),
 		updateCredentialCounter: vi.fn(),
 		deleteCredential: vi.fn(),
+		deleteCredentialForUser: vi.fn(),
+		renameCredential: vi.fn(),
 		hasCredentialForUser: vi.fn(),
 		insertExchangeToken: vi.fn(),
 		consumeExchangeToken: vi.fn(),
@@ -98,6 +101,8 @@ function makeCredentialRow(overrides?: Partial<PasskeyCredentialRow>): PasskeyCr
 		deviceType: "singleDevice",
 		backedUp: false,
 		transports: JSON.stringify(["internal"]),
+		name: null,
+		lastUsedAt: null,
 		createdAt: "2026-04-06T13:20:00.000Z",
 		...overrides,
 	};
@@ -111,6 +116,42 @@ function makeExchangeTokenRow(overrides?: Partial<PasskeyExchangeTokenRow>): Pas
 		usedAt: null,
 		...overrides,
 	};
+}
+
+/** Wires up the mocks for a successful registration verification + persistence. */
+function setupRegistrationSuccess() {
+	const repo = createRepoMock();
+	const siteRepo = createSiteRepoMock();
+	repo.getChallengeById.mockResolvedValue({
+		id: "challenge-1",
+		userId: "user-1",
+		challenge: "registration-challenge",
+		kind: "registration",
+		expiresAt: "2026-04-06T13:25:00.000Z",
+	});
+	siteRepo.get.mockResolvedValue({
+		siteTitle: "Example Auth",
+		siteUrl: null,
+		cdnUrl: null,
+		logoKey: null,
+		mfaEnabled: true,
+	});
+	verifyRegistrationResponseMock.mockResolvedValue({
+		verified: true,
+		registrationInfo: {
+			credentialID: new Uint8Array([1, 2, 3]),
+			credentialPublicKey: new Uint8Array([4, 5, 6]),
+			counter: 7,
+			credentialDeviceType: "singleDevice",
+			credentialBackedUp: false,
+		},
+	} as never);
+	const service = createService({
+		repo,
+		siteRepo,
+		env: { ISSUER_BASE_URL: "https://auth.example.com" } as CloudflareEnv,
+	});
+	return { service, repo, siteRepo };
 }
 
 describe("passkey helpers", () => {
@@ -285,6 +326,47 @@ describe("PasskeyService", () => {
 		expect(credential.userId).toBe("user-1");
 	});
 
+	it("verifyAndStoreRegistration defaults the name to null when none is supplied", async () => {
+		const { service, repo } = setupRegistrationSuccess();
+		const response = {
+			id: "web-authn-credential-id",
+			response: { transports: ["internal"] },
+		} as unknown as RegistrationResponseJSON;
+
+		await service.verifyAndStoreRegistration("user-1", "challenge-1", response);
+
+		expect(repo.insertCredential).toHaveBeenCalledWith(
+			expect.objectContaining({ name: null, lastUsedAt: null })
+		);
+	});
+
+	it("verifyAndStoreRegistration stores a trimmed, length-capped name", async () => {
+		const { service, repo } = setupRegistrationSuccess();
+		const response = {
+			id: "web-authn-credential-id",
+			response: { transports: ["internal"] },
+		} as unknown as RegistrationResponseJSON;
+		const longName = `  ${"x".repeat(100)}  `;
+
+		await service.verifyAndStoreRegistration("user-1", "challenge-1", response, longName);
+
+		const stored = repo.insertCredential.mock.calls[0][0] as { name: string | null };
+		expect(stored.name).toBe("x".repeat(60));
+		expect(stored.name).toHaveLength(60);
+	});
+
+	it("verifyAndStoreRegistration treats a blank name as null", async () => {
+		const { service, repo } = setupRegistrationSuccess();
+		const response = {
+			id: "web-authn-credential-id",
+			response: { transports: ["internal"] },
+		} as unknown as RegistrationResponseJSON;
+
+		await service.verifyAndStoreRegistration("user-1", "challenge-1", response, "   ");
+
+		expect(repo.insertCredential).toHaveBeenCalledWith(expect.objectContaining({ name: null }));
+	});
+
 	it("verifyAndStoreRegistration throws when WebAuthn verification fails", async () => {
 		const repo = createRepoMock();
 		repo.getChallengeById.mockResolvedValue({
@@ -404,7 +486,11 @@ describe("PasskeyService", () => {
 				expectedRPID: ["auth.sub.example.com", "example.com"],
 			})
 		);
-		expect(repo.updateCredentialCounter).toHaveBeenCalledWith("credential-base64url", 9);
+		expect(repo.updateCredentialCounter).toHaveBeenCalledWith(
+			"credential-base64url",
+			9,
+			expect.any(String)
+		);
 		expect(repo.deleteChallenge).toHaveBeenCalledWith("challenge-2");
 		expect(repo.insertExchangeToken).toHaveBeenCalledWith({
 			id: "challenge-1",
@@ -445,5 +531,201 @@ describe("PasskeyService", () => {
 		const service = createService({ repo });
 
 		await expect(service.consumeExchangeToken("exchange-1")).resolves.toBe("user-1");
+	});
+
+	it("listPasskeys returns safe summaries without secrets", async () => {
+		const repo = createRepoMock();
+		repo.findCredentialsByUserId.mockResolvedValue([
+			makeCredentialRow({
+				id: "row-synced",
+				backedUp: true,
+				name: "iPhone",
+				lastUsedAt: "2026-05-01T00:00:00.000Z",
+			}),
+			makeCredentialRow({ id: "row-bound", backedUp: false, name: null, lastUsedAt: null }),
+		]);
+		const service = createService({ repo });
+
+		const list = await service.listPasskeys("user-1");
+
+		expect(repo.findCredentialsByUserId).toHaveBeenCalledWith("user-1");
+		expect(list).toEqual([
+			{
+				id: "row-synced",
+				name: "iPhone",
+				synced: true,
+				deviceBound: false,
+				createdAt: "2026-04-06T13:20:00.000Z",
+				lastUsedAt: "2026-05-01T00:00:00.000Z",
+			},
+			{
+				id: "row-bound",
+				name: null,
+				synced: false,
+				deviceBound: true,
+				createdAt: "2026-04-06T13:20:00.000Z",
+				lastUsedAt: null,
+			},
+		]);
+		// No secret fields leak into the summary.
+		for (const item of list) {
+			expect(item).not.toHaveProperty("publicKey");
+			expect(item).not.toHaveProperty("counter");
+			expect(item).not.toHaveProperty("credentialId");
+		}
+	});
+
+	it("renamePasskey trims/caps the name and is scoped to the owner", async () => {
+		const repo = createRepoMock();
+		repo.renameCredential.mockResolvedValue(true);
+		const service = createService({ repo });
+
+		await expect(service.renamePasskey("user-1", "row-1", `  ${"y".repeat(80)}  `)).resolves.toBe(true);
+		expect(repo.renameCredential).toHaveBeenCalledWith("user-1", "row-1", "y".repeat(60));
+	});
+
+	it("renamePasskey rejects an empty name", async () => {
+		const repo = createRepoMock();
+		const service = createService({ repo });
+
+		await expect(service.renamePasskey("user-1", "row-1", "   ")).rejects.toThrow(
+			"Passkey name cannot be empty."
+		);
+		expect(repo.renameCredential).not.toHaveBeenCalled();
+	});
+
+	it("renamePasskey returns false when the passkey is not owned", async () => {
+		const repo = createRepoMock();
+		repo.renameCredential.mockResolvedValue(false);
+		const service = createService({ repo });
+
+		await expect(service.renamePasskey("user-1", "not-mine", "Laptop")).resolves.toBe(false);
+	});
+
+	it("removePasskey returns true and is scoped to the owner", async () => {
+		const repo = createRepoMock();
+		repo.deleteCredentialForUser.mockResolvedValue(true);
+		const service = createService({ repo });
+
+		await expect(service.removePasskey("user-1", "row-1")).resolves.toBe(true);
+		expect(repo.deleteCredentialForUser).toHaveBeenCalledWith("user-1", "row-1");
+	});
+
+	it("removePasskey returns false when the passkey is not owned", async () => {
+		const repo = createRepoMock();
+		repo.deleteCredentialForUser.mockResolvedValue(false);
+		const service = createService({ repo });
+
+		await expect(service.removePasskey("user-1", "not-mine")).resolves.toBe(false);
+	});
+
+	it("generateAvailabilityChallenge returns null when the passkey is not owned", async () => {
+		const repo = createRepoMock();
+		repo.findCredentialByRowIdForUser.mockResolvedValue(null);
+		const service = createService({ repo });
+
+		await expect(service.generateAvailabilityChallenge("user-1", "not-mine")).resolves.toBeNull();
+		expect(repo.findCredentialByRowIdForUser).toHaveBeenCalledWith("not-mine", "user-1");
+		expect(repo.insertChallenge).not.toHaveBeenCalled();
+	});
+
+	it("generateAvailabilityChallenge stores a user-bound challenge scoped to the credential", async () => {
+		const repo = createRepoMock();
+		repo.findCredentialByRowIdForUser.mockResolvedValue(makeCredentialRow({ id: "row-1" }));
+		generateAuthenticationOptionsMock.mockResolvedValue({
+			challenge: "availability-challenge",
+		} as never);
+		const service = createService({
+			repo,
+			env: { ISSUER_BASE_URL: "https://auth.example.com" } as CloudflareEnv,
+		});
+
+		const result = await service.generateAvailabilityChallenge("user-1", "row-1");
+
+		expect(result?.challengeId).toBeTypeOf("string");
+		// Challenge is scoped to exactly the requested credential.
+		const optsArg = generateAuthenticationOptionsMock.mock.calls[0][0] as unknown as {
+			allowCredentials: { id: Buffer }[];
+		};
+		expect(optsArg.allowCredentials).toHaveLength(1);
+		expect(optsArg.allowCredentials[0].id.toString("base64url")).toBe("credential-base64url");
+		// Challenge row is bound to the user (so verify can re-check ownership).
+		expect(repo.insertChallenge).toHaveBeenCalledWith(
+			expect.objectContaining({ userId: "user-1", kind: "authentication", challenge: "availability-challenge" })
+		);
+	});
+
+	it("verifyAvailability rejects a challenge not bound to the user", async () => {
+		const repo = createRepoMock();
+		repo.getChallengeById.mockResolvedValue({
+			id: "challenge-1",
+			userId: "someone-else",
+			challenge: "availability-challenge",
+			kind: "authentication",
+			expiresAt: "2026-04-06T13:25:00.000Z",
+		});
+		const service = createService({ repo });
+
+		await expect(
+			service.verifyAvailability("user-1", "challenge-1", {
+				id: "credential-base64url",
+			} as AuthenticationResponseJSON)
+		).rejects.toThrow("Invalid or expired authentication challenge.");
+		expect(repo.updateCredentialCounter).not.toHaveBeenCalled();
+	});
+
+	it("verifyAvailability rejects a credential owned by another user", async () => {
+		const repo = createRepoMock();
+		repo.getChallengeById.mockResolvedValue({
+			id: "challenge-1",
+			userId: "user-1",
+			challenge: "availability-challenge",
+			kind: "authentication",
+			expiresAt: "2099-01-01T00:00:00.000Z",
+		});
+		repo.findCredentialById.mockResolvedValue(makeCredentialRow({ userId: "someone-else" }));
+		const service = createService({ repo });
+
+		await expect(
+			service.verifyAvailability("user-1", "challenge-1", {
+				id: "credential-base64url",
+			} as AuthenticationResponseJSON)
+		).rejects.toThrow("Passkey not found.");
+		expect(repo.updateCredentialCounter).not.toHaveBeenCalled();
+	});
+
+	it("verifyAvailability updates last use and issues no exchange token on success", async () => {
+		const repo = createRepoMock();
+		repo.getChallengeById.mockResolvedValue({
+			id: "challenge-1",
+			userId: "user-1",
+			challenge: "availability-challenge",
+			kind: "authentication",
+			expiresAt: "2099-01-01T00:00:00.000Z",
+		});
+		repo.findCredentialById.mockResolvedValue(makeCredentialRow({ userId: "user-1" }));
+		verifyAuthenticationResponseMock.mockResolvedValue({
+			verified: true,
+			authenticationInfo: { newCounter: 11 },
+		} as never);
+		const service = createService({
+			repo,
+			env: { ISSUER_BASE_URL: "https://auth.example.com" } as CloudflareEnv,
+		});
+
+		await expect(
+			service.verifyAvailability("user-1", "challenge-1", {
+				id: "credential-base64url",
+			} as AuthenticationResponseJSON)
+		).resolves.toBe(true);
+
+		expect(repo.updateCredentialCounter).toHaveBeenCalledWith(
+			"credential-base64url",
+			11,
+			expect.any(String)
+		);
+		expect(repo.deleteChallenge).toHaveBeenCalledWith("challenge-1");
+		// Availability check must not mint a sign-in token.
+		expect(repo.insertExchangeToken).not.toHaveBeenCalled();
 	});
 });

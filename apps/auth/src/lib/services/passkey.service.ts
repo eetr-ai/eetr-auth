@@ -47,6 +47,16 @@ export function fallbackRpIdFromRpId(rpId: string): string | null {
 	return labels.slice(-2).join(".");
 }
 
+/** Safe, display-only view of a passkey for the management UI (no secrets). */
+export interface PasskeySummary {
+	id: string;
+	name: string | null;
+	synced: boolean; // backed up / synced across devices (e.g. iCloud, Google)
+	deviceBound: boolean; // single-device credential
+	createdAt: string;
+	lastUsedAt: string | null;
+}
+
 export interface PasskeyServiceDeps {
 	repo: PasskeyRepository;
 	userRepo: UserRepository;
@@ -145,7 +155,8 @@ export class PasskeyService {
 	async verifyAndStoreRegistration(
 		userId: string,
 		challengeId: string,
-		response: RegistrationResponseJSON
+		response: RegistrationResponseJSON,
+		name?: string | null
 	): Promise<PasskeyCredentialRow> {
 		const challengeRow = await this.repo.getChallengeById(challengeId);
 		if (!challengeRow || challengeRow.kind !== "registration" || challengeRow.userId !== userId) {
@@ -184,6 +195,8 @@ export class PasskeyService {
 			deviceType: credentialDeviceType,
 			backedUp: credentialBackedUp,
 			transports: response.response.transports ? JSON.stringify(response.response.transports) : null,
+			name: name?.trim() ? name.trim().slice(0, 60) : null,
+			lastUsedAt: null,
 			createdAt: new Date().toISOString(),
 		};
 
@@ -266,6 +279,12 @@ export class PasskeyService {
 			throw new Error("Authentication challenge has expired.");
 		}
 
+		// If the device presents a credential we don't recognize, reject the sign-in. We do
+		// NOT delete or prune any stored credential here: a failed/unknown assertion is not
+		// proof a passkey is gone (it may be a transient error, a cancel, or a credential from
+		// a different device that simply isn't usable here), and auto-deleting on failure would
+		// let an attacker strip a victim's passkey and could lock users out. Removal is always
+		// an explicit, user-confirmed action in settings (see removePasskey / verifyAvailability).
 		const credentialRow = await this.repo.findCredentialById(response.id);
 		if (!credentialRow) {
 			throw new Error("Passkey not found.");
@@ -304,10 +323,11 @@ export class PasskeyService {
 			throw new Error("Passkey authentication could not be verified.");
 		}
 
-		// Update the counter to prevent replay attacks
+		// Update the counter to prevent replay attacks (and record last use)
 		await this.repo.updateCredentialCounter(
 			credentialRow.credentialId,
-			authenticationInfo.newCounter
+			authenticationInfo.newCounter,
+			new Date().toISOString()
 		);
 		await this.repo.deleteChallenge(challengeId);
 
@@ -332,6 +352,117 @@ export class PasskeyService {
 		return { exchangeToken, userId: credentialRow.userId };
 	}
 
+	// ── Availability check ("verify this passkey on this device") ─────────────
+
+	/**
+	 * Step 1: create an authentication challenge scoped to a single one of the user's
+	 * passkeys, so the client can test whether that credential is reachable from the
+	 * current device. Returns null if the passkey does not exist or is not owned by
+	 * this user (the route maps that to 404). The challenge is bound to the user.
+	 */
+	async generateAvailabilityChallenge(
+		userId: string,
+		rowId: string
+	): Promise<{ challengeId: string; options: PublicKeyCredentialRequestOptionsJSON } | null> {
+		const credential = await this.repo.findCredentialByRowIdForUser(rowId, userId);
+		if (!credential) return null;
+
+		const { rpId } = await this.getRpDetails();
+
+		const options = await generateAuthenticationOptions({
+			rpID: rpId,
+			userVerification: "preferred",
+			// Scope to just this credential so only it can satisfy the challenge.
+			allowCredentials: [
+				{
+					id: Buffer.from(credential.credentialId, "base64url"),
+					type: "public-key" as const,
+					transports: credential.transports
+						? (JSON.parse(credential.transports) as AuthenticatorTransport[])
+						: undefined,
+				},
+			],
+		});
+
+		const challengeId = crypto.randomUUID();
+		const expiresAt = new Date(Date.now() + CHALLENGE_TTL_MS).toISOString();
+
+		await this.repo.insertChallenge({
+			id: challengeId,
+			userId,
+			challenge: options.challenge,
+			kind: "authentication",
+			expiresAt,
+		});
+
+		log({ action: "availability_challenge_created", userId, rowId, challengeId, rpId });
+		return { challengeId, options };
+	}
+
+	/**
+	 * Step 2: verify the assertion produced for an availability challenge. Unlike
+	 * sign-in, this issues no exchange token — it only proves the credential is usable
+	 * on this device and records the use. The challenge must be bound to this user, and
+	 * the asserted credential must belong to this user.
+	 */
+	async verifyAvailability(
+		userId: string,
+		challengeId: string,
+		response: AuthenticationResponseJSON
+	): Promise<boolean> {
+		const challengeRow = await this.repo.getChallengeById(challengeId);
+		if (!challengeRow || challengeRow.kind !== "authentication" || challengeRow.userId !== userId) {
+			throw new Error("Invalid or expired authentication challenge.");
+		}
+		if (challengeRow.expiresAt <= new Date().toISOString()) {
+			await this.repo.deleteChallenge(challengeId);
+			throw new Error("Authentication challenge has expired.");
+		}
+
+		const credentialRow = await this.repo.findCredentialById(response.id);
+		if (!credentialRow || credentialRow.userId !== userId) {
+			throw new Error("Passkey not found.");
+		}
+
+		const { rpId, fallbackRpId, origin } = await this.getRpDetails();
+		const expectedRpIds = fallbackRpId ? [rpId, fallbackRpId] : rpId;
+
+		const authenticator: AuthenticatorDevice = {
+			credentialID: Buffer.from(credentialRow.credentialId, "base64url"),
+			credentialPublicKey: Buffer.from(credentialRow.publicKey, "base64url"),
+			counter: credentialRow.counter,
+			transports: credentialRow.transports
+				? (JSON.parse(credentialRow.transports) as AuthenticatorTransport[])
+				: undefined,
+		};
+
+		const opts: VerifyAuthenticationResponseOpts = {
+			response,
+			expectedChallenge: challengeRow.challenge,
+			expectedOrigin: origin,
+			expectedRPID: expectedRpIds,
+			requireUserVerification: false,
+			authenticator,
+		};
+
+		const { verified, authenticationInfo } = await verifyAuthenticationResponse(opts);
+
+		if (!verified) {
+			log({ action: "availability_verify_failed", userId, challengeId, credentialId: response.id });
+			throw new Error("Passkey authentication could not be verified.");
+		}
+
+		await this.repo.updateCredentialCounter(
+			credentialRow.credentialId,
+			authenticationInfo.newCounter,
+			new Date().toISOString()
+		);
+		await this.repo.deleteChallenge(challengeId);
+
+		log({ action: "availability_verified", userId, credentialId: credentialRow.credentialId });
+		return true;
+	}
+
 	// ── Exchange token (NextAuth handoff) ─────────────────────────────────────
 
 	/**
@@ -346,6 +477,45 @@ export class PasskeyService {
 		}
 		log({ action: "exchange_token_consumed", userId: row.userId });
 		return row.userId;
+	}
+
+	// ── Management (list / rename / remove) ───────────────────────────────────
+
+	/**
+	 * Lists the user's passkeys as safe summaries. Never exposes the public key,
+	 * counter, or raw credential id — only what the management UI needs to display.
+	 */
+	async listPasskeys(userId: string): Promise<PasskeySummary[]> {
+		const rows = await this.repo.findCredentialsByUserId(userId);
+		return rows.map((r) => ({
+			id: r.id,
+			name: r.name,
+			synced: r.backedUp,
+			deviceBound: !r.backedUp,
+			createdAt: r.createdAt,
+			lastUsedAt: r.lastUsedAt,
+		}));
+	}
+
+	/**
+	 * Renames one of the user's passkeys. Scoped to the owner — returns false if the
+	 * passkey does not exist or is not owned by this user.
+	 */
+	async renamePasskey(userId: string, rowId: string, name: string): Promise<boolean> {
+		const trimmed = name.trim().slice(0, 60);
+		if (!trimmed) throw new Error("Passkey name cannot be empty.");
+		return this.repo.renameCredential(userId, rowId, trimmed);
+	}
+
+	/**
+	 * Removes one of the user's passkeys (server-side record only — the server cannot
+	 * delete the credential from the device/authenticator). Scoped to the owner —
+	 * returns false if the passkey does not exist or is not owned by this user.
+	 */
+	async removePasskey(userId: string, rowId: string): Promise<boolean> {
+		const removed = await this.repo.deleteCredentialForUser(userId, rowId);
+		if (removed) log({ action: "passkey_removed", userId, rowId });
+		return removed;
 	}
 
 	// ── Utilities ─────────────────────────────────────────────────────────────

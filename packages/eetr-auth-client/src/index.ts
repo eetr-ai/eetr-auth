@@ -41,3 +41,6 @@ export type {
   CreateUserParams,
   UpdateUserParams,
 } from "./admin.js";
+
+export { listPasskeys, renamePasskey, removePasskey } from "./passkeys.js";
+export type { PasskeySummary, UserClientConfig } from "./passkeys.js";

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { startAuthentication } from "@simplewebauthn/browser";
+import { startAuthentication, browserSupportsWebAuthnAutofill } from "@simplewebauthn/browser";
 import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/types";
 import { LogOut, ShieldCheck } from "lucide-react";
 import { beginSignInChallenge, clearSignInChallenge, signOutFromChallenge } from "@/app/actions/mfa-actions";
@@ -28,32 +28,56 @@ export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
 		!window.location.hostname.includes(":") &&
 		window.location.hostname.split(".").length >= 3;
 
-	const runPasskeySignInAttempt = async (useFallbackRpId: boolean): Promise<string> => {
-		const challengePath = useFallbackRpId
-			? "/api/auth/passkey/challenge?rpId=fallback"
-			: "/api/auth/passkey/challenge";
-		const challengeRes = await fetch(challengePath, { method: "POST" });
-		if (!challengeRes.ok) throw new Error("Failed to get passkey challenge.");
-		const { challengeId, options } = (await challengeRes.json()) as {
-			challengeId: string;
-			options: PublicKeyCredentialRequestOptionsJSON;
+	const runPasskeySignInAttempt = useCallback(
+		async (useFallbackRpId: boolean, useBrowserAutofill = false): Promise<string> => {
+			const challengePath = useFallbackRpId
+				? "/api/auth/passkey/challenge?rpId=fallback"
+				: "/api/auth/passkey/challenge";
+			const challengeRes = await fetch(challengePath, { method: "POST" });
+			if (!challengeRes.ok) throw new Error("Failed to get passkey challenge.");
+			const { challengeId, options } = (await challengeRes.json()) as {
+				challengeId: string;
+				options: PublicKeyCredentialRequestOptionsJSON;
+			};
+
+			const authResponse = await startAuthentication(options, useBrowserAutofill);
+
+			const verifyRes = await fetch("/api/auth/passkey/verify", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ challengeId, authenticationResponse: authResponse }),
+			});
+			if (!verifyRes.ok) {
+				const body = await verifyRes.json().catch(() => ({}));
+				throw new Error((body as { error_description?: string }).error_description ?? "Passkey verification failed.");
+			}
+
+			const { exchangeToken } = (await verifyRes.json()) as { exchangeToken: string };
+			return exchangeToken;
+		},
+		[]
+	);
+
+	// Conditional UI (autofill): if the current device has a passkey for an account, the
+	// browser surfaces it in the username field's autofill. This resolves only when the
+	// user picks one, so failures/aborts are silent. The explicit button below stays as a
+	// fallback. simplewebauthn auto-aborts this pending ceremony when the button starts one.
+	useEffect(() => {
+		let cancelled = false;
+		(async () => {
+			try {
+				if (!(await browserSupportsWebAuthnAutofill()) || cancelled) return;
+				const exchangeToken = await runPasskeySignInAttempt(false, true);
+				if (cancelled) return;
+				await submitPasskeySignIn(exchangeToken, callbackUrl);
+			} catch {
+				// Autofill unsupported, aborted, or the user signed in another way — stay silent.
+			}
+		})();
+		return () => {
+			cancelled = true;
 		};
-
-		const authResponse = await startAuthentication(options);
-
-		const verifyRes = await fetch("/api/auth/passkey/verify", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ challengeId, authenticationResponse: authResponse }),
-		});
-		if (!verifyRes.ok) {
-			const body = await verifyRes.json().catch(() => ({}));
-			throw new Error((body as { error_description?: string }).error_description ?? "Passkey verification failed.");
-		}
-
-		const { exchangeToken } = (await verifyRes.json()) as { exchangeToken: string };
-		return exchangeToken;
-	};
+	}, [runPasskeySignInAttempt, callbackUrl]);
 
 	const onPasskeySignIn = async () => {
 		setError(null);
@@ -182,7 +206,7 @@ export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
 					name="username"
 					type="text"
 					required
-					autoComplete="username"
+					autoComplete="username webauthn"
 					value={username}
 					onChange={(e) => setUsername(e.target.value)}
 					className="w-full rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground placeholder:text-foreground/50 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
