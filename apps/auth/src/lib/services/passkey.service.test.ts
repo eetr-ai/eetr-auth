@@ -118,6 +118,42 @@ function makeExchangeTokenRow(overrides?: Partial<PasskeyExchangeTokenRow>): Pas
 	};
 }
 
+/** Wires up the mocks for a successful registration verification + persistence. */
+function setupRegistrationSuccess() {
+	const repo = createRepoMock();
+	const siteRepo = createSiteRepoMock();
+	repo.getChallengeById.mockResolvedValue({
+		id: "challenge-1",
+		userId: "user-1",
+		challenge: "registration-challenge",
+		kind: "registration",
+		expiresAt: "2026-04-06T13:25:00.000Z",
+	});
+	siteRepo.get.mockResolvedValue({
+		siteTitle: "Example Auth",
+		siteUrl: null,
+		cdnUrl: null,
+		logoKey: null,
+		mfaEnabled: true,
+	});
+	verifyRegistrationResponseMock.mockResolvedValue({
+		verified: true,
+		registrationInfo: {
+			credentialID: new Uint8Array([1, 2, 3]),
+			credentialPublicKey: new Uint8Array([4, 5, 6]),
+			counter: 7,
+			credentialDeviceType: "singleDevice",
+			credentialBackedUp: false,
+		},
+	} as never);
+	const service = createService({
+		repo,
+		siteRepo,
+		env: { ISSUER_BASE_URL: "https://auth.example.com" } as CloudflareEnv,
+	});
+	return { service, repo, siteRepo };
+}
+
 describe("passkey helpers", () => {
 	it("rpIdFromOrigin strips protocol and port", () => {
 		expect(rpIdFromOrigin("https://Auth.Example.com:3000/")).toBe("auth.example.com");
@@ -288,6 +324,47 @@ describe("PasskeyService", () => {
 		);
 		expect(repo.deleteChallenge).toHaveBeenCalledWith("challenge-1");
 		expect(credential.userId).toBe("user-1");
+	});
+
+	it("verifyAndStoreRegistration defaults the name to null when none is supplied", async () => {
+		const { service, repo } = setupRegistrationSuccess();
+		const response = {
+			id: "web-authn-credential-id",
+			response: { transports: ["internal"] },
+		} as unknown as RegistrationResponseJSON;
+
+		await service.verifyAndStoreRegistration("user-1", "challenge-1", response);
+
+		expect(repo.insertCredential).toHaveBeenCalledWith(
+			expect.objectContaining({ name: null, lastUsedAt: null })
+		);
+	});
+
+	it("verifyAndStoreRegistration stores a trimmed, length-capped name", async () => {
+		const { service, repo } = setupRegistrationSuccess();
+		const response = {
+			id: "web-authn-credential-id",
+			response: { transports: ["internal"] },
+		} as unknown as RegistrationResponseJSON;
+		const longName = `  ${"x".repeat(100)}  `;
+
+		await service.verifyAndStoreRegistration("user-1", "challenge-1", response, longName);
+
+		const stored = repo.insertCredential.mock.calls[0][0] as { name: string | null };
+		expect(stored.name).toBe("x".repeat(60));
+		expect(stored.name).toHaveLength(60);
+	});
+
+	it("verifyAndStoreRegistration treats a blank name as null", async () => {
+		const { service, repo } = setupRegistrationSuccess();
+		const response = {
+			id: "web-authn-credential-id",
+			response: { transports: ["internal"] },
+		} as unknown as RegistrationResponseJSON;
+
+		await service.verifyAndStoreRegistration("user-1", "challenge-1", response, "   ");
+
+		expect(repo.insertCredential).toHaveBeenCalledWith(expect.objectContaining({ name: null }));
 	});
 
 	it("verifyAndStoreRegistration throws when WebAuthn verification fails", async () => {
