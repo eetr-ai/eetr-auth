@@ -1,7 +1,7 @@
 "use server";
 
 import { auth, signOut } from "@/auth";
-import { onServerAction } from "@/lib/context/on-server-action";
+import { onAdminServerAction } from "@/lib/context/on-server-action";
 
 export async function getCurrentUser() {
 	const session = await auth();
@@ -13,14 +13,14 @@ export async function logout() {
 }
 
 export async function getUserById(id: string) {
-	return onServerAction(async (_ctx, getServices) => {
+	return onAdminServerAction(async (_ctx, getServices) => {
 		const { userService } = getServices();
 		return userService.getById(id);
 	});
 }
 
 export async function listUsers() {
-	return onServerAction(async (_ctx, getServices) => {
+	return onAdminServerAction(async (_ctx, getServices) => {
 		const { userService } = getServices();
 		return userService.listUsers();
 	});
@@ -38,7 +38,7 @@ export async function createUser(
 		throw new Error("Unauthorized");
 	}
 
-	return onServerAction(async (_ctx, getServices) => {
+	return onAdminServerAction(async (_ctx, getServices) => {
 		const { userService } = getServices();
 		return userService.createUser(username, password, isAdmin, name, email, session.user.id);
 	});
@@ -61,7 +61,7 @@ export async function updateUser(
 		throw new Error("Unauthorized");
 	}
 
-	return onServerAction(async (_ctx, getServices) => {
+	return onAdminServerAction(async (_ctx, getServices) => {
 		const { userService } = getServices();
 		return userService.updateUser(id, updates, session.user.id);
 	});
@@ -73,7 +73,7 @@ export async function deleteUser(id: string) {
 		throw new Error("Unauthorized");
 	}
 
-	return onServerAction(async (_ctx, getServices) => {
+	return onAdminServerAction(async (_ctx, getServices) => {
 		const { userService } = getServices();
 		await userService.deleteUser(id, session.user.id);
 		return { ok: true };

@@ -1,14 +1,14 @@
 "use server";
 
 import { auth } from "@/auth";
-import { onServerAction } from "@/lib/context/on-server-action";
+import { onAdminServerAction } from "@/lib/context/on-server-action";
 
 export async function runCleanupTokenArtifacts(): Promise<{
 	ok: boolean;
 	totalDeleted?: number;
 	error?: string;
 }> {
-	return onServerAction(async (_ctx, getServices) => {
+	return onAdminServerAction(async (_ctx, getServices) => {
 		const session = await auth();
 		if (!session?.user?.id) {
 			return { ok: false, error: "Unauthorized" };
@@ -44,28 +44,28 @@ export async function runCleanupTokenArtifacts(): Promise<{
 }
 
 export async function listTokenActivity() {
-	return onServerAction(async (_ctx, getServices) => {
+	return onAdminServerAction(async (_ctx, getServices) => {
 		const { oauthTokenService } = getServices();
 		return oauthTokenService.listTokenActivity();
 	});
 }
 
 export async function listTokenActivityByClient(clientId: string) {
-	return onServerAction(async (_ctx, getServices) => {
+	return onAdminServerAction(async (_ctx, getServices) => {
 		const { oauthTokenService } = getServices();
 		return oauthTokenService.listTokenActivity(clientId);
 	});
 }
 
 export async function revokeTokenByValue(token: string) {
-	return onServerAction(async (_ctx, getServices) => {
+	return onAdminServerAction(async (_ctx, getServices) => {
 		const { oauthTokenService } = getServices();
 		return oauthTokenService.revokeTokenByValue(token);
 	});
 }
 
 export async function deleteTokenByValue(token: string) {
-	return onServerAction(async (_ctx, getServices) => {
+	return onAdminServerAction(async (_ctx, getServices) => {
 		const { oauthTokenService } = getServices();
 		return oauthTokenService.deleteTokenByValue(token);
 	});
