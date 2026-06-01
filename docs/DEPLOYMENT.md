@@ -169,6 +169,8 @@ Do not leave the bootstrap password or placeholder email in place.
   actually reach.
 - Expose `jwks.json` at `JWKS_CDN_BASE_URL` (e.g. an R2 custom domain or CDN) so `jwks_uri` in the OIDC
   metadata resolves publicly.
+- Once the hostname is routed, configure the WAF — see
+  [Recommended Cloudflare WAF & Rate Limiting](#recommended-cloudflare-waf--rate-limiting).
 
 ### 9. Smoke test
 
@@ -186,6 +188,58 @@ Then sign in at your auth hostname and exercise the OAuth/token flows you depend
 
 > Schema details (fresh snapshot vs. versioned patches) are documented in
 > [../apps/auth/db/README.md](../apps/auth/db/README.md). `setup:remote` applies the fresh snapshot for you.
+
+## Recommended Cloudflare WAF & Rate Limiting
+
+Once the Worker is routed to your hostname (step 8), put it behind Cloudflare's WAF as defense-in-depth.
+This complements the app's own limits (e.g. `MFA_OTP_MAX_ATTEMPTS`); it does not replace them. Configure
+these under **Security → WAF** for the auth zone in the Cloudflare dashboard.
+
+Start with the managed protections, then add the targeted rules below.
+
+- Enable the **Cloudflare Managed Ruleset** (and the **OWASP Core Ruleset**) for the zone.
+- Turn on **Bot Fight Mode** (or Super Bot Fight Mode if available).
+
+### Rate-limit the authentication and token endpoints
+
+These are the credential-stuffing, OTP-brute-force, and email-abuse targets. Add **Rate Limiting Rules**
+(Security → WAF → Rate limiting rules). Thresholds below are conservative starting points — tune them to
+your real traffic.
+
+| Endpoint(s) | Why | Suggested limit (per client IP) |
+|---|---|---|
+| `POST /api/auth/*` (Auth.js sign-in/session) | Password credential stuffing | ~10 requests / 1 min |
+| `POST /api/token` | OAuth token issuance / client-secret brute force | ~30 requests / 1 min |
+| `POST /api/authorize`, `/api/authorize/complete` | Authorization-code abuse | ~30 requests / 1 min |
+| `POST /api/users/email-verification/request` | Email-send abuse (cost + spam) | ~5 requests / 5 min |
+| `POST /api/users/email-verification/verify` | Email OTP brute force | ~10 requests / 5 min |
+| `/forgot-password`, `/reset-password` and the password-reset action under `/api/auth/*` | Reset-email abuse + token guessing | ~5 requests / 5 min |
+| `POST /api/auth/passkey/verify`, `/api/users/passkey/verify` | WebAuthn assertion brute force | ~20 requests / 1 min |
+
+Recommended action when a limit is exceeded: **Managed Challenge** (or **Block** for the email-send
+endpoints). Match on the path and `http.request.method eq "POST"` so cached `GET`s are unaffected.
+
+### Restrict the admin surface
+
+The admin dashboard and admin API should not be reachable by the general public. Add **WAF custom rules**
+that **block** (or require a challenge / Cloudflare Access) for traffic to:
+
+- `/dashboard*` — admin UI
+- `/api/admin/*` — admin users API and site-logo upload (`/api/admin/users`, `/api/admin/users/[id]`,
+  `/api/admin/site-logo`)
+
+Prefer an **IP allowlist** (your office/VPN egress ranges) or **Cloudflare Access** in front of these paths.
+Note the admin API is also bearer-token protected in-app, so this is an additional layer, not the only one.
+
+### Leave these open (do not block or aggressively rate-limit)
+
+- `/.well-known/openid-configuration` and `/.well-known/oauth-authorization-server` — OIDC/OAuth discovery,
+  fetched by every relying party; keep public and cacheable.
+- The public JWKS at `JWKS_CDN_BASE_URL` (served from R2/CDN, not the Worker) — relying parties fetch it to
+  verify tokens.
+- `/api/health` — uptime checks.
+- `/api/userinfo` and `/api/token/validate` — already require a valid bearer token; light rate limiting is
+  fine but do not block.
 
 ## Upgrade Existing Deployment
 

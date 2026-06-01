@@ -108,7 +108,7 @@ is only sent once email is actually chosen.
 - Full CRUD for users
 - View and manage OAuth clients
 - Token activity log viewer
-- Site configuration (logo, URL)
+- Site identity / branding (title, logo, URL, CDN URL) via the setup wizard
 - Initial setup wizard
 
 ### Admin API

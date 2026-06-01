@@ -10,7 +10,7 @@ This project is designed to be used as a reusable Cloudflare Workers template. Y
 - Argon2id password hashing via an isolated Cloudflare Worker
 - Admin dashboard for managing users, clients, and tokens
 - Passkey (WebAuthn) support
-- Email-based MFA and verification
+- Multi-factor auth — email OTP (site-wide) and authenticator-app TOTP (per-user, RFC 6238) — plus email verification
 - Cloudflare D1 (SQLite) for persistence
 - Cloudflare R2 for JWKS, avatars, and site assets
 - A published TypeScript client library (`@eetr/eetr-auth-client`) for consuming the server
@@ -158,11 +158,23 @@ const payload = await validateJwt(
 
 ## Customization Points
 
-### Branding
+### Site identity & branding
 
-- **Site logo** — Upload via admin dashboard → Settings → Site Logo
-- **Worker name** — Set `worker_name` in `apps/auth/infra/terraform/terraform.tfvars`
-- **Client ID prefix** — Change the `CLIENT_KEY_PREFIX` var in `apps/auth/infra/wrangler.template.jsonc` (e.g. `myapp`)
+Configure these in the admin dashboard under **Dashboard → Setup → Site identity**:
+
+- **Site title** — display name shown on the sign-in/authorize pages and in transactional emails; it is also the issuer label your users see when they enroll an authenticator app (TOTP).
+- **Site logo** — image upload (JPEG/PNG/WebP, up to 5 MB) stored in R2; shown on the sign-in page and embedded in emails. Clearing it reverts to the default logo.
+- **Site URL** — the public auth URL; required so transactional email (password reset, MFA codes) can build working links.
+- **CDN URL** — optional public base URL used to serve the uploaded logo.
+
+> Only the title and logo are visual branding — there is no theme/color, font, or favicon customization.
+
+### Deployment configuration
+
+These are deployment knobs, not branding:
+
+- **Worker name** — set `worker_name` in `apps/auth/infra/terraform/terraform.tfvars`.
+- **Client ID prefix** — change the `CLIENT_KEY_PREFIX` var in `apps/auth/infra/wrangler.template.jsonc` (e.g. `myapp`).
 
 ### Email
 
