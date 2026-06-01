@@ -71,7 +71,7 @@ src/
 | Binding | Type | Purpose |
 |---|---|---|
 | `DB` | D1 Database | All persistent data (users, tokens, clients, etc.) |
-| `BLOG_IMAGES` | R2 Bucket | User avatars, site logo, JWKS JSON |
+| `AUTH_ASSETS` | R2 Bucket | User avatars, site logo, JWKS JSON |
 | `IMAGES` | Images API | Cloudflare image optimization |
 | `ASSETS` | Static Assets | OpenNext-compiled static files |
 | `WORKER_SELF_REFERENCE` | Service Binding | Internal self-calls for routing/caching |
@@ -120,7 +120,7 @@ A published TypeScript library (`@eetr/eetr-auth-client`) for consuming the auth
 
 ## Database Schema
 
-The D1 database contains 23 tables organized around these domains:
+The D1 database contains 22 tables organized around these domains:
 
 ```mermaid
 erDiagram
@@ -137,6 +137,18 @@ erDiagram
         text type
         text token
         timestamp expires_at
+    }
+    user_totp {
+        text user_id PK
+        text secret_enc
+        timestamp confirmed_at
+        timestamp last_used_at
+    }
+    site_settings {
+        text id PK
+        text site_title
+        text logo_key
+        integer mfa_enabled
     }
     environments {
         text id PK
@@ -183,6 +195,7 @@ erDiagram
     }
 
     users ||--o{ user_challenges : has
+    users ||--o| user_totp : enrolls
     users ||--o{ tokens : owns
     users ||--o{ passkeys : registers
     clients ||--o{ authorization_codes : issues
@@ -285,7 +298,8 @@ Terraform (`apps/auth/infra/terraform/`) provisions:
 - Cloudflare D1 database
 - Cloudflare R2 bucket
 
-The `wrangler.generated.jsonc` (gitignored) is rendered from Terraform outputs via `npm run infra:render-wrangler` inside `apps/auth`.
+The `wrangler.generated.jsonc` (gitignored) is rendered from Terraform outputs by `infra:render-wrangler`,
+which `npm run setup:remote` runs automatically.
 
 ---
 
@@ -293,12 +307,10 @@ The `wrangler.generated.jsonc` (gitignored) is rendered from Terraform outputs v
 
 ```mermaid
 flowchart TD
-    A["1. Deploy apps/argon-hasher\nnpx wrangler deploy"] -->
-    B["2. Terraform apply\nprovision D1 + R2"] -->
-    C["3. infra:terraform-output\ninfra:render-wrangler"] -->
-    D["4. jwt:setup-secrets\ninfra:provision\n(upload secrets + JWKS to R2)"] -->
-    E["5. db:migrate:remote\ndb:create-admin:remote"] -->
-    F["6. Deploy apps/auth\nnpm run deploy:auth"]
+    A["1. Terraform apply\nprovision D1 + R2"] -->
+    B["2. Deploy apps/argon-hasher\nnpm run deploy:argon-hasher"] -->
+    C["3. npm run setup:remote\nrender config · provision secrets + JWKS\napply schema · deploy auth · seed admin"]
 ```
 
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for full step-by-step instructions.
+`setup:remote` wraps the individual `infra:*`, `jwt:*`, `db:*`, and deploy steps. See
+[DEPLOYMENT.md](./DEPLOYMENT.md#clean-install) for full step-by-step instructions.

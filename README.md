@@ -89,35 +89,28 @@ cd eetr-auth
 npm install
 ```
 
-### 2. Deploy the password hasher
+### 2. Provision infrastructure with Terraform
 
-> This must be deployed before the auth server.
+Fill in `apps/auth/infra/terraform/terraform.tfvars` (see DEPLOYMENT.md for each variable), then:
+
+```bash
+cd apps/auth/infra/terraform && terraform init && terraform apply && cd -
+```
+
+### 3. Deploy the hasher, then run automated setup
+
+Run these from the repository root. `argon-hasher` must be deployed before the auth Worker:
 
 ```bash
 npm run deploy:argon-hasher
+npm run setup:remote
 ```
 
-### 3. Provision infrastructure and deploy
+`npm run setup:remote` renders the Wrangler config, provisions secrets and JWT/JWKS material, applies the
+fresh database schema, deploys the auth Worker, and seeds the bootstrap admin.
 
-```bash
-cd apps/auth
-
-# Provision D1 + R2 via Terraform
-cd infra/terraform && terraform init && terraform apply && cd ../..
-
-# Generate deployment config, upload secrets, migrate DB
-npm run infra:terraform-output
-npm run infra:render-wrangler
-npm run jwt:setup-secrets
-npm run infra:provision
-npm run db:migrate:remote
-npm run db:create-admin:remote
-
-# Deploy
-npm run deploy
-```
-
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the complete step-by-step guide.
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the complete step-by-step guide, including first-login
+hardening and DNS/JWKS setup.
 
 ---
 

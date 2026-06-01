@@ -10,7 +10,7 @@ This project is designed to be used as a reusable Cloudflare Workers template. Y
 - Argon2id password hashing via an isolated Cloudflare Worker
 - Admin dashboard for managing users, clients, and tokens
 - Passkey (WebAuthn) support
-- Email-based MFA and verification
+- Multi-factor auth — email OTP (site-wide) and authenticator-app TOTP (per-user, RFC 6238) — plus email verification
 - Cloudflare D1 (SQLite) for persistence
 - Cloudflare R2 for JWKS, avatars, and site assets
 - A published TypeScript client library (`@eetr/eetr-auth-client`) for consuming the server
@@ -40,67 +40,56 @@ npm install
 
 ## Step 2 — Customize the Worker Name
 
-The auth worker is named `eetr-auth` by default. If you want a custom name, update it in two places:
+The auth worker is named `eetr-auth` by default. To use a custom name, set `worker_name` in
+`apps/auth/infra/terraform/terraform.tfvars`:
 
-**`apps/auth/wrangler.jsonc`** — change the `name` field and the `WORKER_SELF_REFERENCE` service binding:
-
-```jsonc
-{
-  "name": "my-auth-server",          // ← your worker name
-  "services": [
-    { "binding": "WORKER_SELF_REFERENCE", "service": "my-auth-server" },  // ← match above
-    { "binding": "ARGON_HASHER", "service": "argon-hasher" }              // ← keep as-is
-  ]
-}
+```hcl
+worker_name = "my-auth-server"
 ```
 
-> You do not need to rename `argon-hasher` — it is a shared internal service and its name is fixed in the service binding.
+The Wrangler config (`wrangler.generated.jsonc`) is rendered from `infra/wrangler.template.jsonc` during
+`npm run setup:remote`, and the `WORKER_SELF_REFERENCE` service binding is generated to match `worker_name`
+automatically — you do not edit a Wrangler file by hand.
+
+> You do not need to rename `argon-hasher` — it is a shared internal service and its name is fixed in the
+> `ARGON_HASHER` service binding.
 
 ---
 
 ## Step 3 — Configure Your Domain
 
-Set your domain/subdomain where the auth server will be accessible. This is used in OAuth flows and email links.
-
-You will set these values in `apps/auth/infra/terraform/terraform.tfvars` and they will be written to the rendered wrangler config automatically:
+Set the domain/subdomain where the auth server will be accessible — it is used in OAuth flows and email
+links. Configure these in `apps/auth/infra/terraform/terraform.tfvars`; they are written into the rendered
+Wrangler config automatically:
 
 ```hcl
-site_url = "https://auth.yourdomain.com"
+issuer_base_url   = "https://auth.yourdomain.com"
+auth_url          = "https://auth.yourdomain.com/api/auth/session"  # full Auth.js session endpoint
+jwks_cdn_base_url = "https://cdn.yourdomain.com"
 ```
 
 ---
 
-## Step 4 — Provision Infrastructure
+## Step 4 — Provision and Deploy
 
-See [DEPLOYMENT.md](./DEPLOYMENT.md#provision-infrastructure-first-time) for the full Terraform + secret provisioning steps.
-
-In summary:
-
-```bash
-cd apps/auth/infra/terraform
-terraform init
-terraform apply
-
-cd ../..
-npm run infra:terraform-output
-npm run infra:render-wrangler
-npm run jwt:setup-secrets
-npm run infra:provision
-npm run db:migrate:remote
-npm run db:set-site-url:remote
-npm run db:create-admin:remote
-```
-
----
-
-## Step 5 — Deploy
+See [DEPLOYMENT.md](./DEPLOYMENT.md#clean-install) for the full step-by-step guide. In summary, from the
+repository root:
 
 ```bash
-# From the monorepo root:
-npm run deploy
+# 1. Provision D1 + R2
+cd apps/auth/infra/terraform && terraform init && terraform apply && cd -
+
+# 2. Deploy the password hasher, then run automated setup
+npm run deploy:argon-hasher
+npm run setup:remote
 ```
 
-This deploys `argon-hasher` first (required), then `apps/auth`.
+`npm run setup:remote` renders `wrangler.generated.jsonc`, provisions secrets and JWT/JWKS material, applies
+the database schema, deploys the auth Worker, and seeds the bootstrap admin (`admin` / `admin`). Harden that
+account immediately after first login — see DEPLOYMENT.md.
+
+> To redeploy later without re-running setup, use `npm run deploy` from the repository root (it deploys
+> `argon-hasher` first, then `apps/auth`).
 
 ---
 
@@ -169,11 +158,23 @@ const payload = await validateJwt(
 
 ## Customization Points
 
-### Branding
+### Site identity & branding
 
-- **Site logo** — Upload via admin dashboard → Settings → Site Logo
-- **Worker name** — Change `name` in `apps/auth/wrangler.jsonc`
-- **Client ID prefix** — Change `CLIENT_KEY_PREFIX` var in `wrangler.jsonc` (e.g. `myapp`)
+Configure these in the admin dashboard under **Dashboard → Setup → Site identity**:
+
+- **Site title** — display name shown on the sign-in/authorize pages and in transactional emails; it is also the issuer label your users see when they enroll an authenticator app (TOTP).
+- **Site logo** — image upload (JPEG/PNG/WebP, up to 5 MB) stored in R2; shown on the sign-in page and embedded in emails. Clearing it reverts to the default logo.
+- **Site URL** — the public auth URL; required so transactional email (password reset, MFA codes) can build working links.
+- **CDN URL** — optional public base URL used to serve the uploaded logo.
+
+> Only the title and logo are visual branding — there is no theme/color, font, or favicon customization.
+
+### Deployment configuration
+
+These are deployment knobs, not branding:
+
+- **Worker name** — set `worker_name` in `apps/auth/infra/terraform/terraform.tfvars`.
+- **Client ID prefix** — change the `CLIENT_KEY_PREFIX` var in `apps/auth/infra/wrangler.template.jsonc` (e.g. `myapp`).
 
 ### Email
 
@@ -185,7 +186,7 @@ Default scopes are seeded during `db:bootstrap`. Add custom scopes in the admin 
 
 ### Password Hashing
 
-The default is `argon` (Argon2id via the `argon-hasher` worker). To use an alternative method, set `HASH_METHOD` in `wrangler.jsonc` and implement the hash interface in `apps/auth/src/lib/auth/`.
+The default is `argon` (Argon2id via the `argon-hasher` worker). To use an alternative method, set `HASH_METHOD` in `apps/auth/infra/wrangler.template.jsonc` and implement the hash interface in `apps/auth/src/lib/auth/`.
 
 ---
 
@@ -201,7 +202,7 @@ These files contain instance-specific values and are **gitignored** — you gene
 | `apps/auth/.env.local` | Local env vars |
 | `apps/auth/.dev.vars` | Wrangler local dev secrets |
 
-The committed `apps/auth/wrangler.jsonc` is the **template** — it contains placeholders (`REPLACE_WITH_YOUR_*`) and is the file that gets rendered into `wrangler.generated.jsonc` by the infra scripts.
+The committed `apps/auth/infra/wrangler.template.jsonc` is the **template** — it contains placeholders that get rendered into `wrangler.generated.jsonc` by the infra scripts (`infra:render-wrangler`, run as part of `setup:remote`).
 
 ---
 
@@ -215,9 +216,11 @@ git fetch upstream
 git merge upstream/main
 ```
 
-Check for any new database migrations in `apps/auth/db/migration-*.sql` and apply them:
+Then re-run the automated upgrade, which applies any new versioned schema patches from `apps/auth/db/patches/`
+(via `db:migrate:remote`), refreshes config, provisions only missing secrets, and redeploys:
 
 ```bash
-cd apps/auth
-npm run db:migrate:remote
+npm run upgrade:remote
 ```
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md#upgrade-existing-deployment) for details.

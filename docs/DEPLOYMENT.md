@@ -38,16 +38,20 @@ Best practice for this repo: use one properly scoped API token for the entire in
 
 ## Clean Install
 
-Use this path for a brand-new Cloudflare environment.
+Use this path for a brand-new Cloudflare environment. It is the authoritative, step-by-step fresh-install
+guide for this repo.
 
-The operator inputs are:
+The only manual operator inputs are:
 
-1. export `CLOUDFLARE_API_TOKEN`
+1. export `CLOUDFLARE_API_TOKEN` (see [Cloudflare Preflight](#cloudflare-preflight) above)
 2. fill Terraform variables
-3. run Terraform apply
+3. run `terraform apply`
 4. deploy `argon-hasher`
 
-After that, the repo automates the rest.
+After that, `npm run setup:remote` automates the rest (config rendering, secrets, schema, deploy, admin seed).
+
+All commands below are run **from the repository root** unless a step explicitly says otherwise. The `npm run`
+scripts delegate into `apps/auth` via the npm workspace, so you do not need to `cd apps/auth` to run them.
 
 ### 1. Verify Cloudflare CLI access
 
@@ -55,37 +59,43 @@ After that, the repo automates the rest.
 npx wrangler whoami
 ```
 
-The prescribed install path uses the exported `CLOUDFLARE_API_TOKEN`; `wrangler login` is not required.
+This confirms `CLOUDFLARE_API_TOKEN` is exported and valid, and prints your `account_id`. The prescribed
+install path uses the exported token; `wrangler login` is not required.
 
-### 2. Install prerequisites
+### 2. Install build prerequisites
 
 ```bash
-rustup target add wasm32-unknown-unknown
-cargo install worker-build --version '^0.7'
-npm install
+rustup target add wasm32-unknown-unknown   # WASM target for the Rust argon-hasher
+cargo install worker-build --version '^0.7' # builds the hasher Worker
+npm install                                  # installs all workspace dependencies
 ```
 
 ### 3. Configure Terraform variables
 
 ```bash
-cd apps/auth
-cp infra/terraform/terraform.tfvars.example infra/terraform/terraform.tfvars
+cp apps/auth/infra/terraform/terraform.tfvars.example apps/auth/infra/terraform/terraform.tfvars
 ```
 
-Edit `infra/terraform/terraform.tfvars`:
+Edit `apps/auth/infra/terraform/terraform.tfvars`:
 
 ```hcl
-account_id        = "YOUR_CLOUDFLARE_ACCOUNT_ID"
-d1_database_name  = "eetr-auth"
-r2_bucket_name    = "eetr-auth-assets"
-worker_name       = "eetr-auth"
-issuer_base_url   = "https://auth.yourdomain.com"
-auth_url          = "https://auth.yourdomain.com/api/auth/session"
-jwks_cdn_base_url = "https://cdn.yourdomain.com"
-resend_api_key    = "re_XXXXXXXXXXXX"   # optional
+account_id        = "YOUR_CLOUDFLARE_ACCOUNT_ID"      # from `npx wrangler whoami` or the dashboard
+d1_database_name  = "eetr-auth"                        # name for the D1 database Terraform creates
+r2_bucket_name    = "eetr-auth-assets"                 # R2 bucket for avatars, site logo, and jwks.json
+worker_name       = "eetr-auth"                        # the auth Worker's name (also its service-binding name)
+issuer_base_url   = "https://auth.yourdomain.com"      # OAuth/OIDC issuer; the public auth hostname
+auth_url          = "https://auth.yourdomain.com/api/auth/session"  # FULL Auth.js session endpoint, not just the host
+jwks_cdn_base_url = "https://cdn.yourdomain.com"       # public base URL that serves jwks.json (often an R2 custom domain)
+resend_api_key    = "re_XXXXXXXXXXXX"                  # optional — only needed for transactional email (password reset, OTP)
 ```
 
-`auth_url` must be the full Auth.js session endpoint.
+Notes:
+
+- `auth_url` must be the **full** Auth.js session endpoint (ends in `/api/auth/session`), not just the host.
+- `account_id` is the same value `npx wrangler whoami` printed in step 1.
+- `resend_api_key` is optional; leave it out if you are not sending email yet.
+- R2 must already be activated once on the account (see the [Cloudflare Preflight](#cloudflare-preflight)
+  section) — Terraform cannot create the bucket otherwise.
 
 ### 4. Provision D1 + R2 via Terraform
 
@@ -93,60 +103,74 @@ resend_api_key    = "re_XXXXXXXXXXXX"   # optional
 cd apps/auth/infra/terraform
 terraform init
 terraform apply
+cd -            # return to the repository root for the remaining steps
 ```
+
+**Checkpoint:** after `terraform apply` succeeds, confirm the D1 database and R2 bucket now exist in the
+Cloudflare dashboard (or via `npx wrangler d1 list`).
 
 ### 5. Deploy `argon-hasher`
 
-From the repository root:
+The auth Worker reaches the password hasher through a service binding, so the hasher must exist first.
 
 ```bash
 npm run deploy:argon-hasher
 ```
 
-### 6. Run automated remote setup
+**Checkpoint:** the `argon-hasher` Worker now appears under Workers & Pages in the dashboard.
 
-From the repository root:
+### 6. Run automated remote setup
 
 ```bash
 npm run setup:remote
 ```
 
-This command now automates the post-Terraform setup:
+This single command performs the entire post-Terraform setup, in order:
 
-- exports Terraform outputs
-- renders `wrangler.generated.jsonc`
+- exports Terraform outputs (database id, bucket name, rendered URLs)
+- renders `apps/auth/wrangler.generated.jsonc` from the template
 - validates Cloudflare access and remote prerequisites
-- provisions missing Wrangler secrets and JWT/JWKS material
-- applies the fresh remote schema snapshot
-- builds and deploys the auth worker
+- provisions missing Wrangler secrets and JWT/JWKS material (existing secrets are preserved by default)
+- applies the fresh remote schema snapshot (`db/schema.sql`) to the new D1 database
+- builds and deploys the auth Worker
 - seeds the bootstrap remote admin user
 
 Optional flags:
 
 ```bash
-npm run setup:remote -- --email admin@yourdomain.com
-npm run setup:remote -- --force-rotate-secrets
+npm run setup:remote -- --email admin@yourdomain.com   # set the bootstrap admin email up front
+npm run setup:remote -- --force-rotate-secrets          # regenerate AUTH_SECRET/HMAC_KEY/JWT material (rarely needed on a clean install)
 ```
 
-### 7. First-login hardening
+**Checkpoint:** the command finishes without errors, `apps/auth/wrangler.generated.jsonc` exists, and the
+`eetr-auth` Worker is deployed and listed in the dashboard.
 
-The clean-install flow seeds a bootstrap admin:
+### 7. First-login hardening (do this immediately)
+
+> ⚠️ **Security-critical.** The clean-install flow seeds a well-known bootstrap admin. Leaving it in place
+> exposes the dashboard with publicly known credentials.
+
+The seeded bootstrap admin is:
 
 - Username: `admin`
 - Password: `admin`
 - Default email: `admin@example.com` unless overridden with `--email`
 
-After first login, do one of these immediately:
+After the first successful login, do **one** of these right away:
 
-- create a real admin account, then delete the bootstrap `admin` account
-- or change the bootstrap admin password and replace the placeholder email with a real admin email address
+- create a real admin account, then delete the bootstrap `admin` account, **or**
+- change the bootstrap admin password and replace the placeholder email with a real admin email address.
 
 Do not leave the bootstrap password or placeholder email in place.
 
 ### 8. DNS and JWKS CDN
 
-- Route your auth hostname to the Worker; `ISSUER_BASE_URL` and `AUTH_URL` must match what users use.
-- Expose `jwks.json` at `JWKS_CDN_BASE_URL` so `jwks_uri` in OIDC metadata resolves.
+- Route your auth hostname to the Worker; `ISSUER_BASE_URL` and `AUTH_URL` must match the hostname users
+  actually reach.
+- Expose `jwks.json` at `JWKS_CDN_BASE_URL` (e.g. an R2 custom domain or CDN) so `jwks_uri` in the OIDC
+  metadata resolves publicly.
+- Once the hostname is routed, configure the WAF — see
+  [Recommended Cloudflare WAF & Rate Limiting](#recommended-cloudflare-waf--rate-limiting).
 
 ### 9. Smoke test
 
@@ -159,6 +183,63 @@ Expected response:
 ```json
 { "status": "ok" }
 ```
+
+Then sign in at your auth hostname and exercise the OAuth/token flows you depend on.
+
+> Schema details (fresh snapshot vs. versioned patches) are documented in
+> [../apps/auth/db/README.md](../apps/auth/db/README.md). `setup:remote` applies the fresh snapshot for you.
+
+## Recommended Cloudflare WAF & Rate Limiting
+
+Once the Worker is routed to your hostname (step 8), put it behind Cloudflare's WAF as defense-in-depth.
+This complements the app's own limits (e.g. `MFA_OTP_MAX_ATTEMPTS`); it does not replace them. Configure
+these under **Security → WAF** for the auth zone in the Cloudflare dashboard.
+
+Start with the managed protections, then add the targeted rules below.
+
+- Enable the **Cloudflare Managed Ruleset** (and the **OWASP Core Ruleset**) for the zone.
+- Turn on **Bot Fight Mode** (or Super Bot Fight Mode if available).
+
+### Rate-limit the authentication and token endpoints
+
+These are the credential-stuffing, OTP-brute-force, and email-abuse targets. Add **Rate Limiting Rules**
+(Security → WAF → Rate limiting rules). Thresholds below are conservative starting points — tune them to
+your real traffic.
+
+| Endpoint(s) | Why | Suggested limit (per client IP) |
+|---|---|---|
+| `POST /api/auth/*` (Auth.js sign-in/session) | Password credential stuffing | ~10 requests / 1 min |
+| `POST /api/token` | OAuth token issuance / client-secret brute force | ~30 requests / 1 min |
+| `POST /api/authorize`, `/api/authorize/complete` | Authorization-code abuse | ~30 requests / 1 min |
+| `POST /api/users/email-verification/request` | Email-send abuse (cost + spam) | ~5 requests / 5 min |
+| `POST /api/users/email-verification/verify` | Email OTP brute force | ~10 requests / 5 min |
+| `/forgot-password`, `/reset-password` and the password-reset action under `/api/auth/*` | Reset-email abuse + token guessing | ~5 requests / 5 min |
+| `POST /api/auth/passkey/verify`, `/api/users/passkey/verify` | WebAuthn assertion brute force | ~20 requests / 1 min |
+
+Recommended action when a limit is exceeded: **Managed Challenge** (or **Block** for the email-send
+endpoints). Match on the path and `http.request.method eq "POST"` so cached `GET`s are unaffected.
+
+### Restrict the admin surface
+
+The admin dashboard and admin API should not be reachable by the general public. Add **WAF custom rules**
+that **block** (or require a challenge / Cloudflare Access) for traffic to:
+
+- `/dashboard*` — admin UI
+- `/api/admin/*` — admin users API and site-logo upload (`/api/admin/users`, `/api/admin/users/[id]`,
+  `/api/admin/site-logo`)
+
+Prefer an **IP allowlist** (your office/VPN egress ranges) or **Cloudflare Access** in front of these paths.
+Note the admin API is also bearer-token protected in-app, so this is an additional layer, not the only one.
+
+### Leave these open (do not block or aggressively rate-limit)
+
+- `/.well-known/openid-configuration` and `/.well-known/oauth-authorization-server` — OIDC/OAuth discovery,
+  fetched by every relying party; keep public and cacheable.
+- The public JWKS at `JWKS_CDN_BASE_URL` (served from R2/CDN, not the Worker) — relying parties fetch it to
+  verify tokens.
+- `/api/health` — uptime checks.
+- `/api/userinfo` and `/api/token/validate` — already require a valid bearer token; light rate limiting is
+  fine but do not block.
 
 ## Upgrade Existing Deployment
 
@@ -245,11 +326,12 @@ The auth server will be available at `http://localhost:3000`.
 
 | Variable | Description |
 |---|---|
-| `AUTH_URL` | Full URL to the auth worker (e.g. `https://auth.yourdomain.com`) |
-| `ISSUER_BASE_URL` | OAuth issuer base URL (usually same as `AUTH_URL`) |
+| `AUTH_URL` | Full Auth.js session endpoint (`https://auth.yourdomain.com/api/auth/session`). This is the session URL, **not** the issuer — see `ISSUER_BASE_URL`. |
+| `ISSUER_BASE_URL` | OAuth/OIDC issuer base URL — the public auth host (e.g. `https://auth.yourdomain.com`). |
 | `JWKS_CDN_BASE_URL` | Base URL for the public JWKS endpoint (can be R2 public URL) |
-| `EMAIL_FROM_ADDRESS` | Optional transactional email sender address used for password reset and other email flows. Set this in Wrangler `vars`; if unset, the app falls back to `no-reply@<site hostname>`. |
 | `JWKS_R2_KEY` | R2 key for `jwks.json` (default: `jwks.json`) |
+| `JWT_KID` | Key ID for the active JWT signing key. Rendered into `wrangler.generated.jsonc` by `infra:render-wrangler`/`setup:remote`; you do not normally set it by hand. |
+| `EMAIL_FROM_ADDRESS` | Optional transactional email sender address used for password reset and other email flows. Set this in Wrangler `vars`; if unset, the app falls back to `no-reply@<site hostname>`. |
 | `CLIENT_KEY_PREFIX` | Prefix for generated OAuth client IDs (e.g. `eetr`) |
 | `HASH_METHOD` | Password hashing method: `argon` (default) or legacy fallback |
 | `MFA_OTP_MAX_ATTEMPTS` | Max failed OTP attempts before challenge is invalidated (default: `5`) |
