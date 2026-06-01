@@ -5,6 +5,8 @@ import type {
 	ClientRepository,
 	ClientWithDetails,
 } from "@/lib/repositories/client.repository";
+import type { AdminAuditLogService } from "./admin-audit-log.service";
+import { AUDIT_ACTION, AUDIT_RESOURCE } from "./audit-actions";
 
 function generateClientId(prefix: string): string {
 	const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -37,15 +39,18 @@ export interface CreateClientResult {
 
 export interface ClientServiceDeps {
 	clientRepo: ClientRepository;
+	adminAuditLogService: AdminAuditLogService;
 	env: CloudflareEnv;
 }
 
 export class ClientService {
 	private readonly clientRepo: ClientRepository;
+	private readonly adminAuditLogService: AdminAuditLogService;
 	private readonly env: Record<string, unknown>;
 
-	constructor({ clientRepo, env }: ClientServiceDeps) {
+	constructor({ clientRepo, adminAuditLogService, env }: ClientServiceDeps) {
 		this.clientRepo = clientRepo;
+		this.adminAuditLogService = adminAuditLogService;
 		this.env = env as unknown as Record<string, unknown>;
 	}
 
@@ -98,41 +103,100 @@ export class ClientService {
 		if (uris.length > 0) await this.clientRepo.setRedirectUris(id, uris);
 		if (scopeIds.length > 0) await this.clientRepo.setClientScopes(id, scopeIds);
 		const details = await this.getClientWithDetails(id);
+		// Actor is the creating admin; never log the secret.
+		await this.adminAuditLogService.logAction({
+			actorUserId: params.createdBy,
+			action: AUDIT_ACTION.clientCreate,
+			resourceType: AUDIT_RESOURCE.client,
+			resourceId: id,
+			details: {
+				clientId,
+				name: params.name ?? null,
+				environmentId: params.environmentId,
+				redirectUris: uris,
+				scopeIds,
+			},
+		});
 		return {
 			client: details!,
 			clientSecret,
 		};
 	}
 
-	async updateRedirectUris(id: string, uris: string[]): Promise<ClientWithDetails | null> {
+	async updateRedirectUris(
+		id: string,
+		uris: string[],
+		actorUserId: string | null = null
+	): Promise<ClientWithDetails | null> {
 		const client = await this.clientRepo.getById(id);
 		if (!client) return null;
-		await this.clientRepo.setRedirectUris(id, uris.filter((u) => u?.trim()));
+		const nextUris = uris.filter((u) => u?.trim());
+		await this.clientRepo.setRedirectUris(id, nextUris);
+		await this.adminAuditLogService.logAction({
+			actorUserId,
+			action: AUDIT_ACTION.clientUpdate,
+			resourceType: AUDIT_RESOURCE.client,
+			resourceId: id,
+			details: { clientId: client.clientId, field: "redirectUris", redirectUris: nextUris },
+		});
 		return this.getClientWithDetails(id);
 	}
 
-	async updateScopes(id: string, scopeIds: string[]): Promise<ClientWithDetails | null> {
+	async updateScopes(
+		id: string,
+		scopeIds: string[],
+		actorUserId: string | null = null
+	): Promise<ClientWithDetails | null> {
 		const client = await this.clientRepo.getById(id);
 		if (!client) return null;
-		await this.clientRepo.setClientScopes(id, scopeIds.filter(Boolean));
+		const nextScopeIds = scopeIds.filter(Boolean);
+		await this.clientRepo.setClientScopes(id, nextScopeIds);
+		await this.adminAuditLogService.logAction({
+			actorUserId,
+			action: AUDIT_ACTION.clientUpdate,
+			resourceType: AUDIT_RESOURCE.client,
+			resourceId: id,
+			details: { clientId: client.clientId, field: "scopeIds", scopeIds: nextScopeIds },
+		});
 		return this.getClientWithDetails(id);
 	}
 
-	async updateName(id: string, name: string | null): Promise<ClientWithDetails | null> {
+	async updateName(
+		id: string,
+		name: string | null,
+		actorUserId: string | null = null
+	): Promise<ClientWithDetails | null> {
 		const client = await this.clientRepo.getById(id);
 		if (!client) return null;
 		await this.clientRepo.updateName(id, name);
+		await this.adminAuditLogService.logAction({
+			actorUserId,
+			action: AUDIT_ACTION.clientUpdate,
+			resourceType: AUDIT_RESOURCE.client,
+			resourceId: id,
+			details: { clientId: client.clientId, field: "name", from: client.name, to: name },
+		});
 		return this.getClientWithDetails(id);
 	}
 
-	async delete(id: string): Promise<boolean> {
+	async delete(id: string, actorUserId: string | null = null): Promise<boolean> {
 		const client = await this.clientRepo.getById(id);
 		if (!client) return false;
 		await this.clientRepo.delete(id);
+		await this.adminAuditLogService.logAction({
+			actorUserId,
+			action: AUDIT_ACTION.clientDelete,
+			resourceType: AUDIT_RESOURCE.client,
+			resourceId: id,
+			details: { clientId: client.clientId, name: client.name, environmentId: client.environmentId },
+		});
 		return true;
 	}
 
-	async rotateSecret(id: string): Promise<{ client: Client; clientSecret: string } | null> {
+	async rotateSecret(
+		id: string,
+		actorUserId: string | null = null
+	): Promise<{ client: Client; clientSecret: string } | null> {
 		const hmacKey = resolveHmacKey(this.env);
 		if (!hmacKey) {
 			throw new Error("HMAC_KEY is required to rotate OAuth client secrets (set in Wrangler secrets or .dev.vars).");
@@ -143,6 +207,15 @@ export class ClientService {
 		const stored = await hashClientSecretForStorage(newSecret, hmacKey);
 		await this.clientRepo.updateSecret(id, stored);
 		const updated = await this.clientRepo.getById(id);
-		return updated ? { client: updated, clientSecret: newSecret } : null;
+		if (!updated) return null;
+		// Never log the secret — only that it was rotated.
+		await this.adminAuditLogService.logAction({
+			actorUserId,
+			action: AUDIT_ACTION.clientSecretRotate,
+			resourceType: AUDIT_RESOURCE.client,
+			resourceId: id,
+			details: { clientId: client.clientId },
+		});
+		return { client: updated, clientSecret: newSecret };
 	}
 }

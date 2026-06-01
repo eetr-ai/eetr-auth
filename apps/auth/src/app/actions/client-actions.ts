@@ -39,36 +39,46 @@ export async function createClient(params: {
 }
 
 export async function updateClientRedirectUris(id: string, uris: string[]) {
+	const session = await auth();
+	const actorUserId = session?.user?.id ?? null;
 	return onAdminServerAction(async (_ctx, getServices) => {
 		const { clientService } = getServices();
-		return clientService.updateRedirectUris(id, uris);
+		return clientService.updateRedirectUris(id, uris, actorUserId);
 	});
 }
 
 export async function updateClientScopes(id: string, scopeIds: string[]) {
+	const session = await auth();
+	const actorUserId = session?.user?.id ?? null;
 	return onAdminServerAction(async (_ctx, getServices) => {
 		const { clientService } = getServices();
-		return clientService.updateScopes(id, scopeIds);
+		return clientService.updateScopes(id, scopeIds, actorUserId);
 	});
 }
 
 export async function deleteClient(id: string) {
+	const session = await auth();
+	const actorUserId = session?.user?.id ?? null;
 	return onAdminServerAction(async (_ctx, getServices) => {
 		const { clientService } = getServices();
-		return clientService.delete(id);
+		return clientService.delete(id, actorUserId);
 	});
 }
 
 export async function rotateClientSecret(id: string) {
+	const session = await auth();
+	const actorUserId = session?.user?.id ?? null;
 	return onAdminServerAction(async (_ctx, getServices) => {
 		const { clientService } = getServices();
-		return clientService.rotateSecret(id);
+		return clientService.rotateSecret(id, actorUserId);
 	});
 }
 
 export async function updateClientName(id: string, name: string | null) {
+	const session = await auth();
+	const actorUserId = session?.user?.id ?? null;
 	return onAdminServerAction(async (_ctx, getServices) => {
 		const { clientService } = getServices();
-		return clientService.updateName(id, name);
+		return clientService.updateName(id, name, actorUserId);
 	});
 }

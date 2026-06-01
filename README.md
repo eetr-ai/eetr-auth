@@ -10,6 +10,7 @@ Public auth server package: `@eetr/auth`.
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Rust](https://img.shields.io/badge/Rust-WASM-CE422B?logo=rust&logoColor=white)](https://www.rust-lang.org)
+[![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/juancavallotti/6c3e9b0934625c845df2ffb18bfe4f6d/raw/eetr-auth-coverage.json)](https://github.com/eetr-ai/eetr-auth/actions/workflows/coverage-badge.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -223,6 +224,28 @@ npm run dev
 ```
 
 Server runs at `http://localhost:3000`.
+
+---
+
+## Tests & Coverage
+
+```bash
+npm test            # run the full suite across workspaces
+npm run test:coverage   # same, with a V8 coverage report per workspace
+```
+
+CI runs the suite on every PR and posts a coverage comment per workspace
+(`apps/auth`, `eetr-auth-client`) via the [CI workflow](.github/workflows/ci.yml).
+The README coverage badge is the aggregate line coverage across both workspaces,
+refreshed on every push to `main` by the
+[Coverage Badge workflow](.github/workflows/coverage-badge.yml). That workflow
+writes the badge value to a [public gist](https://gist.github.com/juancavallotti/6c3e9b0934625c845df2ffb18bfe4f6d)
+using the `GIST_SECRET` repo secret.
+
+> **Maintainers:** `GIST_SECRET` currently holds a GitHub token with `gist`
+> scope. To rotate it to a least-privilege credential, mint a classic PAT with
+> **only** the `gist` scope and run
+> `gh secret set GIST_SECRET --repo eetr-ai/eetr-auth`. No workflow change needed.
 
 ---
 

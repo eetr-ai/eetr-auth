@@ -16,6 +16,27 @@ export const AUDIT_ACTION = {
 	userAdminGrant: "user.admin_grant",
 	/** Privilege change: a user's admin rights were removed. */
 	userAdminRevoke: "user.admin_revoke",
+
+	// Client management
+	clientCreate: "client.create",
+	clientUpdate: "client.update",
+	/** Secret rotation: security-sensitive — audited distinctly from a generic update. */
+	clientSecretRotate: "client.secret_rotate",
+	clientDelete: "client.delete",
+
+	// Setup: environments
+	environmentCreate: "environment.create",
+	environmentUpdate: "environment.update",
+	environmentDelete: "environment.delete",
+
+	// Setup: scopes
+	scopeCreate: "scope.create",
+	scopeDelete: "scope.delete",
+
+	// Setup: site settings
+	siteSettingsUpdate: "site_settings.update",
+	siteLogoUpdate: "site_settings.logo_update",
+	siteAdminApiClientsUpdate: "site_settings.admin_api_clients_update",
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION];
@@ -23,6 +44,10 @@ export type AuditAction = (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION];
 /** Resource types referenced by audit-log entries. */
 export const AUDIT_RESOURCE = {
 	user: "user",
+	client: "client",
+	environment: "environment",
+	scope: "scope",
+	siteSettings: "site_settings",
 } as const;
 
 export type AuditResource = (typeof AUDIT_RESOURCE)[keyof typeof AUDIT_RESOURCE];

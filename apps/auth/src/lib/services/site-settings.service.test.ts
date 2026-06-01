@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SiteSettingsRepository } from "@/lib/repositories/site-settings.repository";
 import type { SiteAdminApiClientsRepository } from "@/lib/repositories/site-admin-api-clients.repository";
 import type { ClientRepository } from "@/lib/repositories/client.repository";
+import type { AdminAuditLogRepository } from "@/lib/repositories/admin-audit-log.repository";
 import { DEFAULT_LOGO_PATH, DEFAULT_SITE_TITLE, SiteSettingsService } from "@/lib/services/site-settings.service";
+import { AdminAuditLogService } from "@/lib/services/admin-audit-log.service";
 
 function createSiteRepoMock(): SiteSettingsRepository {
 	return { get: vi.fn(), update: vi.fn() };
@@ -29,16 +31,27 @@ function createClientRepoMock(): ClientRepository {
 	};
 }
 
+function createAuditLogService(insert = vi.fn()): AdminAuditLogService {
+	const logRepo: AdminAuditLogRepository = { insert, listLogs: vi.fn() };
+	return new AdminAuditLogService({ logRepo });
+}
+
 function createService(
 	siteRepo: SiteSettingsRepository,
 	adminClientsRepo: SiteAdminApiClientsRepository,
 	clientRepo: ClientRepository,
-	options: { avatarCdnBaseUrl?: string; resendApiKey?: string | null; authUrl?: string } = {}
+	options: {
+		avatarCdnBaseUrl?: string;
+		resendApiKey?: string | null;
+		authUrl?: string;
+		adminAuditLogService?: AdminAuditLogService;
+	} = {}
 ): SiteSettingsService {
 	return new SiteSettingsService({
 		siteRepo,
 		adminClientsRepo,
 		clientRepo,
+		adminAuditLogService: options.adminAuditLogService ?? createAuditLogService(),
 		avatarCdnBaseUrl: options.avatarCdnBaseUrl ?? "https://cdn.example.com",
 		resendApiKey: options.resendApiKey ?? null,
 		authUrl: options.authUrl ?? "https://auth.example.com",
@@ -222,6 +235,41 @@ describe("SiteSettingsService", () => {
 			await service.updateSiteFields({ siteTitle: "Auth" });
 			expect(siteRepo.update).toHaveBeenCalledWith(expect.objectContaining({ siteTitle: "Auth" }));
 		});
+
+		it("writes a site_settings.update audit entry listing the changed fields", async () => {
+			const siteRepo = createSiteRepoMock();
+			vi.mocked(siteRepo.get)
+				.mockResolvedValueOnce(null)
+				.mockResolvedValueOnce({ siteTitle: "Auth", siteUrl: null, cdnUrl: null, logoKey: null, mfaEnabled: false });
+			const insert = vi.fn();
+			const service = createService(siteRepo, createAdminClientsRepoMock(), createClientRepoMock(), {
+				adminAuditLogService: createAuditLogService(insert),
+			});
+
+			await service.updateSiteFields({ siteTitle: "Auth" }, "admin-1");
+			expect(insert).toHaveBeenCalledWith(
+				expect.objectContaining({
+					actor_user_id: "admin-1",
+					action: "site_settings.update",
+					resource_type: "site_settings",
+					details: JSON.stringify({ changedFields: ["siteTitle"], siteTitle: "Auth" }),
+				})
+			);
+		});
+
+		it("does not write an audit entry when no fields are provided", async () => {
+			const siteRepo = createSiteRepoMock();
+			vi.mocked(siteRepo.get)
+				.mockResolvedValueOnce(null)
+				.mockResolvedValueOnce({ siteTitle: null, siteUrl: null, cdnUrl: null, logoKey: null, mfaEnabled: false });
+			const insert = vi.fn();
+			const service = createService(siteRepo, createAdminClientsRepoMock(), createClientRepoMock(), {
+				adminAuditLogService: createAuditLogService(insert),
+			});
+
+			await service.updateSiteFields({}, "admin-1");
+			expect(insert).not.toHaveBeenCalled();
+		});
 	});
 
 	describe("setLogoKey", () => {
@@ -241,6 +289,34 @@ describe("SiteSettingsService", () => {
 
 			await service.setLogoKey("  logo.png  ");
 			expect(siteRepo.update).toHaveBeenCalledWith({ logoKey: "logo.png" });
+		});
+
+		it("writes a site_settings.logo_update audit entry, flagging a cleared logo", async () => {
+			const siteRepo = createSiteRepoMock();
+			vi.mocked(siteRepo.get).mockResolvedValue(null);
+			const insert = vi.fn();
+			const service = createService(siteRepo, createAdminClientsRepoMock(), createClientRepoMock(), {
+				adminAuditLogService: createAuditLogService(insert),
+			});
+
+			await service.setLogoKey("  logo.png  ", "admin-1");
+			expect(insert).toHaveBeenCalledWith(
+				expect.objectContaining({
+					actor_user_id: "admin-1",
+					action: "site_settings.logo_update",
+					resource_type: "site_settings",
+					details: JSON.stringify({ logoKey: "logo.png", cleared: false }),
+				})
+			);
+
+			insert.mockClear();
+			await service.setLogoKey(null, "admin-1");
+			expect(insert).toHaveBeenCalledWith(
+				expect.objectContaining({
+					action: "site_settings.logo_update",
+					details: JSON.stringify({ logoKey: null, cleared: true }),
+				})
+			);
 		});
 	});
 
@@ -281,6 +357,33 @@ describe("SiteSettingsService", () => {
 
 			await service.setAdminApiClientRowIds(["id-1", "id-1", "  id-1  "]);
 			expect(adminRepo.setClientRowIds).toHaveBeenCalledWith(["id-1"]);
+		});
+
+		it("writes a site_settings.admin_api_clients_update audit entry with the persisted ids", async () => {
+			const clientRepo = createClientRepoMock();
+			vi.mocked(clientRepo.getById).mockResolvedValue({
+				id: "id-1",
+				clientId: "c1",
+				clientSecret: "s",
+				environmentId: "e1",
+				createdBy: "u1",
+				expiresAt: null,
+				name: null,
+			});
+			const insert = vi.fn();
+			const service = createService(createSiteRepoMock(), createAdminClientsRepoMock(), clientRepo, {
+				adminAuditLogService: createAuditLogService(insert),
+			});
+
+			await service.setAdminApiClientRowIds(["id-1", "  id-1  "], "admin-1");
+			expect(insert).toHaveBeenCalledWith(
+				expect.objectContaining({
+					actor_user_id: "admin-1",
+					action: "site_settings.admin_api_clients_update",
+					resource_type: "site_settings",
+					details: JSON.stringify({ clientRowIds: ["id-1"] }),
+				})
+			);
 		});
 	});
 });

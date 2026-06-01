@@ -1,5 +1,6 @@
 "use server";
 
+import { auth } from "@/auth";
 import { onAdminServerAction } from "@/lib/context/on-server-action";
 
 export async function getSiteSettings() {
@@ -15,9 +16,11 @@ export async function updateSiteSettings(input: {
 	cdnUrl?: string | null;
 	mfaEnabled?: boolean;
 }) {
+	const session = await auth();
+	const actorUserId = session?.user?.id ?? null;
 	return onAdminServerAction(async (_ctx, getServices) => {
 		const { siteSettingsService } = getServices();
-		return siteSettingsService.updateSiteFields(input);
+		return siteSettingsService.updateSiteFields(input, actorUserId);
 	});
 }
 
@@ -29,15 +32,19 @@ export async function getAdminApiClientRowIds() {
 }
 
 export async function setAdminApiClientRowIds(rowIds: string[]) {
+	const session = await auth();
+	const actorUserId = session?.user?.id ?? null;
 	return onAdminServerAction(async (_ctx, getServices) => {
 		const { siteSettingsService } = getServices();
-		await siteSettingsService.setAdminApiClientRowIds(rowIds);
+		await siteSettingsService.setAdminApiClientRowIds(rowIds, actorUserId);
 	});
 }
 
 export async function clearSiteLogo() {
+	const session = await auth();
+	const actorUserId = session?.user?.id ?? null;
 	return onAdminServerAction(async (_ctx, getServices) => {
 		const { siteSettingsService } = getServices();
-		return siteSettingsService.setLogoKey(null);
+		return siteSettingsService.setLogoKey(null, actorUserId);
 	});
 }
