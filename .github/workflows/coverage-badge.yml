@@ -2,13 +2,11 @@ name: Coverage Badge
 
 # Recomputes the README coverage badge whenever main changes.
 #
-# One-time setup (see README "Coverage" section):
-#   1. Create a public GitHub Gist with any placeholder file; note its ID
-#      (the hash in the gist URL).
-#   2. Create a PAT (classic) with ONLY the `gist` scope, and add it as the
-#      repo secret `GIST_SECRET`.
-#   3. Replace `__GIST_ID__` below with the gist ID, and point the README
-#      badge URL at the same gist.
+# Wired to gist https://gist.github.com/juancavallotti/6c3e9b0934625c845df2ffb18bfe4f6d
+# (file eetr-auth-coverage.json), authenticated with the `GIST_SECRET` repo
+# secret. To rotate that secret to a least-privilege token, create a classic
+# PAT with ONLY the `gist` scope and re-set GIST_SECRET — no workflow change
+# needed.
 
 on:
   push:
@@ -59,7 +57,7 @@ jobs:
         uses: schneegans/dynamic-badges-action@v1.7.0
         with:
           auth: ${{ secrets.GIST_SECRET }}
-          gistID: __GIST_ID__
+          gistID: 6c3e9b0934625c845df2ffb18bfe4f6d
           filename: eetr-auth-coverage.json
           label: coverage
           message: ${{ steps.cov.outputs.pct }}%
