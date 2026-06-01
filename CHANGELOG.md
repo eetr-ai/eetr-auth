@@ -2,7 +2,7 @@
 
 All notable changes to this monorepo are documented in this file.
 
-The current released baseline for both the auth server and the client library is 0.2.0.
+The current released baseline for both the auth server and the client library is 0.3.1.
 
 ## [0.3.1](https://github.com/eetr-ai/eetr-auth/compare/v0.3.0...v0.3.1) (2026-05-31)
 

@@ -9,7 +9,7 @@ variable "d1_database_name" {
 }
 
 variable "r2_bucket_name" {
-  description = "R2 bucket name for BLOG_IMAGES (e.g. blog-images)."
+  description = "R2 bucket name for the AUTH_ASSETS binding (e.g. eetr-auth-assets)."
   type        = string
 }
 
