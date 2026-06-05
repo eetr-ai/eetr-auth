@@ -15,6 +15,13 @@ import {
 	createScope,
 	deleteScope,
 } from "@/app/actions/scope-actions";
+import {
+	listPasswordPolicies,
+	createPasswordPolicy,
+	updatePasswordPolicy,
+	deletePasswordPolicy,
+} from "@/app/actions/password-policy-actions";
+import type { CreatePasswordPolicyInput } from "@/lib/repositories/password-policy.repository";
 import { listClients } from "@/app/actions/client-actions";
 import {
 	getSiteSettings,
@@ -36,6 +43,7 @@ import { SiteIdentitySection } from "./_components/site-identity-section";
 import { AdminApiSection } from "./_components/admin-api-section";
 import { EnvironmentsSection } from "./_components/environments-section";
 import { ScopesSection } from "./_components/scopes-section";
+import { PasswordPoliciesSection } from "./_components/password-policies-section";
 
 const { Provider: SetupPageStateProvider, useContextAccessors: useSetupPageState } =
 	bootstrapProvider<SetupPageState, ReducerAction<SetupPageActionType>>(
@@ -57,6 +65,8 @@ function SetupPageContent() {
 		activeTab,
 		environments,
 		scopes,
+		passwordPolicies,
+		passwordPolicyError,
 		loading,
 		envName,
 		scopeName,
@@ -85,15 +95,17 @@ function SetupPageContent() {
 	const load = async () => {
 		dispatch({ type: SetupPageActionType.SET_LOADING, data: true });
 		try {
-			const [envs, scopesList, settings, clientsRaw, adminIds] = await Promise.all([
+			const [envs, scopesList, policiesList, settings, clientsRaw, adminIds] = await Promise.all([
 				listEnvironments(),
 				listScopes(),
+				listPasswordPolicies(),
 				getSiteSettings(),
 				listClients(),
 				getAdminApiClientRowIds(),
 			]);
 			dispatch({ type: SetupPageActionType.SET_ENVIRONMENTS, data: envs });
 			dispatch({ type: SetupPageActionType.SET_SCOPES, data: scopesList });
+			dispatch({ type: SetupPageActionType.SET_PASSWORD_POLICIES, data: policiesList });
 			dispatch({ type: SetupPageActionType.SET_SITE_SETTINGS, data: settings });
 			const clientItems: ClientListItem[] = clientsRaw.map((c) => ({
 				id: c.id,
@@ -207,6 +219,79 @@ function SetupPageContent() {
 				type: SetupPageActionType.SET_SCOPE_ERROR,
 				data: err instanceof Error ? err.message : "Failed to delete scope",
 			});
+		}
+	};
+
+	const handleCreatePolicy = async (
+		input: CreatePasswordPolicyInput,
+		environmentIds: string[]
+	): Promise<boolean> => {
+		dispatch({ type: SetupPageActionType.SET_PASSWORD_POLICY_ERROR, data: null });
+		try {
+			const result = await createPasswordPolicy(input, environmentIds);
+			if (!result.ok) {
+				dispatch({
+					type: SetupPageActionType.SET_PASSWORD_POLICY_ERROR,
+					data: result.error ?? "Failed to create policy",
+				});
+				return false;
+			}
+			await load();
+			return true;
+		} catch (err) {
+			dispatch({
+				type: SetupPageActionType.SET_PASSWORD_POLICY_ERROR,
+				data: err instanceof Error ? err.message : "Failed to create policy",
+			});
+			return false;
+		}
+	};
+
+	const handleUpdatePolicy = async (
+		id: string,
+		input: CreatePasswordPolicyInput,
+		environmentIds: string[]
+	): Promise<boolean> => {
+		dispatch({ type: SetupPageActionType.SET_PASSWORD_POLICY_ERROR, data: null });
+		try {
+			const result = await updatePasswordPolicy(id, input, environmentIds);
+			if (!result.ok) {
+				dispatch({
+					type: SetupPageActionType.SET_PASSWORD_POLICY_ERROR,
+					data: result.error ?? "Failed to update policy",
+				});
+				return false;
+			}
+			await load();
+			return true;
+		} catch (err) {
+			dispatch({
+				type: SetupPageActionType.SET_PASSWORD_POLICY_ERROR,
+				data: err instanceof Error ? err.message : "Failed to update policy",
+			});
+			return false;
+		}
+	};
+
+	const handleDeletePolicy = async (id: string): Promise<boolean> => {
+		dispatch({ type: SetupPageActionType.SET_PASSWORD_POLICY_ERROR, data: null });
+		try {
+			const result = await deletePasswordPolicy(id);
+			if (!result.ok) {
+				dispatch({
+					type: SetupPageActionType.SET_PASSWORD_POLICY_ERROR,
+					data: result.error ?? "Failed to delete policy",
+				});
+				return false;
+			}
+			await load();
+			return true;
+		} catch (err) {
+			dispatch({
+				type: SetupPageActionType.SET_PASSWORD_POLICY_ERROR,
+				data: err instanceof Error ? err.message : "Failed to delete policy",
+			});
+			return false;
 		}
 	};
 
@@ -370,6 +455,19 @@ function SetupPageContent() {
 				dispatch={dispatch}
 				onCreate={handleCreateScope}
 				onDelete={handleDeleteScope}
+			/>
+
+			<PasswordPoliciesSection
+				activeTab={activeTab}
+				policies={passwordPolicies}
+				environments={environments}
+				error={passwordPolicyError}
+				onClearError={() =>
+					dispatch({ type: SetupPageActionType.SET_PASSWORD_POLICY_ERROR, data: null })
+				}
+				onCreate={handleCreatePolicy}
+				onUpdate={handleUpdatePolicy}
+				onDelete={handleDeletePolicy}
 			/>
 		</main>
 	);

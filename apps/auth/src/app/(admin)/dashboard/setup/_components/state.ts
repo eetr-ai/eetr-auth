@@ -2,6 +2,7 @@ import { ReducerAction } from "@eetr/react-reducer-utils";
 import type { SiteSettingsDto } from "@/lib/services/site-settings.service";
 import type { Environment } from "@/lib/repositories/environment.repository";
 import type { Scope } from "@/lib/repositories/scope.repository";
+import type { PasswordPolicyWithEnvironments } from "@/lib/repositories/password-policy.repository";
 
 export interface ClientListItem {
 	id: string;
@@ -10,12 +11,19 @@ export interface ClientListItem {
 	environmentId: string;
 }
 
-export type SetupTabId = "site" | "admin-api" | "environments" | "scopes";
+export type SetupTabId =
+	| "site"
+	| "admin-api"
+	| "environments"
+	| "scopes"
+	| "password-policies";
 
 export enum SetupPageActionType {
 	SET_ACTIVE_TAB = "SET_ACTIVE_TAB",
 	SET_ENVIRONMENTS = "SET_ENVIRONMENTS",
 	SET_SCOPES = "SET_SCOPES",
+	SET_PASSWORD_POLICIES = "SET_PASSWORD_POLICIES",
+	SET_PASSWORD_POLICY_ERROR = "SET_PASSWORD_POLICY_ERROR",
 	SET_LOADING = "SET_LOADING",
 	SET_ENV_NAME = "SET_ENV_NAME",
 	SET_SCOPE_NAME = "SET_SCOPE_NAME",
@@ -41,6 +49,8 @@ export interface SetupPageState {
 	activeTab: SetupTabId;
 	environments: Environment[];
 	scopes: Scope[];
+	passwordPolicies: PasswordPolicyWithEnvironments[];
+	passwordPolicyError: string | null;
 	loading: boolean;
 	envName: string;
 	scopeName: string;
@@ -66,6 +76,8 @@ export const initialState: SetupPageState = {
 	activeTab: "site",
 	environments: [],
 	scopes: [],
+	passwordPolicies: [],
+	passwordPolicyError: null,
 	loading: true,
 	envName: "",
 	scopeName: "",
@@ -98,6 +110,13 @@ export function reducer(
 			return { ...state, environments: (action.data as Environment[]) ?? [] };
 		case SetupPageActionType.SET_SCOPES:
 			return { ...state, scopes: (action.data as Scope[]) ?? [] };
+		case SetupPageActionType.SET_PASSWORD_POLICIES:
+			return {
+				...state,
+				passwordPolicies: (action.data as PasswordPolicyWithEnvironments[]) ?? [],
+			};
+		case SetupPageActionType.SET_PASSWORD_POLICY_ERROR:
+			return { ...state, passwordPolicyError: (action.data as string | null) ?? null };
 		case SetupPageActionType.SET_LOADING:
 			return { ...state, loading: (action.data as boolean | undefined) ?? false };
 		case SetupPageActionType.SET_ENV_NAME:
