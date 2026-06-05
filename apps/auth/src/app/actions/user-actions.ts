@@ -54,6 +54,7 @@ export async function updateUser(
 		password?: string;
 		isAdmin?: boolean;
 		avatarKey?: string | null;
+		environmentIds?: string[];
 	}
 ) {
 	const session = await auth();
@@ -72,6 +73,7 @@ export async function updateUser(
 		...(updates.password !== undefined ? { password: updates.password } : {}),
 		...(updates.isAdmin !== undefined ? { isAdmin: updates.isAdmin } : {}),
 		...(updates.avatarKey !== undefined ? { avatarKey: updates.avatarKey } : {}),
+		...(updates.environmentIds !== undefined ? { environmentIds: updates.environmentIds } : {}),
 	};
 
 	return onAdminServerAction(async (_ctx, getServices) => {

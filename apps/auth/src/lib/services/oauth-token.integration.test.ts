@@ -370,6 +370,10 @@ class InMemoryUserRepo implements UserRepository {
 	}
 	async update(): Promise<void> {}
 	async delete(): Promise<void> {}
+	async getUserEnvironments(): Promise<string[]> {
+		return [];
+	}
+	async setUserEnvironments(): Promise<void> {}
 	async deleteWithAudit(): Promise<void> {}
 }
 

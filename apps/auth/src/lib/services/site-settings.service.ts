@@ -1,4 +1,5 @@
 import type { ClientRepository } from "@/lib/repositories/client.repository";
+import type { PasswordPolicyRepository } from "@/lib/repositories/password-policy.repository";
 import type { SiteAdminApiClientsRepository } from "@/lib/repositories/site-admin-api-clients.repository";
 import type { SiteSettingsRepository } from "@/lib/repositories/site-settings.repository";
 import type { AdminAuditLogService } from "./admin-audit-log.service";
@@ -13,6 +14,8 @@ export interface SiteSettingsDto {
 	cdnUrl: string | null;
 	logoKey: string | null;
 	mfaEnabled: boolean;
+	/** Password policy applied to admin sign-in, or null when none is selected. */
+	adminPasswordPolicyId: string | null;
 	/** True when Site URL and Resend are configured so MFA can be turned on. */
 	mfaCanEnable: boolean;
 	displayTitle: string;
@@ -44,6 +47,7 @@ export interface SiteSettingsServiceDependencies {
 	siteRepo: SiteSettingsRepository;
 	adminClientsRepo: SiteAdminApiClientsRepository;
 	clientRepo: ClientRepository;
+	passwordPolicyRepo: PasswordPolicyRepository;
 	adminAuditLogService: AdminAuditLogService;
 	avatarCdnBaseUrl: string;
 	resendApiKey: string | null;
@@ -54,6 +58,7 @@ export class SiteSettingsService {
 	private readonly siteRepo: SiteSettingsRepository;
 	private readonly adminClientsRepo: SiteAdminApiClientsRepository;
 	private readonly clientRepo: ClientRepository;
+	private readonly passwordPolicyRepo: PasswordPolicyRepository;
 	private readonly adminAuditLogService: AdminAuditLogService;
 	private readonly avatarCdnBaseUrl: string;
 	private readonly resendApiKey: string | null;
@@ -63,6 +68,7 @@ export class SiteSettingsService {
 		siteRepo,
 		adminClientsRepo,
 		clientRepo,
+		passwordPolicyRepo,
 		adminAuditLogService,
 		avatarCdnBaseUrl,
 		resendApiKey,
@@ -71,6 +77,7 @@ export class SiteSettingsService {
 		this.siteRepo = siteRepo;
 		this.adminClientsRepo = adminClientsRepo;
 		this.clientRepo = clientRepo;
+		this.passwordPolicyRepo = passwordPolicyRepo;
 		this.adminAuditLogService = adminAuditLogService;
 		this.avatarCdnBaseUrl = avatarCdnBaseUrl.replace(/\/+$/, "");
 		this.resendApiKey = resendApiKey;
@@ -117,6 +124,7 @@ export class SiteSettingsService {
 		const cdnUrl = row?.cdnUrl ?? null;
 		const logoKey = row?.logoKey ?? null;
 		const mfaEnabled = row?.mfaEnabled ?? false;
+		const adminPasswordPolicyId = row?.adminPasswordPolicyId ?? null;
 		const mfaCanEnable = this.computeMfaCanEnable(siteUrl);
 		return {
 			siteTitle,
@@ -124,6 +132,7 @@ export class SiteSettingsService {
 			cdnUrl,
 			logoKey,
 			mfaEnabled,
+			adminPasswordPolicyId,
 			mfaCanEnable,
 			displayTitle: this.getDisplaySiteTitle(siteTitle),
 			displayLogoUrl: this.getDisplayLogoUrl(logoKey, cdnUrl),
@@ -136,6 +145,7 @@ export class SiteSettingsService {
 			siteUrl?: string | null;
 			cdnUrl?: string | null;
 			mfaEnabled?: boolean;
+			adminPasswordPolicyId?: string | null;
 		},
 		actorUserId: string | null = null
 	): Promise<SiteSettingsDto> {
@@ -143,9 +153,19 @@ export class SiteSettingsService {
 		const siteTitle = input.siteTitle !== undefined ? normalizeOptional(input.siteTitle) : undefined;
 		const siteUrl = input.siteUrl !== undefined ? normalizeOptional(input.siteUrl) : undefined;
 		const cdnUrl = input.cdnUrl !== undefined ? normalizeOptional(input.cdnUrl) : undefined;
+		const adminPasswordPolicyId =
+			input.adminPasswordPolicyId !== undefined
+				? normalizeOptional(input.adminPasswordPolicyId)
+				: undefined;
 
 		if (siteUrl !== undefined) assertOptionalHttpUrl("Site URL", siteUrl);
 		if (cdnUrl !== undefined) assertOptionalHttpUrl("CDN URL", cdnUrl);
+		if (adminPasswordPolicyId != null) {
+			const policy = await this.passwordPolicyRepo.getById(adminPasswordPolicyId);
+			if (!policy) {
+				throw new Error("Selected admin password policy no longer exists.");
+			}
+		}
 
 		const nextSiteUrl = siteUrl !== undefined ? siteUrl : current?.siteUrl ?? null;
 		const nextMfaEnabled =
@@ -173,12 +193,14 @@ export class SiteSettingsService {
 			...(siteUrl !== undefined ? { siteUrl } : {}),
 			...(cdnUrl !== undefined ? { cdnUrl } : {}),
 			...(input.mfaEnabled !== undefined ? { mfaEnabled: input.mfaEnabled } : {}),
+			...(adminPasswordPolicyId !== undefined ? { adminPasswordPolicyId } : {}),
 		});
 		const changedFields = [
 			...(siteTitle !== undefined ? ["siteTitle"] : []),
 			...(siteUrl !== undefined ? ["siteUrl"] : []),
 			...(cdnUrl !== undefined ? ["cdnUrl"] : []),
 			...(input.mfaEnabled !== undefined ? ["mfaEnabled"] : []),
+			...(adminPasswordPolicyId !== undefined ? ["adminPasswordPolicyId"] : []),
 		];
 		if (changedFields.length > 0) {
 			await this.adminAuditLogService.logAction({
@@ -191,6 +213,7 @@ export class SiteSettingsService {
 					...(siteUrl !== undefined ? { siteUrl } : {}),
 					...(cdnUrl !== undefined ? { cdnUrl } : {}),
 					...(input.mfaEnabled !== undefined ? { mfaEnabled: input.mfaEnabled } : {}),
+					...(adminPasswordPolicyId !== undefined ? { adminPasswordPolicyId } : {}),
 				},
 			});
 		}

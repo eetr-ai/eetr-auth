@@ -1,5 +1,5 @@
 import type { ReducerAction } from "@eetr/react-reducer-utils";
-import { Globe2, KeyRound, Layers, Tag, type LucideIcon } from "lucide-react";
+import { Globe2, KeyRound, Layers, Lock, Tag, type LucideIcon } from "lucide-react";
 import { SetupPageActionType, type SetupTabId } from "./state";
 
 const tabs: { id: SetupTabId; label: string; icon: LucideIcon }[] = [
@@ -7,6 +7,7 @@ const tabs: { id: SetupTabId; label: string; icon: LucideIcon }[] = [
 	{ id: "admin-api", label: "Admin API", icon: KeyRound },
 	{ id: "environments", label: "Environments", icon: Layers },
 	{ id: "scopes", label: "Scopes", icon: Tag },
+	{ id: "password-policies", label: "Password policies", icon: Lock },
 ];
 
 interface SetupTabsProps {

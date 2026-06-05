@@ -24,6 +24,7 @@ export const getPublicSiteSettings = cache(async (): Promise<SiteSettingsDto> =>
 			cdnUrl: null,
 			logoKey: null,
 			mfaEnabled: false,
+			adminPasswordPolicyId: null,
 			mfaCanEnable: false,
 			displayTitle: DEFAULT_SITE_TITLE,
 			displayLogoUrl: DEFAULT_LOGO_PATH,

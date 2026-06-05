@@ -2,10 +2,12 @@ import type { FormEvent } from "react";
 import { Users } from "lucide-react";
 import { SectionCard } from "@/components/ui";
 import type { UserRecord } from "@/lib/repositories/admin.repository";
+import type { Environment } from "@/lib/repositories/environment.repository";
 import { UserRow } from "./user-row";
 
 interface UsersSectionProps {
 	users: UserRecord[];
+	environments: Environment[];
 	editingUserId: string | null;
 	editingUsername: string;
 	onEditingUsernameChange: (value: string) => void;
@@ -17,6 +19,8 @@ interface UsersSectionProps {
 	onEditingPasswordChange: (value: string) => void;
 	editingIsAdmin: boolean;
 	onEditingIsAdminChange: (value: boolean) => void;
+	editingEnvironmentIds: string[];
+	onEditingEnvironmentIdsChange: (ids: string[]) => void;
 	onUpdate: (e: FormEvent) => void;
 	onCancelEdit: () => void;
 	onStartEdit: (user: UserRecord) => void;
@@ -33,6 +37,7 @@ interface UsersSectionProps {
 
 export function UsersSection({
 	users,
+	environments,
 	editingUserId,
 	editingUsername,
 	onEditingUsernameChange,
@@ -44,6 +49,8 @@ export function UsersSection({
 	onEditingPasswordChange,
 	editingIsAdmin,
 	onEditingIsAdminChange,
+	editingEnvironmentIds,
+	onEditingEnvironmentIdsChange,
 	onUpdate,
 	onCancelEdit,
 	onStartEdit,
@@ -64,6 +71,7 @@ export function UsersSection({
 					<UserRow
 						key={user.id}
 						user={user}
+						environments={environments}
 						isEditing={editingUserId === user.id}
 						editingUsername={editingUsername}
 						onEditingUsernameChange={onEditingUsernameChange}
@@ -75,6 +83,8 @@ export function UsersSection({
 						onEditingPasswordChange={onEditingPasswordChange}
 						editingIsAdmin={editingIsAdmin}
 						onEditingIsAdminChange={onEditingIsAdminChange}
+						editingEnvironmentIds={editingEnvironmentIds}
+						onEditingEnvironmentIdsChange={onEditingEnvironmentIdsChange}
 						onUpdate={onUpdate}
 						onCancelEdit={onCancelEdit}
 						onStartEdit={() => onStartEdit(user)}

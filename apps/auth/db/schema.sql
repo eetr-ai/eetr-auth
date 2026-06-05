@@ -1,5 +1,5 @@
 -- eetr-auth D1 schema (SQLite)
--- Current schema version: 0.4.0
+-- Current schema version: 0.4.1
 -- Apply with: npm run db:schema (fresh local), npm run db:schema:remote (fresh remote),
 -- or the db:migrate variants when upgrading an existing environment
 
@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS schema_metadata (
 );
 
 INSERT INTO schema_metadata (key, value)
-VALUES ('schema_version', '0.4.0')
+VALUES ('schema_version', '0.4.1')
 ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 
 -- Environments (e.g. development, staging, production)
@@ -31,8 +31,26 @@ CREATE TABLE IF NOT EXISTS users (
   email_verified_at TEXT,
   avatar_key TEXT,
   password_hash TEXT NOT NULL,
+  -- Set whenever the user changes their password (create/update/reset). Used by the
+  -- login max-age gate. NULL = not tracked -> treated as not expired.
+  password_updated_at TEXT,
   is_admin INTEGER NOT NULL DEFAULT 0
 );
+
+-- User<->environment access grants (many-to-many). Controls which environments a
+-- user may access. On upgrade (patch 0.4.1) every existing user is granted every
+-- environment for backwards compatibility.
+CREATE TABLE IF NOT EXISTS users_environments (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  environment_id TEXT NOT NULL,
+  UNIQUE(user_id, environment_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_environments_user_id ON users_environments(user_id);
+CREATE INDEX IF NOT EXISTS idx_users_environments_environment_id ON users_environments(environment_id);
 
 -- Clients (OAuth clients per environment, created by a user/admin)
 -- created_by is nullable + SET NULL on user delete so removing an admin does not
@@ -81,6 +99,37 @@ CREATE TABLE IF NOT EXISTS client_scopes (
 
 CREATE INDEX IF NOT EXISTS idx_client_scopes_client_id ON client_scopes(client_id);
 CREATE INDEX IF NOT EXISTS idx_client_scopes_scope_id ON client_scopes(scope_id);
+
+-- Named password policies (complexity rules + max password age). Assigned to
+-- environments via password_policy_environments.
+CREATE TABLE IF NOT EXISTS password_policies (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  min_length INTEGER NOT NULL DEFAULT 8,
+  max_length INTEGER,
+  min_uppercase INTEGER NOT NULL DEFAULT 0,
+  min_lowercase INTEGER NOT NULL DEFAULT 0,
+  min_number INTEGER NOT NULL DEFAULT 0,
+  min_special INTEGER NOT NULL DEFAULT 0,
+  reject_contains_identifier INTEGER NOT NULL DEFAULT 0,
+  max_password_age_days INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+-- Policy<->environment assignments. One policy -> many environments, but each
+-- environment maps to at most one policy (UNIQUE on environment_id).
+CREATE TABLE IF NOT EXISTS password_policy_environments (
+  id TEXT PRIMARY KEY,
+  policy_id TEXT NOT NULL,
+  environment_id TEXT NOT NULL UNIQUE,
+  FOREIGN KEY (policy_id) REFERENCES password_policies(id) ON DELETE CASCADE,
+  FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_password_policy_environments_policy_id
+  ON password_policy_environments(policy_id);
 
 -- Tokens (issued for a client)
 CREATE TABLE IF NOT EXISTS tokens (
@@ -194,7 +243,11 @@ CREATE TABLE IF NOT EXISTS site_settings (
   site_url TEXT,
   cdn_url TEXT,
   logo_key TEXT,
-  mfa_enabled INTEGER NOT NULL DEFAULT 0
+  mfa_enabled INTEGER NOT NULL DEFAULT 0,
+  -- Password policy applied to admin sign-in. Admins don't belong to an environment
+  -- (regular users derive theirs from the client id), so the admin policy is a global
+  -- selection here. NULL = no policy enforced for admins.
+  admin_password_policy_id TEXT REFERENCES password_policies(id) ON DELETE SET NULL
 );
 
 INSERT OR IGNORE INTO site_settings (id, site_title, site_url, cdn_url, logo_key, mfa_enabled)

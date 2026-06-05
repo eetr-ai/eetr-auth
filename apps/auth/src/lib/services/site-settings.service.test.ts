@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SiteSettingsRepository } from "@/lib/repositories/site-settings.repository";
 import type { SiteAdminApiClientsRepository } from "@/lib/repositories/site-admin-api-clients.repository";
 import type { ClientRepository } from "@/lib/repositories/client.repository";
+import type { PasswordPolicyRepository } from "@/lib/repositories/password-policy.repository";
 import type { AdminAuditLogRepository } from "@/lib/repositories/admin-audit-log.repository";
 import { DEFAULT_LOGO_PATH, DEFAULT_SITE_TITLE, SiteSettingsService } from "@/lib/services/site-settings.service";
 import { AdminAuditLogService } from "@/lib/services/admin-audit-log.service";
@@ -31,6 +32,22 @@ function createClientRepoMock(): ClientRepository {
 	};
 }
 
+function createPasswordPolicyRepoMock(): PasswordPolicyRepository {
+	return {
+		list: vi.fn(),
+		listWithEnvironments: vi.fn(),
+		getById: vi.fn(),
+		getWithEnvironments: vi.fn(),
+		create: vi.fn(),
+		update: vi.fn(),
+		delete: vi.fn(),
+		setEnvironments: vi.fn(),
+		getPolicyForEnvironment: vi.fn(),
+		getAdminPolicy: vi.fn(),
+		getStrictestEnabledMaxAgeDaysForUser: vi.fn(),
+	};
+}
+
 function createAuditLogService(insert = vi.fn()): AdminAuditLogService {
 	const logRepo: AdminAuditLogRepository = { insert, listLogs: vi.fn() };
 	return new AdminAuditLogService({ logRepo });
@@ -45,12 +62,14 @@ function createService(
 		resendApiKey?: string | null;
 		authUrl?: string;
 		adminAuditLogService?: AdminAuditLogService;
+		passwordPolicyRepo?: PasswordPolicyRepository;
 	} = {}
 ): SiteSettingsService {
 	return new SiteSettingsService({
 		siteRepo,
 		adminClientsRepo,
 		clientRepo,
+		passwordPolicyRepo: options.passwordPolicyRepo ?? createPasswordPolicyRepoMock(),
 		adminAuditLogService: options.adminAuditLogService ?? createAuditLogService(),
 		avatarCdnBaseUrl: options.avatarCdnBaseUrl ?? "https://cdn.example.com",
 		resendApiKey: options.resendApiKey ?? null,
@@ -150,6 +169,7 @@ describe("SiteSettingsService", () => {
 				cdnUrl: null,
 				logoKey: null,
 				mfaEnabled: false,
+				adminPasswordPolicyId: null,
 			});
 			const service = createService(siteRepo, createAdminClientsRepoMock(), createClientRepoMock(), {
 				resendApiKey: "re_key_123",
@@ -201,6 +221,7 @@ describe("SiteSettingsService", () => {
 				cdnUrl: null,
 				logoKey: null,
 				mfaEnabled: false,
+				adminPasswordPolicyId: null,
 			});
 			const service = createService(siteRepo, createAdminClientsRepoMock(), createClientRepoMock());
 
@@ -217,6 +238,7 @@ describe("SiteSettingsService", () => {
 				cdnUrl: null,
 				logoKey: null,
 				mfaEnabled: true,
+				adminPasswordPolicyId: null,
 			});
 			const service = createService(siteRepo, createAdminClientsRepoMock(), createClientRepoMock());
 
@@ -229,18 +251,64 @@ describe("SiteSettingsService", () => {
 			const siteRepo = createSiteRepoMock();
 			vi.mocked(siteRepo.get)
 				.mockResolvedValueOnce(null)
-				.mockResolvedValueOnce({ siteTitle: "Auth", siteUrl: null, cdnUrl: null, logoKey: null, mfaEnabled: false });
+				.mockResolvedValueOnce({ siteTitle: "Auth", siteUrl: null, cdnUrl: null, logoKey: null, mfaEnabled: false, adminPasswordPolicyId: null });
 			const service = createService(siteRepo, createAdminClientsRepoMock(), createClientRepoMock());
 
 			await service.updateSiteFields({ siteTitle: "Auth" });
 			expect(siteRepo.update).toHaveBeenCalledWith(expect.objectContaining({ siteTitle: "Auth" }));
 		});
 
+		it("saves the admin password policy when the selected policy exists", async () => {
+			const siteRepo = createSiteRepoMock();
+			vi.mocked(siteRepo.get).mockResolvedValue(null);
+			const passwordPolicyRepo = createPasswordPolicyRepoMock();
+			vi.mocked(passwordPolicyRepo.getById).mockResolvedValue({ id: "policy-1" } as never);
+			const service = createService(siteRepo, createAdminClientsRepoMock(), createClientRepoMock(), {
+				passwordPolicyRepo,
+			});
+
+			await service.updateSiteFields({ adminPasswordPolicyId: "policy-1" });
+			expect(passwordPolicyRepo.getById).toHaveBeenCalledWith("policy-1");
+			expect(siteRepo.update).toHaveBeenCalledWith(
+				expect.objectContaining({ adminPasswordPolicyId: "policy-1" })
+			);
+		});
+
+		it("clears the admin password policy without a lookup when set to null", async () => {
+			const siteRepo = createSiteRepoMock();
+			vi.mocked(siteRepo.get).mockResolvedValue(null);
+			const passwordPolicyRepo = createPasswordPolicyRepoMock();
+			const service = createService(siteRepo, createAdminClientsRepoMock(), createClientRepoMock(), {
+				passwordPolicyRepo,
+			});
+
+			await service.updateSiteFields({ adminPasswordPolicyId: null });
+			expect(passwordPolicyRepo.getById).not.toHaveBeenCalled();
+			expect(siteRepo.update).toHaveBeenCalledWith(
+				expect.objectContaining({ adminPasswordPolicyId: null })
+			);
+		});
+
+		it("rejects an admin password policy that does not exist", async () => {
+			const siteRepo = createSiteRepoMock();
+			vi.mocked(siteRepo.get).mockResolvedValue(null);
+			const passwordPolicyRepo = createPasswordPolicyRepoMock();
+			vi.mocked(passwordPolicyRepo.getById).mockResolvedValue(null);
+			const service = createService(siteRepo, createAdminClientsRepoMock(), createClientRepoMock(), {
+				passwordPolicyRepo,
+			});
+
+			await expect(
+				service.updateSiteFields({ adminPasswordPolicyId: "missing" })
+			).rejects.toThrow(/no longer exists/i);
+			expect(siteRepo.update).not.toHaveBeenCalled();
+		});
+
 		it("writes a site_settings.update audit entry listing the changed fields", async () => {
 			const siteRepo = createSiteRepoMock();
 			vi.mocked(siteRepo.get)
 				.mockResolvedValueOnce(null)
-				.mockResolvedValueOnce({ siteTitle: "Auth", siteUrl: null, cdnUrl: null, logoKey: null, mfaEnabled: false });
+				.mockResolvedValueOnce({ siteTitle: "Auth", siteUrl: null, cdnUrl: null, logoKey: null, mfaEnabled: false, adminPasswordPolicyId: null });
 			const insert = vi.fn();
 			const service = createService(siteRepo, createAdminClientsRepoMock(), createClientRepoMock(), {
 				adminAuditLogService: createAuditLogService(insert),
@@ -261,7 +329,7 @@ describe("SiteSettingsService", () => {
 			const siteRepo = createSiteRepoMock();
 			vi.mocked(siteRepo.get)
 				.mockResolvedValueOnce(null)
-				.mockResolvedValueOnce({ siteTitle: null, siteUrl: null, cdnUrl: null, logoKey: null, mfaEnabled: false });
+				.mockResolvedValueOnce({ siteTitle: null, siteUrl: null, cdnUrl: null, logoKey: null, mfaEnabled: false, adminPasswordPolicyId: null });
 			const insert = vi.fn();
 			const service = createService(siteRepo, createAdminClientsRepoMock(), createClientRepoMock(), {
 				adminAuditLogService: createAuditLogService(insert),
