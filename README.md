@@ -65,9 +65,17 @@ eetr-auth/
 ├── apps/
 │   ├── auth/               # @eetr/auth - Next.js 16 OAuth/OIDC server
 │   └── argon-hasher/       # Rust/Wasm password hashing worker
-└── packages/
-    └── eetr-auth-client/   # @eetr/eetr-auth-client (TypeScript, publishable)
+├── packages/
+│   └── eetr-auth-client/   # @eetr/eetr-auth-client (TypeScript, publishable)
+├── infra/                  # Terraform (D1 + R2) and the Wrangler config template
+├── scripts/                # Setup/deploy/db tooling (run via root npm scripts)
+├── db/                     # D1 schema snapshot + versioned migration patches
+└── docs/                   # Architecture, features, deployment, UX guidelines
 ```
+
+Infrastructure (`infra/`), tooling (`scripts/`), and database files (`db/`) live at
+the repo root and operate on the auth Worker; the ops `npm run` commands
+(`setup:*`, `db:*`, `infra:*`, `jwt:*`) are defined in the root `package.json`.
 
 ---
 
