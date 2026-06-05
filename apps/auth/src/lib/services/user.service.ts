@@ -13,6 +13,8 @@ interface UpdateUserInput {
 	isAdmin?: boolean;
 	avatarKey?: string | null;
 	emailVerifiedAt?: string | null;
+	/** When provided, replaces the user's full set of environment grants. */
+	environmentIds?: string[];
 }
 
 export interface UserServiceDependencies {
@@ -206,6 +208,11 @@ export class UserService {
 		}
 
 		await this.userRepository.update(id, patch);
+		// Environment grants live in a separate table; replace the full set when provided.
+		const environmentsChanged = updates.environmentIds !== undefined;
+		if (environmentsChanged) {
+			await this.userRepository.setUserEnvironments(id, updates.environmentIds!);
+		}
 		const updated = await this.userRepository.getById(id);
 		if (!updated) {
 			throw new Error("User not found");
@@ -217,6 +224,9 @@ export class UserService {
 		const changedFields = Object.keys(patch)
 			.filter((field) => field !== "passwordUpdatedAt")
 			.map((field) => (field === "passwordHash" ? "password" : field));
+		if (environmentsChanged) {
+			changedFields.push("environments");
+		}
 		if (changedFields.length > 0) {
 			const passwordOnly = changedFields.length === 1 && changedFields[0] === "password";
 			await this.adminAuditLogService.logAction({
@@ -227,6 +237,7 @@ export class UserService {
 				details: {
 					username: updated.username,
 					changedFields,
+					...(environmentsChanged ? { environmentIds: updates.environmentIds } : {}),
 				},
 			});
 		}

@@ -41,6 +41,15 @@ export class UserRepositoryD1 implements UserRepository {
 				avatarKey: string | null;
 				isAdmin: number;
 			}>();
+		const grants = await this.db
+			.prepare("SELECT user_id as userId, environment_id as environmentId FROM users_environments")
+			.all<{ userId: string; environmentId: string }>();
+		const envByUser = new Map<string, string[]>();
+		for (const row of grants.results ?? []) {
+			const list = envByUser.get(row.userId) ?? [];
+			list.push(row.environmentId);
+			envByUser.set(row.userId, list);
+		}
 		return (result.results ?? []).map((row) => ({
 			id: row.id,
 			username: row.username,
@@ -49,6 +58,7 @@ export class UserRepositoryD1 implements UserRepository {
 			emailVerifiedAt: row.emailVerifiedAt,
 			avatarKey: row.avatarKey,
 			isAdmin: !!row.isAdmin,
+			environmentIds: envByUser.get(row.id) ?? [],
 		}));
 	}
 
@@ -193,6 +203,28 @@ export class UserRepositoryD1 implements UserRepository {
 
 	async delete(id: string): Promise<void> {
 		await this.db.prepare("DELETE FROM users WHERE id = ?").bind(id).run();
+	}
+
+	async getUserEnvironments(userId: string): Promise<string[]> {
+		const result = await this.db
+			.prepare("SELECT environment_id as environmentId FROM users_environments WHERE user_id = ?")
+			.bind(userId)
+			.all<{ environmentId: string }>();
+		return (result.results ?? []).map((row) => row.environmentId);
+	}
+
+	async setUserEnvironments(userId: string, environmentIds: string[]): Promise<void> {
+		const unique = [...new Set(environmentIds)];
+		await this.db.batch([
+			this.db.prepare("DELETE FROM users_environments WHERE user_id = ?").bind(userId),
+			...unique.map((environmentId) =>
+				this.db
+					.prepare(
+						"INSERT INTO users_environments (id, user_id, environment_id) VALUES (?, ?, ?)"
+					)
+					.bind(crypto.randomUUID(), userId, environmentId)
+			),
+		]);
 	}
 
 	async deleteWithAudit(id: string, auditRow: AdminAuditLogRow): Promise<void> {

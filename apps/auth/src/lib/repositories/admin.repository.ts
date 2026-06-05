@@ -19,6 +19,8 @@ export interface UserRecord {
 	avatarKey: string | null;
 	avatarUrl?: string | null;
 	isAdmin: boolean;
+	/** Environments this user is granted access to. Populated by list(); may be omitted elsewhere. */
+	environmentIds?: string[];
 }
 
 export interface UserUpdateInput {
@@ -51,6 +53,10 @@ export interface UserRepository {
 	getById(id: string): Promise<UserRecord | null>;
 	update(id: string, updates: UserUpdateInput): Promise<void>;
 	delete(id: string): Promise<void>;
+	/** Environment IDs the user is granted (via users_environments). */
+	getUserEnvironments(userId: string): Promise<string[]>;
+	/** Replace the user's full set of environment grants. */
+	setUserEnvironments(userId: string, environmentIds: string[]): Promise<void>;
 	/**
 	 * Deletes a user and writes an audit log row atomically in a single D1 batch.
 	 * Dependent rows (passkeys, challenges, etc.) cascade automatically via FK.

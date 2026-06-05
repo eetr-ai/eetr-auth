@@ -26,6 +26,8 @@ function createUserRepoMock(): UserRepository {
 		getById: vi.fn(),
 		update: vi.fn(),
 		delete: vi.fn(),
+		getUserEnvironments: vi.fn().mockResolvedValue([]),
+		setUserEnvironments: vi.fn(),
 		deleteWithAudit: vi.fn(),
 	};
 }
@@ -276,6 +278,40 @@ describe("UserService", () => {
 			await service.updateUser("user-1", { name: "Alice B" }, "actor-1");
 			const patch = vi.mocked(mockRepo.update).mock.calls[0]?.[1];
 			expect(patch?.passwordUpdatedAt).toBeUndefined();
+		});
+
+		it("replaces environment grants and audits them when environmentIds is provided", async () => {
+			const user = makeUserRecord();
+			vi.mocked(mockRepo.getById)
+				.mockResolvedValueOnce(user)
+				.mockResolvedValueOnce(user);
+			const insert = vi.fn();
+			const service = createService(mockRepo, createAuditLogService(insert));
+			await service.updateUser("user-1", { environmentIds: ["env-1", "env-2"] }, "actor-1");
+			expect(mockRepo.setUserEnvironments).toHaveBeenCalledWith("user-1", ["env-1", "env-2"]);
+			const details = JSON.parse(vi.mocked(insert).mock.calls[0]?.[0]?.details ?? "{}");
+			expect(details.changedFields).toContain("environments");
+			expect(details.environmentIds).toEqual(["env-1", "env-2"]);
+		});
+
+		it("does not touch environment grants when environmentIds is omitted", async () => {
+			const user = makeUserRecord();
+			vi.mocked(mockRepo.getById)
+				.mockResolvedValueOnce(user)
+				.mockResolvedValueOnce({ ...user, name: "Alice B" });
+			const service = createService(mockRepo);
+			await service.updateUser("user-1", { name: "Alice B" }, "actor-1");
+			expect(mockRepo.setUserEnvironments).not.toHaveBeenCalled();
+		});
+
+		it("can clear all environment grants with an empty array", async () => {
+			const user = makeUserRecord();
+			vi.mocked(mockRepo.getById)
+				.mockResolvedValueOnce(user)
+				.mockResolvedValueOnce(user);
+			const service = createService(mockRepo);
+			await service.updateUser("user-1", { environmentIds: [] }, "actor-1");
+			expect(mockRepo.setUserEnvironments).toHaveBeenCalledWith("user-1", []);
 		});
 
 		it("writes a user.update audit log entry listing changed fields", async () => {
