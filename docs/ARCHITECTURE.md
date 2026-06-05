@@ -120,7 +120,7 @@ A published TypeScript library (`@eetr/eetr-auth-client`) for consuming the auth
 
 ## Database Schema
 
-The D1 database contains 22 tables organized around these domains:
+The D1 database contains 25 tables organized around these domains:
 
 ```mermaid
 erDiagram
@@ -129,6 +129,7 @@ erDiagram
         text username
         text email
         text password_hash
+        text password_updated_at
         text avatar_url
     }
     user_challenges {
@@ -163,6 +164,23 @@ erDiagram
     scopes {
         text id PK
         text name
+    }
+    password_policies {
+        text id PK
+        text name
+        integer enabled
+        integer min_length
+        integer max_password_age_days
+    }
+    password_policy_environments {
+        text id PK
+        text policy_id FK
+        text environment_id FK
+    }
+    users_environments {
+        text id PK
+        text user_id FK
+        text environment_id FK
     }
     authorization_codes {
         text code PK
@@ -202,6 +220,10 @@ erDiagram
     clients }o--|| environments : belongs_to
     tokens ||--o| refresh_tokens : paired_with
     tokens ||--o{ token_activity_log : logged_in
+    users ||--o{ users_environments : granted
+    environments ||--o{ users_environments : grants
+    password_policies ||--o{ password_policy_environments : assigned_to
+    environments ||--o| password_policy_environments : has_policy
 ```
 
 ---

@@ -29,6 +29,23 @@
 - Configurable fallback hash method via `HASH_METHOD` environment variable
 - Password reset via time-limited JWT token sent to email
 
+### Password Policies
+Per-environment password policies are managed from **Setup → Password policies**.
+- A policy is a named rule set: **enabled** flag, complexity rules (min length,
+  optional max length, require uppercase / lowercase / number / special character,
+  and "must not contain the username or email local-part"), and a **max password age**
+  (days; `0` = never expires).
+- A policy can be assigned to **one or more environments**, but each environment may
+  hold **at most one** policy (enforced by a `UNIQUE` constraint and surfaced in the UI).
+- **Max-age enforcement at login:** when a user signs in, the strictest enabled max age
+  across the environments they are granted (via user↔environment access) is applied. If
+  their password is older, sign-in is halted **before MFA** and a reset is forced — a
+  reset link is emailed when delivery is configured, otherwise the user is directed to an
+  administrator. Users whose password change predates this feature are never expired
+  until their next password change.
+- The complexity rules are validated by a shared utility and surfaced in the policy
+  editor; enforcing them on password *set* (create/change/reset) is a planned follow-up.
+
 ### Passkeys (WebAuthn)
 - Register and sign in with device passkeys (Touch ID, Face ID, hardware keys)
 - Multi-device credential support
@@ -104,11 +121,18 @@ is only sent once email is actually chosen.
 - Self-service profile update
 - Gravatar-compatible avatar fallback (MD5-based)
 
+### Environment Access
+- Users are granted access to specific environments via a `users_environments` mapping
+- Grants are edited inline in the admin Users list (and shown as badges per user)
+- Drives per-user password-policy resolution (the login max-age gate)
+- On upgrade, every existing user is granted every environment for backwards compatibility
+
 ### Admin Dashboard
-- Full CRUD for users
+- Full CRUD for users, including per-user environment grants
 - View and manage OAuth clients
 - Token activity log viewer
 - Site identity / branding (title, logo, URL, CDN URL) via the setup wizard
+- Password policies management (per-environment complexity rules + max password age)
 - Initial setup wizard
 
 ### Admin API
@@ -122,6 +146,7 @@ is only sent once email is actually chosen.
 | Feature | Detail |
 |---|---|
 | Password hashing | Argon2id via isolated WASM Worker |
+| Password policies | Per-environment complexity rules + max password age enforced at login |
 | Token signing | RS256 asymmetric JWT |
 | Token MAC | HMAC-SHA256 for request signing |
 | PKCE | S256 mandatory for Authorization Code flow |
