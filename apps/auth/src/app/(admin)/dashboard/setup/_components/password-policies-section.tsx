@@ -13,6 +13,8 @@ interface PasswordPoliciesSectionProps {
 	policies: PasswordPolicyWithEnvironments[];
 	environments: Environment[];
 	error: string | null;
+	/** Policy applied to admin sign-in (admins have no environment), or null for none. */
+	adminPasswordPolicyId: string | null;
 	onClearError: () => void;
 	onCreate: (input: CreatePasswordPolicyInput, environmentIds: string[]) => Promise<boolean>;
 	onUpdate: (
@@ -21,6 +23,8 @@ interface PasswordPoliciesSectionProps {
 		environmentIds: string[]
 	) => Promise<boolean>;
 	onDelete: (id: string) => Promise<boolean>;
+	/** Persist the admin sign-in policy selection. Returns whether the save succeeded. */
+	onSetAdminPolicy: (policyId: string | null) => Promise<boolean>;
 }
 
 interface PolicyDraft {
@@ -28,10 +32,10 @@ interface PolicyDraft {
 	enabled: boolean;
 	minLength: string;
 	maxLength: string;
-	requireUppercase: boolean;
-	requireLowercase: boolean;
-	requireNumber: boolean;
-	requireSpecial: boolean;
+	minUppercase: string;
+	minLowercase: string;
+	minNumber: string;
+	minSpecial: string;
 	rejectContainsIdentifier: boolean;
 	maxPasswordAgeDays: string;
 	environmentIds: string[];
@@ -42,14 +46,22 @@ const emptyDraft: PolicyDraft = {
 	enabled: true,
 	minLength: "8",
 	maxLength: "",
-	requireUppercase: false,
-	requireLowercase: false,
-	requireNumber: false,
-	requireSpecial: false,
+	minUppercase: "0",
+	minLowercase: "0",
+	minNumber: "0",
+	minSpecial: "0",
 	rejectContainsIdentifier: false,
 	maxPasswordAgeDays: "0",
 	environmentIds: [],
 };
+
+// Minimum-count fields rendered as number inputs: [draft key, label].
+const COUNT_FIELDS: Array<[keyof PolicyDraft, string]> = [
+	["minUppercase", "Min uppercase"],
+	["minLowercase", "Min lowercase"],
+	["minNumber", "Min numbers"],
+	["minSpecial", "Min special chars"],
+];
 
 function draftFromPolicy(policy: PasswordPolicyWithEnvironments): PolicyDraft {
 	return {
@@ -57,10 +69,10 @@ function draftFromPolicy(policy: PasswordPolicyWithEnvironments): PolicyDraft {
 		enabled: policy.enabled,
 		minLength: String(policy.minLength),
 		maxLength: policy.maxLength === null ? "" : String(policy.maxLength),
-		requireUppercase: policy.requireUppercase,
-		requireLowercase: policy.requireLowercase,
-		requireNumber: policy.requireNumber,
-		requireSpecial: policy.requireSpecial,
+		minUppercase: String(policy.minUppercase),
+		minLowercase: String(policy.minLowercase),
+		minNumber: String(policy.minNumber),
+		minSpecial: String(policy.minSpecial),
 		rejectContainsIdentifier: policy.rejectContainsIdentifier,
 		maxPasswordAgeDays: String(policy.maxPasswordAgeDays),
 		environmentIds: [...policy.environmentIds],
@@ -69,15 +81,16 @@ function draftFromPolicy(policy: PasswordPolicyWithEnvironments): PolicyDraft {
 
 function draftToInput(draft: PolicyDraft): CreatePasswordPolicyInput {
 	const parsedMax = draft.maxLength.trim();
+	const count = (value: string) => Math.max(0, Number.parseInt(value, 10) || 0);
 	return {
 		name: draft.name.trim(),
 		enabled: draft.enabled,
 		minLength: Number.parseInt(draft.minLength, 10) || 0,
 		maxLength: parsedMax === "" ? null : Number.parseInt(parsedMax, 10) || 0,
-		requireUppercase: draft.requireUppercase,
-		requireLowercase: draft.requireLowercase,
-		requireNumber: draft.requireNumber,
-		requireSpecial: draft.requireSpecial,
+		minUppercase: count(draft.minUppercase),
+		minLowercase: count(draft.minLowercase),
+		minNumber: count(draft.minNumber),
+		minSpecial: count(draft.minSpecial),
 		rejectContainsIdentifier: draft.rejectContainsIdentifier,
 		maxPasswordAgeDays: Number.parseInt(draft.maxPasswordAgeDays, 10) || 0,
 	};
@@ -87,10 +100,10 @@ function summarize(policy: PasswordPolicyWithEnvironments): string {
 	const parts = [`min ${policy.minLength}`];
 	if (policy.maxLength !== null) parts.push(`max ${policy.maxLength}`);
 	const classes = [
-		policy.requireUppercase && "A-Z",
-		policy.requireLowercase && "a-z",
-		policy.requireNumber && "0-9",
-		policy.requireSpecial && "symbol",
+		policy.minUppercase > 0 && `${policy.minUppercase}×A-Z`,
+		policy.minLowercase > 0 && `${policy.minLowercase}×a-z`,
+		policy.minNumber > 0 && `${policy.minNumber}×0-9`,
+		policy.minSpecial > 0 && `${policy.minSpecial}×symbol`,
 	].filter(Boolean);
 	if (classes.length) parts.push(classes.join("/"));
 	if (policy.rejectContainsIdentifier) parts.push("no identifier");
@@ -103,16 +116,29 @@ export function PasswordPoliciesSection({
 	policies,
 	environments,
 	error,
+	adminPasswordPolicyId,
 	onClearError,
 	onCreate,
 	onUpdate,
 	onDelete,
+	onSetAdminPolicy,
 }: PasswordPoliciesSectionProps) {
 	const [draft, setDraft] = useState<PolicyDraft>(emptyDraft);
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
 	const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 	const [deletingId, setDeletingId] = useState<string | null>(null);
+	const [savingAdminPolicy, setSavingAdminPolicy] = useState(false);
+
+	const handleAdminPolicyChange = async (value: string) => {
+		onClearError();
+		setSavingAdminPolicy(true);
+		try {
+			await onSetAdminPolicy(value === "" ? null : value);
+		} finally {
+			setSavingAdminPolicy(false);
+		}
+	};
 
 	// Map each assigned environment to its owning policy, to enforce "one policy per
 	// environment" in the UI (envs owned by another policy are shown disabled).
@@ -186,6 +212,32 @@ export function PasswordPoliciesSection({
 			</p>
 			<Banner variant="error" message={error} />
 
+			<div className="mb-6 rounded-xl border border-brand-muted p-4">
+				<label className="text-sm" htmlFor="admin-password-policy">
+					<span className="mb-1 block font-medium">Admin sign-in policy</span>
+					<span className="mb-2 block text-xs text-muted-foreground">
+						Admins don&apos;t belong to an environment, so choose the policy that applies when an
+						admin signs in. Leave as <span className="font-medium">None</span> to enforce no policy
+						for admins.
+					</span>
+					<select
+						id="admin-password-policy"
+						value={adminPasswordPolicyId ?? ""}
+						disabled={savingAdminPolicy}
+						onChange={(e) => handleAdminPolicyChange(e.target.value)}
+						className="w-full max-w-sm rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand disabled:opacity-50"
+					>
+						<option value="">None</option>
+						{policies.map((policy) => (
+							<option key={policy.id} value={policy.id}>
+								{policy.name}
+								{!policy.enabled ? " (disabled)" : ""}
+							</option>
+						))}
+					</select>
+				</label>
+			</div>
+
 			<form onSubmit={handleSubmit} className="mb-6 space-y-4 rounded-xl border border-brand-muted p-4">
 				<div className="flex flex-wrap items-center gap-3">
 					<Input
@@ -237,26 +289,35 @@ export function PasswordPoliciesSection({
 					</label>
 				</div>
 
-				<div className="flex flex-wrap gap-4">
-					{(
-						[
-							["requireUppercase", "Uppercase"],
-							["requireLowercase", "Lowercase"],
-							["requireNumber", "Number"],
-							["requireSpecial", "Special char"],
-							["rejectContainsIdentifier", "No username/email"],
-						] as const
-					).map(([key, label]) => (
-						<label key={key} className="flex items-center gap-2 text-sm">
-							<input
-								type="checkbox"
-								checked={draft[key]}
-								onChange={(e) => update({ [key]: e.target.checked } as Partial<PolicyDraft>)}
-								className="rounded border-brand-muted"
+				<div className="grid gap-4 sm:grid-cols-4">
+					{COUNT_FIELDS.map(([key, label]) => (
+						<label key={key} className="text-sm">
+							<span className="mb-1 block text-muted-foreground">{label}</span>
+							<Input
+								type="number"
+								min={0}
+								value={draft[key] as string}
+								onChange={(e) => update({ [key]: e.target.value } as Partial<PolicyDraft>)}
 							/>
-							{label}
 						</label>
 					))}
+				</div>
+
+				<p className="text-xs text-muted-foreground">
+					Each field is the minimum number of characters of that class a password must contain.
+					Use <span className="font-medium">0</span> to not require any.
+				</p>
+
+				<div className="flex flex-wrap gap-4">
+					<label className="flex items-center gap-2 text-sm">
+						<input
+							type="checkbox"
+							checked={draft.rejectContainsIdentifier}
+							onChange={(e) => update({ rejectContainsIdentifier: e.target.checked })}
+							className="rounded border-brand-muted"
+						/>
+						No username/email
+					</label>
 				</div>
 
 				<div>

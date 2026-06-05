@@ -34,6 +34,7 @@ function makeSiteRepo(siteTitle: string | null): SiteSettingsRepository {
 		cdnUrl: null,
 		logoKey: null,
 		mfaEnabled: false,
+		adminPasswordPolicyId: null,
 	};
 	return { get: vi.fn(async () => settings), update: vi.fn(async () => {}) };
 }

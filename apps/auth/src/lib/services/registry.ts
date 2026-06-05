@@ -85,6 +85,7 @@ export function getServices(ctx: RequestContext): Services {
 		siteRepo,
 		adminClientsRepo,
 		clientRepo,
+		passwordPolicyRepo,
 		adminAuditLogService,
 		avatarCdnBaseUrl,
 		resendApiKey: resolveOptionalEnvString(resolvedEnv, "RESEND_API_KEY"),

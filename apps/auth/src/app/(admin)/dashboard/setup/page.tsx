@@ -295,6 +295,21 @@ function SetupPageContent() {
 		}
 	};
 
+	const handleSetAdminPolicy = async (policyId: string | null): Promise<boolean> => {
+		dispatch({ type: SetupPageActionType.SET_PASSWORD_POLICY_ERROR, data: null });
+		try {
+			const dto = await updateSiteSettings({ adminPasswordPolicyId: policyId });
+			dispatch({ type: SetupPageActionType.SET_SITE_SETTINGS, data: dto });
+			return true;
+		} catch (err) {
+			dispatch({
+				type: SetupPageActionType.SET_PASSWORD_POLICY_ERROR,
+				data: err instanceof Error ? err.message : "Failed to set admin password policy",
+			});
+			return false;
+		}
+	};
+
 	const handleSaveSite = async (e: React.FormEvent) => {
 		e.preventDefault();
 		dispatch({ type: SetupPageActionType.SET_SITE_ERROR, data: null });
@@ -462,12 +477,14 @@ function SetupPageContent() {
 				policies={passwordPolicies}
 				environments={environments}
 				error={passwordPolicyError}
+				adminPasswordPolicyId={siteSettings?.adminPasswordPolicyId ?? null}
 				onClearError={() =>
 					dispatch({ type: SetupPageActionType.SET_PASSWORD_POLICY_ERROR, data: null })
 				}
 				onCreate={handleCreatePolicy}
 				onUpdate={handleUpdatePolicy}
 				onDelete={handleDeletePolicy}
+				onSetAdminPolicy={handleSetAdminPolicy}
 			/>
 		</main>
 	);

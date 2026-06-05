@@ -10,10 +10,10 @@ function makePolicy(overrides?: Partial<PasswordPolicy>): PasswordPolicy {
 		enabled: true,
 		minLength: 8,
 		maxLength: null,
-		requireUppercase: false,
-		requireLowercase: false,
-		requireNumber: false,
-		requireSpecial: false,
+		minUppercase: 0,
+		minLowercase: 0,
+		minNumber: 0,
+		minSpecial: 0,
 		rejectContainsIdentifier: false,
 		maxPasswordAgeDays: 0,
 		createdAt: "2026-01-01T00:00:00.000Z",
@@ -36,10 +36,10 @@ describe("validatePasswordAgainstPolicy", () => {
 	it("passes a compliant password", () => {
 		const policy = makePolicy({
 			minLength: 8,
-			requireUppercase: true,
-			requireLowercase: true,
-			requireNumber: true,
-			requireSpecial: true,
+			minUppercase: 1,
+			minLowercase: 1,
+			minNumber: 1,
+			minSpecial: 1,
 		});
 		const result = validatePasswordAgainstPolicy(policy, "Abcdef1!");
 		expect(result.ok).toBe(true);
@@ -50,19 +50,31 @@ describe("validatePasswordAgainstPolicy", () => {
 		expect(codes(makePolicy({ minLength: 1, maxLength: 4 }), "toolong")).toContain("too_long");
 	});
 
-	it("flags each missing character class independently", () => {
-		expect(codes(makePolicy({ requireUppercase: true }), "lowercase1!")).toContain("missing_uppercase");
-		expect(codes(makePolicy({ requireLowercase: true }), "UPPER123!")).toContain("missing_lowercase");
-		expect(codes(makePolicy({ requireNumber: true }), "NoDigits!")).toContain("missing_number");
-		expect(codes(makePolicy({ requireSpecial: true }), "NoSpecial1")).toContain("missing_special");
+	it("flags each character class with too few occurrences independently", () => {
+		expect(codes(makePolicy({ minUppercase: 1 }), "lowercase1!")).toContain("too_few_uppercase");
+		expect(codes(makePolicy({ minLowercase: 1 }), "UPPER123!")).toContain("too_few_lowercase");
+		expect(codes(makePolicy({ minNumber: 1 }), "NoDigits!")).toContain("too_few_number");
+		expect(codes(makePolicy({ minSpecial: 1 }), "NoSpecial1")).toContain("too_few_special");
+	});
+
+	it("enforces a minimum count greater than one per class", () => {
+		// Two specials required; only one present -> violation reporting the shortfall.
+		const result = validatePasswordAgainstPolicy(makePolicy({ minSpecial: 2 }), "Abcdefg1!");
+		const special = result.violations.find((v) => v.code === "too_few_special");
+		expect(special).toEqual({ code: "too_few_special", min: 2, found: 1 });
+
+		// Three uppercase required and present -> passes that class.
+		expect(codes(makePolicy({ minLength: 1, minUppercase: 3 }), "ABCdef")).not.toContain(
+			"too_few_uppercase"
+		);
 	});
 
 	it("reports multiple violations at once", () => {
-		const policy = makePolicy({ minLength: 10, requireUppercase: true, requireNumber: true });
+		const policy = makePolicy({ minLength: 10, minUppercase: 1, minNumber: 1 });
 		const result = validatePasswordAgainstPolicy(policy, "abc");
 		expect(result.ok).toBe(false);
 		expect(result.violations.map((v) => v.code)).toEqual(
-			expect.arrayContaining(["too_short", "missing_uppercase", "missing_number"])
+			expect.arrayContaining(["too_short", "too_few_uppercase", "too_few_number"])
 		);
 	});
 

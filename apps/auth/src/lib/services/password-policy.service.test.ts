@@ -20,6 +20,7 @@ function createPolicyRepoMock(): PasswordPolicyRepository {
 		delete: vi.fn(),
 		setEnvironments: vi.fn(),
 		getPolicyForEnvironment: vi.fn().mockResolvedValue(null),
+		getAdminPolicy: vi.fn().mockResolvedValue(null),
 		getStrictestEnabledMaxAgeDaysForUser: vi.fn(),
 	};
 }
@@ -42,10 +43,10 @@ function makeInput(overrides?: Partial<CreatePasswordPolicyInput>): CreatePasswo
 		enabled: true,
 		minLength: 8,
 		maxLength: null,
-		requireUppercase: false,
-		requireLowercase: false,
-		requireNumber: false,
-		requireSpecial: false,
+		minUppercase: 0,
+		minLowercase: 0,
+		minNumber: 0,
+		minSpecial: 0,
 		rejectContainsIdentifier: false,
 		maxPasswordAgeDays: 0,
 		...overrides,
@@ -59,10 +60,10 @@ function makePolicy(overrides?: Partial<PasswordPolicy>): PasswordPolicy {
 		enabled: true,
 		minLength: 8,
 		maxLength: null,
-		requireUppercase: false,
-		requireLowercase: false,
-		requireNumber: false,
-		requireSpecial: false,
+		minUppercase: 0,
+		minLowercase: 0,
+		minNumber: 0,
+		minSpecial: 0,
 		rejectContainsIdentifier: false,
 		maxPasswordAgeDays: 0,
 		createdAt: "2026-01-01T00:00:00.000Z",
@@ -142,6 +143,25 @@ describe("PasswordPolicyService", () => {
 			const result = await service.create(makeInput({ maxPasswordAgeDays: -1 }), []);
 			expect(result.ok).toBe(false);
 			expect(mockRepo.create).not.toHaveBeenCalled();
+		});
+
+		it("rejects a negative minimum character count", async () => {
+			const service = createService(mockRepo);
+			const result = await service.create(makeInput({ minSpecial: -1 }), []);
+			expect(result.ok).toBe(false);
+			expect(result.error).toMatch(/special characters must be a whole number/i);
+			expect(mockRepo.create).not.toHaveBeenCalled();
+		});
+
+		it("accepts a minimum character count greater than one", async () => {
+			const service = createService(mockRepo);
+			const result = await service.create(makeInput({ minUppercase: 2, minSpecial: 3 }), []);
+			expect(result.ok).toBe(true);
+			expect(mockRepo.create).toHaveBeenCalledWith(
+				"new-policy-id",
+				expect.objectContaining({ minUppercase: 2, minSpecial: 3 }),
+				expect.any(String)
+			);
 		});
 
 		it("rejects assignment of an environment already owned by another policy", async () => {
@@ -275,6 +295,39 @@ describe("PasswordPolicyService", () => {
 			const service = createService(mockRepo);
 			const sixtyDaysAgo = "2026-04-02T00:00:00.000Z";
 			await expect(service.isPasswordExpiredForUser("user-1", sixtyDaysAgo)).resolves.toBe(true);
+		});
+
+		describe("admin path", () => {
+			const sixtyDaysAgo = "2026-04-02T00:00:00.000Z";
+
+			it("uses the admin policy (not the user's environments) when isAdmin is true", async () => {
+				// Environment lookup would say "not expired", but the admin policy expires it.
+				vi.mocked(mockRepo.getStrictestEnabledMaxAgeDaysForUser).mockResolvedValue(null);
+				vi.mocked(mockRepo.getAdminPolicy).mockResolvedValue(
+					makePolicy({ enabled: true, maxPasswordAgeDays: 30 })
+				);
+				const service = createService(mockRepo);
+				await expect(service.isPasswordExpiredForUser("admin-1", sixtyDaysAgo, true)).resolves.toBe(true);
+				expect(mockRepo.getStrictestEnabledMaxAgeDaysForUser).not.toHaveBeenCalled();
+			});
+
+			it("never expires an admin when no admin policy is selected", async () => {
+				vi.mocked(mockRepo.getAdminPolicy).mockResolvedValue(null);
+				const service = createService(mockRepo);
+				await expect(service.isPasswordExpiredForUser("admin-1", sixtyDaysAgo, true)).resolves.toBe(false);
+			});
+
+			it("ignores a disabled admin policy or one with no expiry", async () => {
+				const service = createService(mockRepo);
+				vi.mocked(mockRepo.getAdminPolicy).mockResolvedValue(
+					makePolicy({ enabled: false, maxPasswordAgeDays: 30 })
+				);
+				await expect(service.isPasswordExpiredForUser("admin-1", sixtyDaysAgo, true)).resolves.toBe(false);
+				vi.mocked(mockRepo.getAdminPolicy).mockResolvedValue(
+					makePolicy({ enabled: true, maxPasswordAgeDays: 0 })
+				);
+				await expect(service.isPasswordExpiredForUser("admin-1", sixtyDaysAgo, true)).resolves.toBe(false);
+			});
 		});
 	});
 });

@@ -12,10 +12,10 @@ interface PolicyRow {
 	enabled: number;
 	minLength: number;
 	maxLength: number | null;
-	requireUppercase: number;
-	requireLowercase: number;
-	requireNumber: number;
-	requireSpecial: number;
+	minUppercase: number;
+	minLowercase: number;
+	minNumber: number;
+	minSpecial: number;
 	rejectContainsIdentifier: number;
 	maxPasswordAgeDays: number;
 	createdAt: string;
@@ -28,10 +28,10 @@ const POLICY_COLUMNS: Array<[column: string, alias: string]> = [
 	["enabled", "enabled"],
 	["min_length", "minLength"],
 	["max_length", "maxLength"],
-	["require_uppercase", "requireUppercase"],
-	["require_lowercase", "requireLowercase"],
-	["require_number", "requireNumber"],
-	["require_special", "requireSpecial"],
+	["min_uppercase", "minUppercase"],
+	["min_lowercase", "minLowercase"],
+	["min_number", "minNumber"],
+	["min_special", "minSpecial"],
 	["reject_contains_identifier", "rejectContainsIdentifier"],
 	["max_password_age_days", "maxPasswordAgeDays"],
 	["created_at", "createdAt"],
@@ -51,10 +51,10 @@ function mapRow(row: PolicyRow): PasswordPolicy {
 		enabled: !!row.enabled,
 		minLength: row.minLength,
 		maxLength: row.maxLength,
-		requireUppercase: !!row.requireUppercase,
-		requireLowercase: !!row.requireLowercase,
-		requireNumber: !!row.requireNumber,
-		requireSpecial: !!row.requireSpecial,
+		minUppercase: row.minUppercase,
+		minLowercase: row.minLowercase,
+		minNumber: row.minNumber,
+		minSpecial: row.minSpecial,
 		rejectContainsIdentifier: !!row.rejectContainsIdentifier,
 		maxPasswordAgeDays: row.maxPasswordAgeDays,
 		createdAt: row.createdAt,
@@ -114,8 +114,8 @@ export class PasswordPolicyRepositoryD1 implements PasswordPolicyRepository {
 		await this.db
 			.prepare(
 				`INSERT INTO password_policies (
-					id, name, enabled, min_length, max_length, require_uppercase, require_lowercase,
-					require_number, require_special, reject_contains_identifier, max_password_age_days,
+					id, name, enabled, min_length, max_length, min_uppercase, min_lowercase,
+					min_number, min_special, reject_contains_identifier, max_password_age_days,
 					created_at, updated_at
 				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 			)
@@ -125,10 +125,10 @@ export class PasswordPolicyRepositoryD1 implements PasswordPolicyRepository {
 				input.enabled ? 1 : 0,
 				input.minLength,
 				input.maxLength,
-				input.requireUppercase ? 1 : 0,
-				input.requireLowercase ? 1 : 0,
-				input.requireNumber ? 1 : 0,
-				input.requireSpecial ? 1 : 0,
+				input.minUppercase,
+				input.minLowercase,
+				input.minNumber,
+				input.minSpecial,
 				input.rejectContainsIdentifier ? 1 : 0,
 				input.maxPasswordAgeDays,
 				now,
@@ -142,27 +142,29 @@ export class PasswordPolicyRepositoryD1 implements PasswordPolicyRepository {
 		const binds: Array<string | number | null> = [];
 		const boolColumns: Array<[keyof UpdatePasswordPolicyInput, string]> = [
 			["enabled", "enabled"],
-			["requireUppercase", "require_uppercase"],
-			["requireLowercase", "require_lowercase"],
-			["requireNumber", "require_number"],
-			["requireSpecial", "require_special"],
 			["rejectContainsIdentifier", "reject_contains_identifier"],
+		];
+		const numberColumns: Array<[keyof UpdatePasswordPolicyInput, string]> = [
+			["minLength", "min_length"],
+			["minUppercase", "min_uppercase"],
+			["minLowercase", "min_lowercase"],
+			["minNumber", "min_number"],
+			["minSpecial", "min_special"],
+			["maxPasswordAgeDays", "max_password_age_days"],
 		];
 		if (updates.name !== undefined) {
 			sets.push("name = ?");
 			binds.push(updates.name);
 		}
-		if (updates.minLength !== undefined) {
-			sets.push("min_length = ?");
-			binds.push(updates.minLength);
-		}
 		if (updates.maxLength !== undefined) {
 			sets.push("max_length = ?");
 			binds.push(updates.maxLength);
 		}
-		if (updates.maxPasswordAgeDays !== undefined) {
-			sets.push("max_password_age_days = ?");
-			binds.push(updates.maxPasswordAgeDays);
+		for (const [key, column] of numberColumns) {
+			if (updates[key] !== undefined) {
+				sets.push(`${column} = ?`);
+				binds.push(updates[key] as number);
+			}
 		}
 		for (const [key, column] of boolColumns) {
 			if (updates[key] !== undefined) {
@@ -209,6 +211,18 @@ export class PasswordPolicyRepositoryD1 implements PasswordPolicyRepository {
 				WHERE e.environment_id = ?`
 			)
 			.bind(environmentId)
+			.first<PolicyRow>();
+		return row ? mapRow(row) : null;
+	}
+
+	async getAdminPolicy(): Promise<PasswordPolicy | null> {
+		const row = await this.db
+			.prepare(
+				`SELECT ${selectColumns("p")}
+				FROM password_policies p
+				JOIN site_settings s ON s.admin_password_policy_id = p.id
+				WHERE s.id = 'default'`
+			)
 			.first<PolicyRow>();
 		return row ? mapRow(row) : null;
 	}

@@ -39,7 +39,9 @@ export async function beginSignInChallenge(username: string, password: string) {
 		// Password max-age gate (runs before MFA so an expired credential can't reach a
 		// session). The policy decision and the reset-email dispatch live in their
 		// respective services; this action only maps the outcome to cookies + response.
-		if (await passwordPolicyService.isPasswordExpiredForUser(user.id, user.passwordUpdatedAt)) {
+		// Admins authenticate against the global admin policy (they have no environment);
+		// everyone else against the policies of the environments they're granted.
+		if (await passwordPolicyService.isPasswordExpiredForUser(user.id, user.passwordUpdatedAt, user.isAdmin)) {
 			const emailSent = await userChallengeService.sendExpiredPasswordReset(user);
 			const jar = await cookies();
 			jar.delete(MFA_CHALLENGE_COOKIE);

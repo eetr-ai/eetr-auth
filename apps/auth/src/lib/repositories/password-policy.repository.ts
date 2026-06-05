@@ -4,10 +4,14 @@ export interface PasswordPolicy {
 	enabled: boolean;
 	minLength: number;
 	maxLength: number | null;
-	requireUppercase: boolean;
-	requireLowercase: boolean;
-	requireNumber: boolean;
-	requireSpecial: boolean;
+	/** Minimum required uppercase letters (A-Z). 0 = not required. */
+	minUppercase: number;
+	/** Minimum required lowercase letters (a-z). 0 = not required. */
+	minLowercase: number;
+	/** Minimum required digits (0-9). 0 = not required. */
+	minNumber: number;
+	/** Minimum required special (non-alphanumeric) characters. 0 = not required. */
+	minSpecial: number;
 	rejectContainsIdentifier: boolean;
 	/** 0 = no expiry. */
 	maxPasswordAgeDays: number;
@@ -24,10 +28,10 @@ export interface CreatePasswordPolicyInput {
 	enabled: boolean;
 	minLength: number;
 	maxLength: number | null;
-	requireUppercase: boolean;
-	requireLowercase: boolean;
-	requireNumber: boolean;
-	requireSpecial: boolean;
+	minUppercase: number;
+	minLowercase: number;
+	minNumber: number;
+	minSpecial: number;
 	rejectContainsIdentifier: boolean;
 	maxPasswordAgeDays: number;
 }
@@ -45,6 +49,12 @@ export interface PasswordPolicyRepository {
 	/** Replace the full set of environment assignments for a policy. */
 	setEnvironments(policyId: string, environmentIds: string[]): Promise<void>;
 	getPolicyForEnvironment(environmentId: string): Promise<PasswordPolicy | null>;
+	/**
+	 * The policy selected as the admin sign-in policy on the site_settings singleton, or
+	 * null when none is set. Admins have no environment, so this is the admin equivalent of
+	 * {@link getPolicyForEnvironment}.
+	 */
+	getAdminPolicy(): Promise<PasswordPolicy | null>;
 	/**
 	 * Strictest (smallest) max age across the enabled policies assigned to the
 	 * environments the given user is granted (via users_environments), considering

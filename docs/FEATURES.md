@@ -32,15 +32,21 @@
 ### Password Policies
 Per-environment password policies are managed from **Setup → Password policies**.
 - A policy is a named rule set: **enabled** flag, complexity rules (min length,
-  optional max length, require uppercase / lowercase / number / special character,
+  optional max length, a **minimum count** of uppercase / lowercase / number / special
+  characters — `0` = not required, so a value of `2` demands at least two of that class —
   and "must not contain the username or email local-part"), and a **max password age**
   (days; `0` = never expires).
 - A policy can be assigned to **one or more environments**, but each environment may
   hold **at most one** policy (enforced by a `UNIQUE` constraint and surfaced in the UI).
-- **Max-age enforcement at login:** when a user signs in, the strictest enabled max age
-  across the environments they are granted (via user↔environment access) is applied. If
-  their password is older, sign-in is halted **before MFA** and a reset is forced — a
-  reset link is emailed when delivery is configured, otherwise the user is directed to an
+- **Admins** don't belong to an environment (a regular user's environment is derived from
+  the client id used at sign-in). A single **admin sign-in policy** is therefore selected
+  globally at the top of the Password policies tab and stored on the `site_settings`
+  singleton (`admin_password_policy_id`); `None` enforces no policy for admins.
+- **Max-age enforcement at login:** when a user signs in, the applicable max age is
+  applied — for admins, the admin sign-in policy; for everyone else, the strictest enabled
+  max age across the environments they are granted (via user↔environment access). If their
+  password is older, sign-in is halted **before MFA** and a reset is forced — a reset link
+  is emailed when delivery is configured, otherwise the user is directed to an
   administrator. Users whose password change predates this feature are never expired
   until their next password change.
 - The complexity rules are validated by a shared utility and surfaced in the policy

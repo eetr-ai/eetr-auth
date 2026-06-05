@@ -11,10 +11,10 @@ import type { PasswordPolicy } from "@/lib/repositories/password-policy.reposito
 export type PasswordPolicyViolation =
 	| { code: "too_short"; min: number }
 	| { code: "too_long"; max: number }
-	| { code: "missing_uppercase" }
-	| { code: "missing_lowercase" }
-	| { code: "missing_number" }
-	| { code: "missing_special" }
+	| { code: "too_few_uppercase"; min: number; found: number }
+	| { code: "too_few_lowercase"; min: number; found: number }
+	| { code: "too_few_number"; min: number; found: number }
+	| { code: "too_few_special"; min: number; found: number }
 	| { code: "contains_identifier" };
 
 export interface PasswordIdentifiers {
@@ -33,6 +33,11 @@ const MIN_IDENTIFIER_LENGTH = 3;
 function emailLocalPart(email: string): string {
 	const at = email.indexOf("@");
 	return at === -1 ? email : email.slice(0, at);
+}
+
+/** Number of characters in `password` matching the global `pattern`. */
+function countMatches(password: string, pattern: RegExp): number {
+	return (password.match(pattern) ?? []).length;
 }
 
 /**
@@ -57,17 +62,29 @@ export function validatePasswordAgainstPolicy(
 	if (policy.maxLength !== null && password.length > policy.maxLength) {
 		violations.push({ code: "too_long", max: policy.maxLength });
 	}
-	if (policy.requireUppercase && !/[A-Z]/.test(password)) {
-		violations.push({ code: "missing_uppercase" });
+	if (policy.minUppercase > 0) {
+		const found = countMatches(password, /[A-Z]/g);
+		if (found < policy.minUppercase) {
+			violations.push({ code: "too_few_uppercase", min: policy.minUppercase, found });
+		}
 	}
-	if (policy.requireLowercase && !/[a-z]/.test(password)) {
-		violations.push({ code: "missing_lowercase" });
+	if (policy.minLowercase > 0) {
+		const found = countMatches(password, /[a-z]/g);
+		if (found < policy.minLowercase) {
+			violations.push({ code: "too_few_lowercase", min: policy.minLowercase, found });
+		}
 	}
-	if (policy.requireNumber && !/[0-9]/.test(password)) {
-		violations.push({ code: "missing_number" });
+	if (policy.minNumber > 0) {
+		const found = countMatches(password, /[0-9]/g);
+		if (found < policy.minNumber) {
+			violations.push({ code: "too_few_number", min: policy.minNumber, found });
+		}
 	}
-	if (policy.requireSpecial && !/[^A-Za-z0-9]/.test(password)) {
-		violations.push({ code: "missing_special" });
+	if (policy.minSpecial > 0) {
+		const found = countMatches(password, /[^A-Za-z0-9]/g);
+		if (found < policy.minSpecial) {
+			violations.push({ code: "too_few_special", min: policy.minSpecial, found });
+		}
 	}
 
 	if (policy.rejectContainsIdentifier) {

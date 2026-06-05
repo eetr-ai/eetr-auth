@@ -108,10 +108,10 @@ CREATE TABLE IF NOT EXISTS password_policies (
   enabled INTEGER NOT NULL DEFAULT 1,
   min_length INTEGER NOT NULL DEFAULT 8,
   max_length INTEGER,
-  require_uppercase INTEGER NOT NULL DEFAULT 0,
-  require_lowercase INTEGER NOT NULL DEFAULT 0,
-  require_number INTEGER NOT NULL DEFAULT 0,
-  require_special INTEGER NOT NULL DEFAULT 0,
+  min_uppercase INTEGER NOT NULL DEFAULT 0,
+  min_lowercase INTEGER NOT NULL DEFAULT 0,
+  min_number INTEGER NOT NULL DEFAULT 0,
+  min_special INTEGER NOT NULL DEFAULT 0,
   reject_contains_identifier INTEGER NOT NULL DEFAULT 0,
   max_password_age_days INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
@@ -243,7 +243,11 @@ CREATE TABLE IF NOT EXISTS site_settings (
   site_url TEXT,
   cdn_url TEXT,
   logo_key TEXT,
-  mfa_enabled INTEGER NOT NULL DEFAULT 0
+  mfa_enabled INTEGER NOT NULL DEFAULT 0,
+  -- Password policy applied to admin sign-in. Admins don't belong to an environment
+  -- (regular users derive theirs from the client id), so the admin policy is a global
+  -- selection here. NULL = no policy enforced for admins.
+  admin_password_policy_id TEXT REFERENCES password_policies(id) ON DELETE SET NULL
 );
 
 INSERT OR IGNORE INTO site_settings (id, site_title, site_url, cdn_url, logo_key, mfa_enabled)

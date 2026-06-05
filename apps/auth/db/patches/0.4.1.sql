@@ -7,10 +7,11 @@
 --     (existing users are grandfathered; the clock starts on their next password change).
 --
 -- Idempotency: the new tables/index use CREATE ... IF NOT EXISTS so this patch can be
--- replayed safely. SQLite has no `ADD COLUMN IF NOT EXISTS`, so the users column add
--- below is the one non-idempotent statement; it is applied exactly once by the version
--- gate in run-d1-migrate.mjs (patches strictly greater than the DB's current version).
--- On a manual re-run against a DB that already has the column, remove that single line.
+-- replayed safely. SQLite has no `ADD COLUMN IF NOT EXISTS`, so the two ADD COLUMN
+-- statements (users.password_updated_at and site_settings.admin_password_policy_id) are
+-- the non-idempotent ones; they are applied exactly once by the version gate in
+-- run-d1-migrate.mjs (patches strictly greater than the DB's current version).
+-- On a manual re-run against a DB that already has those columns, remove those lines.
 
 -- Named password policies (complexity rules + max password age).
 CREATE TABLE IF NOT EXISTS password_policies (
@@ -19,10 +20,10 @@ CREATE TABLE IF NOT EXISTS password_policies (
   enabled INTEGER NOT NULL DEFAULT 1,
   min_length INTEGER NOT NULL DEFAULT 8,
   max_length INTEGER,
-  require_uppercase INTEGER NOT NULL DEFAULT 0,
-  require_lowercase INTEGER NOT NULL DEFAULT 0,
-  require_number INTEGER NOT NULL DEFAULT 0,
-  require_special INTEGER NOT NULL DEFAULT 0,
+  min_uppercase INTEGER NOT NULL DEFAULT 0,
+  min_lowercase INTEGER NOT NULL DEFAULT 0,
+  min_number INTEGER NOT NULL DEFAULT 0,
+  min_special INTEGER NOT NULL DEFAULT 0,
   reject_contains_identifier INTEGER NOT NULL DEFAULT 0,
   max_password_age_days INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
@@ -64,5 +65,11 @@ FROM users u CROSS JOIN environments e;
 
 -- Non-idempotent: applied exactly once by the version gate (see header note).
 ALTER TABLE users ADD COLUMN password_updated_at TEXT;
+
+-- Admin sign-in password policy. Admins don't belong to an environment, so the policy
+-- that applies to them is a global selection on the site_settings singleton (NULL = none).
+-- Non-idempotent ADD COLUMN, applied exactly once by the version gate (see header note).
+-- REFERENCES is valid here because password_policies is created earlier in this patch.
+ALTER TABLE site_settings ADD COLUMN admin_password_policy_id TEXT REFERENCES password_policies(id) ON DELETE SET NULL;
 
 UPDATE schema_metadata SET value = '0.4.1' WHERE key = 'schema_version';

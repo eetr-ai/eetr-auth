@@ -26,6 +26,10 @@ function validateRules(input: {
 	name?: string;
 	minLength?: number;
 	maxLength?: number | null;
+	minUppercase?: number;
+	minLowercase?: number;
+	minNumber?: number;
+	minSpecial?: number;
 	maxPasswordAgeDays?: number;
 }): string | null {
 	if (input.name !== undefined && input.name.trim().length === 0) {
@@ -33,6 +37,17 @@ function validateRules(input: {
 	}
 	if (input.minLength !== undefined && (!Number.isInteger(input.minLength) || input.minLength < 1)) {
 		return "Minimum length must be a whole number of at least 1";
+	}
+	const counts: Array<[number | undefined, string]> = [
+		[input.minUppercase, "Minimum uppercase"],
+		[input.minLowercase, "Minimum lowercase"],
+		[input.minNumber, "Minimum numbers"],
+		[input.minSpecial, "Minimum special characters"],
+	];
+	for (const [value, label] of counts) {
+		if (value !== undefined && (!Number.isInteger(value) || value < 0)) {
+			return `${label} must be a whole number of 0 or more`;
+		}
 	}
 	if (input.maxLength !== undefined && input.maxLength !== null) {
 		if (!Number.isInteger(input.maxLength) || input.maxLength < 1) {
@@ -132,6 +147,10 @@ export class PasswordPolicyService {
 			name: updates.name,
 			minLength: updates.minLength ?? existing.minLength,
 			maxLength: updates.maxLength !== undefined ? updates.maxLength : existing.maxLength,
+			minUppercase: updates.minUppercase,
+			minLowercase: updates.minLowercase,
+			minNumber: updates.minNumber,
+			minSpecial: updates.minSpecial,
 			maxPasswordAgeDays: updates.maxPasswordAgeDays,
 		});
 		if (ruleError) {
@@ -187,13 +206,31 @@ export class PasswordPolicyService {
 	}
 
 	/**
-	 * Whether the user's password has exceeded the strictest enabled max age across the
-	 * environments they're granted. A user with no recorded `passwordUpdatedAt`
-	 * (pre-feature) or no applicable policy is never considered expired.
+	 * Max password age (days) from the admin sign-in policy, or null when no policy is
+	 * selected, it is disabled, or it sets no expiry. Admins have no environment, so this
+	 * is the admin counterpart of {@link getMaxPasswordAgeDaysForUser}.
 	 */
-	async isPasswordExpiredForUser(userId: string, passwordUpdatedAt: string | null): Promise<boolean> {
+	async getAdminMaxPasswordAgeDays(): Promise<number | null> {
+		const policy = await this.policyRepo.getAdminPolicy();
+		if (!policy || !policy.enabled || policy.maxPasswordAgeDays <= 0) return null;
+		return policy.maxPasswordAgeDays;
+	}
+
+	/**
+	 * Whether the user's password has exceeded the applicable max age. For admins the
+	 * global admin policy is used (they have no environment); for everyone else the
+	 * strictest enabled max age across their granted environments. A user with no recorded
+	 * `passwordUpdatedAt` (pre-feature) or no applicable policy is never considered expired.
+	 */
+	async isPasswordExpiredForUser(
+		userId: string,
+		passwordUpdatedAt: string | null,
+		isAdmin = false
+	): Promise<boolean> {
 		if (!passwordUpdatedAt) return false;
-		const maxAgeDays = await this.getMaxPasswordAgeDaysForUser(userId);
+		const maxAgeDays = isAdmin
+			? await this.getAdminMaxPasswordAgeDays()
+			: await this.getMaxPasswordAgeDaysForUser(userId);
 		if (maxAgeDays == null) return false;
 		const ageDays = (Date.now() - Date.parse(passwordUpdatedAt)) / 86_400_000;
 		return ageDays > maxAgeDays;
