@@ -185,4 +185,17 @@ export class PasswordPolicyService {
 	async getMaxPasswordAgeDaysForUser(userId: string): Promise<number | null> {
 		return this.policyRepo.getStrictestEnabledMaxAgeDaysForUser(userId);
 	}
+
+	/**
+	 * Whether the user's password has exceeded the strictest enabled max age across the
+	 * environments they're granted. A user with no recorded `passwordUpdatedAt`
+	 * (pre-feature) or no applicable policy is never considered expired.
+	 */
+	async isPasswordExpiredForUser(userId: string, passwordUpdatedAt: string | null): Promise<boolean> {
+		if (!passwordUpdatedAt) return false;
+		const maxAgeDays = await this.getMaxPasswordAgeDaysForUser(userId);
+		if (maxAgeDays == null) return false;
+		const ageDays = (Date.now() - Date.parse(passwordUpdatedAt)) / 86_400_000;
+		return ageDays > maxAgeDays;
+	}
 }

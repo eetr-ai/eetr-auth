@@ -237,4 +237,44 @@ describe("PasswordPolicyService", () => {
 			expect(mockRepo.getStrictestEnabledMaxAgeDaysForUser).toHaveBeenCalledWith("user-1");
 		});
 	});
+
+	describe("isPasswordExpiredForUser", () => {
+		const NOW = "2026-06-01T00:00:00.000Z";
+
+		beforeEach(() => {
+			vi.useFakeTimers();
+			vi.setSystemTime(new Date(NOW));
+		});
+
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		it("is never expired when passwordUpdatedAt is null (pre-feature user)", async () => {
+			vi.mocked(mockRepo.getStrictestEnabledMaxAgeDaysForUser).mockResolvedValue(30);
+			const service = createService(mockRepo);
+			await expect(service.isPasswordExpiredForUser("user-1", null)).resolves.toBe(false);
+		});
+
+		it("is never expired when no policy enforces a max age", async () => {
+			vi.mocked(mockRepo.getStrictestEnabledMaxAgeDaysForUser).mockResolvedValue(null);
+			const service = createService(mockRepo);
+			const tenYearsAgo = "2016-01-01T00:00:00.000Z";
+			await expect(service.isPasswordExpiredForUser("user-1", tenYearsAgo)).resolves.toBe(false);
+		});
+
+		it("is not expired when the password is within the max age", async () => {
+			vi.mocked(mockRepo.getStrictestEnabledMaxAgeDaysForUser).mockResolvedValue(30);
+			const service = createService(mockRepo);
+			const tenDaysAgo = "2026-05-22T00:00:00.000Z";
+			await expect(service.isPasswordExpiredForUser("user-1", tenDaysAgo)).resolves.toBe(false);
+		});
+
+		it("is expired when the password is older than the max age", async () => {
+			vi.mocked(mockRepo.getStrictestEnabledMaxAgeDaysForUser).mockResolvedValue(30);
+			const service = createService(mockRepo);
+			const sixtyDaysAgo = "2026-04-02T00:00:00.000Z";
+			await expect(service.isPasswordExpiredForUser("user-1", sixtyDaysAgo)).resolves.toBe(true);
+		});
+	});
 });

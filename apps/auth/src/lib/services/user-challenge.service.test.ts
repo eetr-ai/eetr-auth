@@ -680,4 +680,61 @@ describe("UserChallengeService", () => {
 			expect(challengeRepo.deleteById).toHaveBeenCalledWith("challenge-1");
 		});
 	});
+
+	describe("sendExpiredPasswordReset", () => {
+		const configuredSite = {
+			siteUrl: "https://auth.example.com",
+			siteTitle: "Test Auth",
+			logoKey: null,
+			cdnUrl: null,
+		};
+
+		it("sends a reset email and reports true when delivery is configured", async () => {
+			const userRepo = createUserRepoMock();
+			const siteRepo = createSiteRepoMock();
+			const mail = createMailMock();
+			siteRepo.get.mockResolvedValue(configuredSite as never);
+			const user = makeUser({ email: "alice@example.com" });
+			userRepo.findByEmail.mockResolvedValue(user);
+			const service = createService({ userRepo, siteRepo, mail });
+
+			await expect(service.sendExpiredPasswordReset(user)).resolves.toBe(true);
+			expect(mail.send).toHaveBeenCalled();
+		});
+
+		it("reports false (and sends nothing) when the site URL is not configured", async () => {
+			const siteRepo = createSiteRepoMock();
+			const mail = createMailMock();
+			siteRepo.get.mockResolvedValue({ ...configuredSite, siteUrl: null } as never);
+			const service = createService({ siteRepo, mail });
+
+			await expect(
+				service.sendExpiredPasswordReset(makeUser({ email: "alice@example.com" }))
+			).resolves.toBe(false);
+			expect(mail.send).not.toHaveBeenCalled();
+		});
+
+		it("reports false when no RESEND key is configured", async () => {
+			const siteRepo = createSiteRepoMock();
+			const mail = createMailMock();
+			mail.getResendApiKey.mockReturnValue(null);
+			siteRepo.get.mockResolvedValue(configuredSite as never);
+			const service = createService({ siteRepo, mail });
+
+			await expect(
+				service.sendExpiredPasswordReset(makeUser({ email: "alice@example.com" }))
+			).resolves.toBe(false);
+			expect(mail.send).not.toHaveBeenCalled();
+		});
+
+		it("reports false when the user has no email address", async () => {
+			const siteRepo = createSiteRepoMock();
+			const mail = createMailMock();
+			siteRepo.get.mockResolvedValue(configuredSite as never);
+			const service = createService({ siteRepo, mail });
+
+			await expect(service.sendExpiredPasswordReset(makeUser({ email: null }))).resolves.toBe(false);
+			expect(mail.send).not.toHaveBeenCalled();
+		});
+	});
 });

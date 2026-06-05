@@ -28,11 +28,23 @@ export async function signOutFromChallenge() {
 
 export async function beginSignInChallenge(username: string, password: string) {
 	return onPublicServerAction(async (_ctx, getServices) => {
-		const { userChallengeService, siteSettingsService, totpService } = getServices();
+		const { userChallengeService, siteSettingsService, totpService, passwordPolicyService } =
+			getServices();
 		const site = await siteSettingsService.get();
 		const user = await userChallengeService.verifyUsernamePassword(username, password);
 		if (!user) {
 			return { ok: false as const, error: "Invalid username or password." };
+		}
+
+		// Password max-age gate (runs before MFA so an expired credential can't reach a
+		// session). The policy decision and the reset-email dispatch live in their
+		// respective services; this action only maps the outcome to cookies + response.
+		if (await passwordPolicyService.isPasswordExpiredForUser(user.id, user.passwordUpdatedAt)) {
+			const emailSent = await userChallengeService.sendExpiredPasswordReset(user);
+			const jar = await cookies();
+			jar.delete(MFA_CHALLENGE_COOKIE);
+			jar.delete(EMAIL_VERIFICATION_CHALLENGE_COOKIE);
+			return { ok: true as const, challenge: "password_expired" as const, emailSent };
 		}
 
 		const totpEnrolled = (await totpService.getStatus(user.id)).enrolled;
