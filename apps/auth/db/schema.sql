@@ -37,6 +37,21 @@ CREATE TABLE IF NOT EXISTS users (
   is_admin INTEGER NOT NULL DEFAULT 0
 );
 
+-- User<->environment access grants (many-to-many). Controls which environments a
+-- user may access. On upgrade (patch 0.4.1) every existing user is granted every
+-- environment for backwards compatibility.
+CREATE TABLE IF NOT EXISTS users_environments (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  environment_id TEXT NOT NULL,
+  UNIQUE(user_id, environment_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_environments_user_id ON users_environments(user_id);
+CREATE INDEX IF NOT EXISTS idx_users_environments_environment_id ON users_environments(environment_id);
+
 -- Clients (OAuth clients per environment, created by a user/admin)
 -- created_by is nullable + SET NULL on user delete so removing an admin does not
 -- cascade into their OAuth clients.

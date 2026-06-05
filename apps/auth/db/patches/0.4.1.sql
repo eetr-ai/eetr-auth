@@ -42,6 +42,26 @@ CREATE TABLE IF NOT EXISTS password_policy_environments (
 CREATE INDEX IF NOT EXISTS idx_password_policy_environments_policy_id
   ON password_policy_environments(policy_id);
 
+-- User<->environment access grants (many-to-many). UNIQUE(user_id, environment_id)
+-- makes the backfill below idempotent/replay-safe via INSERT OR IGNORE.
+CREATE TABLE IF NOT EXISTS users_environments (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  environment_id TEXT NOT NULL,
+  UNIQUE(user_id, environment_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_environments_user_id ON users_environments(user_id);
+CREATE INDEX IF NOT EXISTS idx_users_environments_environment_id ON users_environments(environment_id);
+
+-- Backwards compatibility: grant every existing user access to every environment.
+-- INSERT OR IGNORE + the UNIQUE constraint keep this safe to replay.
+INSERT OR IGNORE INTO users_environments (id, user_id, environment_id)
+SELECT lower(hex(randomblob(16))), u.id, e.id
+FROM users u CROSS JOIN environments e;
+
 -- Non-idempotent: applied exactly once by the version gate (see header note).
 ALTER TABLE users ADD COLUMN password_updated_at TEXT;
 
