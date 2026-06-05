@@ -371,7 +371,8 @@ class InMemoryUserRepo implements UserRepository {
 	async update(): Promise<void> {}
 	async delete(): Promise<void> {}
 	async getUserEnvironments(): Promise<string[]> {
-		return [];
+		// Grant the integration client's environment so authorize() passes the access gate.
+		return ["env-1"];
 	}
 	async setUserEnvironments(): Promise<void> {}
 	async deleteWithAudit(): Promise<void> {}
@@ -436,6 +437,7 @@ function buildHarness(options?: {
 		clientRepo,
 		tokenRepo,
 		authorizationCodeRepo,
+		userRepo,
 	});
 
 	return { client, tokenService, authorizationService };

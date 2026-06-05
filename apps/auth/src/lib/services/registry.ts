@@ -117,6 +117,7 @@ export function getServices(ctx: RequestContext): Services {
 			clientRepo,
 			tokenRepo,
 			authorizationCodeRepo,
+			userRepo,
 		}),
 		oauthTokenService: new OauthTokenService({
 			clientRepo,

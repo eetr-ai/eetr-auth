@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthorizationCodeRepository } from "@/lib/repositories/authorization-code.repository";
 import type { ClientRepository, Client } from "@/lib/repositories/client.repository";
 import type { TokenRepository, ClientScopeGrant } from "@/lib/repositories/token.repository";
+import type { UserRepository } from "@/lib/repositories/admin.repository";
 import { OauthAuthorizationService } from "@/lib/services/oauth-authorization.service";
 
 function createClientRepoMock() {
@@ -43,15 +44,24 @@ function createAuthorizationCodeRepoMock() {
 	} satisfies AuthorizationCodeRepository;
 }
 
+/** Defaults to granting the user the client's environment ("env-1") so happy paths pass. */
+function createUserRepoMock(environmentIds: string[] = ["env-1"]) {
+	return {
+		getUserEnvironments: vi.fn().mockResolvedValue(environmentIds),
+	} as unknown as UserRepository;
+}
+
 function createService(deps?: {
 	clientRepo?: ClientRepository;
 	tokenRepo?: TokenRepository;
 	authorizationCodeRepo?: AuthorizationCodeRepository;
+	userRepo?: UserRepository;
 }) {
 	return new OauthAuthorizationService({
 		clientRepo: deps?.clientRepo ?? createClientRepoMock(),
 		tokenRepo: deps?.tokenRepo ?? createTokenRepoMock(),
 		authorizationCodeRepo: deps?.authorizationCodeRepo ?? createAuthorizationCodeRepoMock(),
+		userRepo: deps?.userRepo ?? createUserRepoMock(),
 	});
 }
 
@@ -170,6 +180,37 @@ describe("OauthAuthorizationService", () => {
 			code: "unauthorized_client",
 			message: "Client credentials have expired.",
 			status: 401,
+		});
+	});
+
+	it("rejects a user without access to the client's environment", async () => {
+		const clientRepo = createClientRepoMock();
+		clientRepo.getByClientIdentifier.mockResolvedValue(makeClient({ environmentId: "env-prod" }));
+		const service = createService({
+			clientRepo,
+			userRepo: createUserRepoMock(["env-dev"]),
+		});
+
+		await expect(service.authorize(baseParams)).rejects.toMatchObject({
+			code: "access_denied",
+			message: "You do not have access to this application.",
+			status: 403,
+		});
+	});
+
+	it("allows a user granted the client's environment to proceed past the access gate", async () => {
+		const clientRepo = createClientRepoMock();
+		clientRepo.getByClientIdentifier.mockResolvedValue(makeClient({ environmentId: "env-prod" }));
+		// No redirect URIs registered → fails the next check, proving the access gate passed.
+		clientRepo.getRedirectUris.mockResolvedValue([]);
+		const service = createService({
+			clientRepo,
+			userRepo: createUserRepoMock(["env-prod"]),
+		});
+
+		await expect(service.authorize(baseParams)).rejects.toMatchObject({
+			code: "invalid_request",
+			message: "Invalid redirect_uri.",
 		});
 	});
 

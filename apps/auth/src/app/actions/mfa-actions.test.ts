@@ -3,8 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("next/headers", () => ({ cookies: vi.fn() }));
 vi.mock("@/lib/context/on-public-server-action", () => ({ onPublicServerAction: vi.fn() }));
 vi.mock("@/auth", () => ({ auth: vi.fn(), signOut: vi.fn() }));
+vi.mock("@/lib/auth/oauth-pending-cookie", () => ({
+	decodePendingAuthorizationCookie: vi.fn().mockResolvedValue(null),
+	getPendingCookieName: vi.fn().mockReturnValue("oauth_pending"),
+}));
 
 import { cookies } from "next/headers";
+import { decodePendingAuthorizationCookie } from "@/lib/auth/oauth-pending-cookie";
 import { onPublicServerAction } from "@/lib/context/on-public-server-action";
 import {
 	beginSignInChallenge,
@@ -35,9 +40,18 @@ function setup(opts: {
 	complexity?: ComplexityResult;
 	/** Second verifyUsernamePassword answer (the "new password" check in changePasswordAtSignIn). */
 	newPasswordMatchesExisting?: boolean;
+	/** When set, simulates an OAuth client context resolving to this environment. */
+	clientEnvironmentId?: string;
+	/** Environments the user is granted (for the env-access check). */
+	userEnvironments?: string[];
 }) {
 	const jar = { set: vi.fn(), delete: vi.fn(), get: vi.fn() };
 	cookiesMock.mockResolvedValue(jar as never);
+
+	// Simulate the OAuth pending cookie + client→environment resolution when requested.
+	vi.mocked(decodePendingAuthorizationCookie).mockResolvedValue(
+		opts.clientEnvironmentId ? { client_id: "client-abc" } : null
+	);
 
 	const verifyUsernamePassword = vi.fn().mockResolvedValue(opts.user);
 	if (opts.newPasswordMatchesExisting !== undefined) {
@@ -61,8 +75,15 @@ function setup(opts: {
 			.fn()
 			.mockResolvedValue(opts.complexity ?? { ok: true, violations: [], policy: null }),
 	};
-	const clientService = { getByClientIdentifier: vi.fn().mockResolvedValue(null) };
-	const userService = { updateUser: vi.fn().mockResolvedValue(undefined) };
+	const clientService = {
+		getByClientIdentifier: vi
+			.fn()
+			.mockResolvedValue(opts.clientEnvironmentId ? { environmentId: opts.clientEnvironmentId } : null),
+	};
+	const userService = {
+		updateUser: vi.fn().mockResolvedValue(undefined),
+		getUserEnvironments: vi.fn().mockResolvedValue(opts.userEnvironments ?? []),
+	};
 
 	const services = {
 		userChallengeService,
@@ -268,6 +289,34 @@ describe("beginSignInChallenge — password complexity gate", () => {
 		const r = await beginSignInChallenge("alice", "pw");
 		expect(r).toMatchObject({ challenge: "password_expired" });
 		expect(passwordPolicyService.checkSignInPasswordComplexity).not.toHaveBeenCalled();
+	});
+});
+
+describe("beginSignInChallenge — environment access", () => {
+	it("denies sign-in when the user lacks access to the client's environment", async () => {
+		const { passwordPolicyService } = setup({
+			user: baseUser,
+			site: { mfaEnabled: false, mfaCanEnable: false },
+			totpEnrolled: true,
+			clientEnvironmentId: "env-prod",
+			userEnvironments: ["env-dev"],
+		});
+		const r = await beginSignInChallenge("alice", "pw");
+		expect(r).toEqual({ ok: false, error: "You don't have access to this application." });
+		// Denied before any gate runs.
+		expect(passwordPolicyService.isPasswordExpiredForUser).not.toHaveBeenCalled();
+	});
+
+	it("allows sign-in when the user is granted the client's environment", async () => {
+		setup({
+			user: baseUser,
+			site: { mfaEnabled: false, mfaCanEnable: false },
+			totpEnrolled: true,
+			clientEnvironmentId: "env-prod",
+			userEnvironments: ["env-dev", "env-prod"],
+		});
+		const r = await beginSignInChallenge("alice", "pw");
+		expect(r).toEqual({ ok: true, challenge: "mfa", methods: ["totp"] });
 	});
 });
 

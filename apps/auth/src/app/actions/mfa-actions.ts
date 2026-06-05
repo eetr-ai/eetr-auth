@@ -51,12 +51,31 @@ export async function signOutFromChallenge() {
 
 export async function beginSignInChallenge(username: string, password: string) {
 	return onPublicServerAction(async (ctx, getServices) => {
-		const { userChallengeService, siteSettingsService, totpService, passwordPolicyService, clientService } =
-			getServices();
+		const {
+			userChallengeService,
+			siteSettingsService,
+			totpService,
+			passwordPolicyService,
+			clientService,
+			userService,
+		} = getServices();
 		const site = await siteSettingsService.get();
 		const user = await userChallengeService.verifyUsernamePassword(username, password);
 		if (!user) {
 			return { ok: false as const, error: "Invalid username or password." };
+		}
+
+		// Environment of the client being signed in to (null for a non-OAuth/dashboard login).
+		const environmentId = await resolvePendingEnvironmentId(clientService, ctx.env as unknown as Record<string, unknown>);
+
+		// Environment access: the user must be granted the client's environment. The
+		// authorization endpoint enforces this authoritatively; this is the friendly,
+		// early denial on the fresh-login path. Admins are scoped too (no bypass).
+		if (environmentId) {
+			const userEnvironments = await userService.getUserEnvironments(user.id);
+			if (!userEnvironments.includes(environmentId)) {
+				return { ok: false as const, error: "You don't have access to this application." };
+			}
 		}
 
 		// Password max-age gate (runs before MFA so an expired credential can't reach a
@@ -76,7 +95,6 @@ export async function beginSignInChallenge(username: string, password: string) {
 		// out-of-policy credential can't reach a session. The policy is scoped to the
 		// environment of the client being signed in to (admins use the admin policy). The
 		// user proved the current password; they must set a compliant one in place to continue.
-		const environmentId = await resolvePendingEnvironmentId(clientService, ctx.env as unknown as Record<string, unknown>);
 		const complexity = await passwordPolicyService.checkSignInPasswordComplexity({
 			userId: user.id,
 			isAdmin: user.isAdmin,
