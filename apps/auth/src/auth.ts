@@ -13,6 +13,7 @@ import type { RequestContext } from "@/lib/context/types";
 import { PasskeyService } from "@/lib/services/passkey.service";
 import { getServices } from "@/lib/services/registry";
 import { EMAIL_VERIFICATION_CHALLENGE_COOKIE } from "@/lib/auth/email-verification-cookie";
+import { isEmailMfaGloballyEnabled } from "@/lib/auth/email-mfa-enablement";
 import { MFA_CHALLENGE_COOKIE } from "@/lib/auth/mfa-cookie";
 import {
 	decodePendingAuthorizationCookie,
@@ -105,11 +106,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 				}
 
 				const siteRow = await siteRepo.get();
-				const mfaEnabled = siteRow?.mfaEnabled ?? false;
-				const siteUrl = siteRow?.siteUrl?.trim();
 				// Email MFA and email verification both depend on the global email toggle
-				// being on with a Site URL configured.
-				const emailMfaGloballyEnabled = mfaEnabled && !!siteUrl;
+				// being on with a Site URL and Resend key configured.
+				const emailMfaGloballyEnabled = isEmailMfaGloballyEnabled(siteRow, env.RESEND_API_KEY);
 				const emailMfaActive = emailMfaGloballyEnabled && !!user.email?.trim();
 				// Email verification is only enforced when email MFA is enabled globally;
 				// otherwise there's no way to send a code, so don't block sign-in (including
@@ -361,8 +360,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 				// otherwise there's no way to verify, so don't block sign-in (mirrors the
 				// password provider and beginSignInChallenge).
 				const siteRow = await siteRepo.get();
-				const emailMfaGloballyEnabled = (siteRow?.mfaEnabled ?? false) && !!siteRow?.siteUrl?.trim();
-				if (emailMfaGloballyEnabled && !user.isAdmin && !user.emailVerifiedAt) {
+				if (isEmailMfaGloballyEnabled(siteRow, env.RESEND_API_KEY) && !user.isAdmin && !user.emailVerifiedAt) {
 					console.info(
 						JSON.stringify({
 							event: "sign_in_authorize",
