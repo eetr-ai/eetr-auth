@@ -33,6 +33,11 @@ export const AUDIT_ACTION = {
 	scopeCreate: "scope.create",
 	scopeDelete: "scope.delete",
 
+	// Setup: password policies
+	passwordPolicyCreate: "password_policy.create",
+	passwordPolicyUpdate: "password_policy.update",
+	passwordPolicyDelete: "password_policy.delete",
+
 	// Setup: site settings
 	siteSettingsUpdate: "site_settings.update",
 	siteLogoUpdate: "site_settings.logo_update",
@@ -47,6 +52,7 @@ export const AUDIT_RESOURCE = {
 	client: "client",
 	environment: "environment",
 	scope: "scope",
+	passwordPolicy: "password_policy",
 	siteSettings: "site_settings",
 } as const;
 

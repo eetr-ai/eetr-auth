@@ -1,0 +1,240 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import type {
+	CreatePasswordPolicyInput,
+	PasswordPolicy,
+	PasswordPolicyRepository,
+} from "@/lib/repositories/password-policy.repository";
+import type { AdminAuditLogRepository } from "@/lib/repositories/admin-audit-log.repository";
+import { PasswordPolicyService } from "@/lib/services/password-policy.service";
+import { AdminAuditLogService } from "@/lib/services/admin-audit-log.service";
+
+function createPolicyRepoMock(): PasswordPolicyRepository {
+	return {
+		list: vi.fn(),
+		listWithEnvironments: vi.fn(),
+		getById: vi.fn(),
+		getWithEnvironments: vi.fn(),
+		create: vi.fn(),
+		update: vi.fn(),
+		delete: vi.fn(),
+		setEnvironments: vi.fn(),
+		getPolicyForEnvironment: vi.fn().mockResolvedValue(null),
+		getStrictestEnabledMaxAgeDaysForUser: vi.fn(),
+	};
+}
+
+function createAuditLogService(insert = vi.fn()): AdminAuditLogService {
+	const logRepo: AdminAuditLogRepository = { insert, listLogs: vi.fn() };
+	return new AdminAuditLogService({ logRepo });
+}
+
+function createService(
+	policyRepo: PasswordPolicyRepository,
+	adminAuditLogService: AdminAuditLogService = createAuditLogService()
+): PasswordPolicyService {
+	return new PasswordPolicyService({ policyRepo, adminAuditLogService });
+}
+
+function makeInput(overrides?: Partial<CreatePasswordPolicyInput>): CreatePasswordPolicyInput {
+	return {
+		name: "Default",
+		enabled: true,
+		minLength: 8,
+		maxLength: null,
+		requireUppercase: false,
+		requireLowercase: false,
+		requireNumber: false,
+		requireSpecial: false,
+		rejectContainsIdentifier: false,
+		maxPasswordAgeDays: 0,
+		...overrides,
+	};
+}
+
+function makePolicy(overrides?: Partial<PasswordPolicy>): PasswordPolicy {
+	return {
+		id: "policy-1",
+		name: "Default",
+		enabled: true,
+		minLength: 8,
+		maxLength: null,
+		requireUppercase: false,
+		requireLowercase: false,
+		requireNumber: false,
+		requireSpecial: false,
+		rejectContainsIdentifier: false,
+		maxPasswordAgeDays: 0,
+		createdAt: "2026-01-01T00:00:00.000Z",
+		updatedAt: "2026-01-01T00:00:00.000Z",
+		...overrides,
+	};
+}
+
+describe("PasswordPolicyService", () => {
+	let mockRepo: PasswordPolicyRepository;
+
+	beforeEach(() => {
+		mockRepo = createPolicyRepoMock();
+		vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue("new-policy-id");
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	describe("create", () => {
+		it("creates a policy, assigns environments, and writes an audit entry", async () => {
+			vi.mocked(mockRepo.getWithEnvironments).mockResolvedValue({
+				...makePolicy({ id: "new-policy-id" }),
+				environmentIds: ["env-1"],
+			});
+			const insert = vi.fn();
+			const service = createService(mockRepo, createAuditLogService(insert));
+
+			const result = await service.create(makeInput(), ["env-1"], "actor-1");
+
+			expect(result.ok).toBe(true);
+			expect(mockRepo.create).toHaveBeenCalledWith(
+				"new-policy-id",
+				expect.objectContaining({ name: "Default" }),
+				expect.any(String)
+			);
+			expect(mockRepo.setEnvironments).toHaveBeenCalledWith("new-policy-id", ["env-1"]);
+			expect(insert).toHaveBeenCalledWith(
+				expect.objectContaining({
+					action: "password_policy.create",
+					resource_type: "password_policy",
+					resource_id: "new-policy-id",
+					actor_user_id: "actor-1",
+				})
+			);
+		});
+
+		it("trims the policy name before persisting", async () => {
+			const service = createService(mockRepo);
+			await service.create(makeInput({ name: "  Strict  " }), []);
+			expect(mockRepo.create).toHaveBeenCalledWith(
+				"new-policy-id",
+				expect.objectContaining({ name: "Strict" }),
+				expect.any(String)
+			);
+		});
+
+		it("rejects an empty name without creating", async () => {
+			const service = createService(mockRepo);
+			const result = await service.create(makeInput({ name: "   " }), []);
+			expect(result.ok).toBe(false);
+			expect(result.error).toMatch(/name is required/i);
+			expect(mockRepo.create).not.toHaveBeenCalled();
+		});
+
+		it("rejects maxLength below minLength", async () => {
+			const service = createService(mockRepo);
+			const result = await service.create(makeInput({ minLength: 12, maxLength: 8 }), []);
+			expect(result.ok).toBe(false);
+			expect(result.error).toMatch(/maximum length cannot be less/i);
+			expect(mockRepo.create).not.toHaveBeenCalled();
+		});
+
+		it("rejects a negative max password age", async () => {
+			const service = createService(mockRepo);
+			const result = await service.create(makeInput({ maxPasswordAgeDays: -1 }), []);
+			expect(result.ok).toBe(false);
+			expect(mockRepo.create).not.toHaveBeenCalled();
+		});
+
+		it("rejects assignment of an environment already owned by another policy", async () => {
+			vi.mocked(mockRepo.getPolicyForEnvironment).mockResolvedValue(
+				makePolicy({ id: "other", name: "Existing" })
+			);
+			const service = createService(mockRepo);
+			const result = await service.create(makeInput(), ["env-1"]);
+			expect(result.ok).toBe(false);
+			expect(result.error).toMatch(/already assigned to policy "Existing"/);
+			expect(mockRepo.create).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("update", () => {
+		it("returns an error when the policy does not exist", async () => {
+			vi.mocked(mockRepo.getById).mockResolvedValue(null);
+			const service = createService(mockRepo);
+			const result = await service.update("missing", { name: "X" }, undefined);
+			expect(result.ok).toBe(false);
+			expect(result.error).toMatch(/not found/i);
+		});
+
+		it("validates cross-field rules against the merged record", async () => {
+			// Existing minLength 10; updating only maxLength to 6 must fail.
+			vi.mocked(mockRepo.getById).mockResolvedValue(makePolicy({ minLength: 10 }));
+			const service = createService(mockRepo);
+			const result = await service.update("policy-1", { maxLength: 6 }, undefined);
+			expect(result.ok).toBe(false);
+			expect(result.error).toMatch(/maximum length cannot be less/i);
+			expect(mockRepo.update).not.toHaveBeenCalled();
+		});
+
+		it("updates and re-assigns environments, ignoring the policy's own env in the conflict check", async () => {
+			vi.mocked(mockRepo.getById).mockResolvedValue(makePolicy());
+			// Env already owned by THIS policy -> not a conflict.
+			vi.mocked(mockRepo.getPolicyForEnvironment).mockResolvedValue(makePolicy());
+			vi.mocked(mockRepo.getWithEnvironments).mockResolvedValue({
+				...makePolicy(),
+				environmentIds: ["env-1"],
+			});
+			const insert = vi.fn();
+			const service = createService(mockRepo, createAuditLogService(insert));
+
+			const result = await service.update("policy-1", { enabled: false }, ["env-1"], "actor-1");
+
+			expect(result.ok).toBe(true);
+			expect(mockRepo.update).toHaveBeenCalledWith(
+				"policy-1",
+				expect.objectContaining({ enabled: false }),
+				expect.any(String)
+			);
+			expect(mockRepo.setEnvironments).toHaveBeenCalledWith("policy-1", ["env-1"]);
+			expect(insert).toHaveBeenCalledWith(
+				expect.objectContaining({ action: "password_policy.update", resource_id: "policy-1" })
+			);
+		});
+	});
+
+	describe("delete", () => {
+		it("deletes an existing policy and writes an audit entry", async () => {
+			vi.mocked(mockRepo.getById).mockResolvedValue(makePolicy({ name: "Strict" }));
+			const insert = vi.fn();
+			const service = createService(mockRepo, createAuditLogService(insert));
+
+			const result = await service.delete("policy-1", "actor-1");
+
+			expect(result.ok).toBe(true);
+			expect(mockRepo.delete).toHaveBeenCalledWith("policy-1");
+			expect(insert).toHaveBeenCalledWith(
+				expect.objectContaining({
+					action: "password_policy.delete",
+					resource_id: "policy-1",
+					actor_user_id: "actor-1",
+				})
+			);
+		});
+
+		it("returns an error when the policy does not exist", async () => {
+			vi.mocked(mockRepo.getById).mockResolvedValue(null);
+			const service = createService(mockRepo);
+			const result = await service.delete("missing");
+			expect(result.ok).toBe(false);
+			expect(mockRepo.delete).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("getMaxPasswordAgeDaysForUser", () => {
+		it("delegates to the repository", async () => {
+			vi.mocked(mockRepo.getStrictestEnabledMaxAgeDaysForUser).mockResolvedValue(30);
+			const service = createService(mockRepo);
+			await expect(service.getMaxPasswordAgeDaysForUser("user-1")).resolves.toBe(30);
+			expect(mockRepo.getStrictestEnabledMaxAgeDaysForUser).toHaveBeenCalledWith("user-1");
+		});
+	});
+});
