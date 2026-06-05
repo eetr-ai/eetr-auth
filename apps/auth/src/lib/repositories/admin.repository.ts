@@ -6,6 +6,7 @@ export interface UserWithPassword {
 	emailVerifiedAt: string | null;
 	avatarKey: string | null;
 	passwordHash: string;
+	passwordUpdatedAt: string | null;
 	isAdmin: boolean;
 }
 
@@ -27,6 +28,7 @@ export interface UserUpdateInput {
 	emailVerifiedAt?: string | null;
 	avatarKey?: string | null;
 	passwordHash?: string;
+	passwordUpdatedAt?: string | null;
 	isAdmin?: boolean;
 }
 
@@ -40,6 +42,7 @@ export interface UserRepository {
 		email: string | null,
 		emailVerifiedAt: string | null,
 		passwordHash: string,
+		passwordUpdatedAt: string | null,
 		isAdmin: boolean
 	): Promise<void>;
 	list(): Promise<UserRecord[]>;

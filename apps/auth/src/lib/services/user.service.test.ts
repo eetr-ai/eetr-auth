@@ -129,6 +129,7 @@ describe("UserService", () => {
 				"alice@example.com",
 				"2026-04-07T12:00:00.000Z",
 				"hashed-password",
+				"2026-04-07T12:00:00.000Z",
 				true
 			);
 			expect(result.emailVerifiedAt).toBe("2026-04-07T12:00:00.000Z");
@@ -248,6 +249,33 @@ describe("UserService", () => {
 				"user-1",
 				expect.objectContaining({ passwordHash: "hashed-password" })
 			);
+		});
+
+		it("stamps passwordUpdatedAt when the password changes", async () => {
+			vi.useFakeTimers();
+			vi.setSystemTime(new Date("2026-04-07T12:00:00.000Z"));
+			const user = makeUserRecord();
+			vi.mocked(mockRepo.getById)
+				.mockResolvedValueOnce(user)
+				.mockResolvedValueOnce(user);
+			const service = createService(mockRepo);
+			await service.updateUser("user-1", { password: "new-password" }, "actor-1");
+			expect(mockRepo.update).toHaveBeenCalledWith(
+				"user-1",
+				expect.objectContaining({ passwordUpdatedAt: "2026-04-07T12:00:00.000Z" })
+			);
+			vi.useRealTimers();
+		});
+
+		it("does not stamp passwordUpdatedAt when the password is unchanged", async () => {
+			const user = makeUserRecord();
+			vi.mocked(mockRepo.getById)
+				.mockResolvedValueOnce(user)
+				.mockResolvedValueOnce({ ...user, name: "Alice B" });
+			const service = createService(mockRepo);
+			await service.updateUser("user-1", { name: "Alice B" }, "actor-1");
+			const patch = vi.mocked(mockRepo.update).mock.calls[0]?.[1];
+			expect(patch?.passwordUpdatedAt).toBeUndefined();
 		});
 
 		it("writes a user.update audit log entry listing changed fields", async () => {

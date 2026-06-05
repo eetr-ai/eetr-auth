@@ -16,13 +16,14 @@ export class UserRepositoryD1 implements UserRepository {
 		email: string | null,
 		emailVerifiedAt: string | null,
 		passwordHash: string,
+		passwordUpdatedAt: string | null,
 		isAdmin: boolean
 	): Promise<void> {
 		await this.db
 			.prepare(
-				"INSERT INTO users (id, username, name, email, email_verified_at, password_hash, is_admin) VALUES (?, ?, ?, ?, ?, ?, ?)"
+				"INSERT INTO users (id, username, name, email, email_verified_at, password_hash, password_updated_at, is_admin) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
 			)
-			.bind(id, username, name, email, emailVerifiedAt, passwordHash, isAdmin ? 1 : 0)
+			.bind(id, username, name, email, emailVerifiedAt, passwordHash, passwordUpdatedAt, isAdmin ? 1 : 0)
 			.run();
 	}
 
@@ -54,7 +55,7 @@ export class UserRepositoryD1 implements UserRepository {
 	async findByUsername(username: string): Promise<UserWithPassword | null> {
 		const result = await this.db
 			.prepare(
-				"SELECT id, username, name, email, email_verified_at as emailVerifiedAt, avatar_key as avatarKey, password_hash as passwordHash, is_admin as isAdmin FROM users WHERE username = ?"
+				"SELECT id, username, name, email, email_verified_at as emailVerifiedAt, avatar_key as avatarKey, password_hash as passwordHash, password_updated_at as passwordUpdatedAt, is_admin as isAdmin FROM users WHERE username = ?"
 			)
 			.bind(username)
 			.first<{
@@ -65,6 +66,7 @@ export class UserRepositoryD1 implements UserRepository {
 				emailVerifiedAt: string | null;
 				avatarKey: string | null;
 				passwordHash: string;
+				passwordUpdatedAt: string | null;
 				isAdmin: number;
 			}>();
 		return result
@@ -76,6 +78,7 @@ export class UserRepositoryD1 implements UserRepository {
 					emailVerifiedAt: result.emailVerifiedAt,
 					avatarKey: result.avatarKey,
 					passwordHash: result.passwordHash,
+					passwordUpdatedAt: result.passwordUpdatedAt,
 					isAdmin: !!result.isAdmin,
 				}
 			: null;
@@ -86,7 +89,7 @@ export class UserRepositoryD1 implements UserRepository {
 		if (!normalized) return null;
 		const result = await this.db
 			.prepare(
-				"SELECT id, username, name, email, email_verified_at as emailVerifiedAt, avatar_key as avatarKey, password_hash as passwordHash, is_admin as isAdmin FROM users WHERE lower(trim(email)) = ?"
+				"SELECT id, username, name, email, email_verified_at as emailVerifiedAt, avatar_key as avatarKey, password_hash as passwordHash, password_updated_at as passwordUpdatedAt, is_admin as isAdmin FROM users WHERE lower(trim(email)) = ?"
 			)
 			.bind(normalized)
 			.first<{
@@ -97,6 +100,7 @@ export class UserRepositoryD1 implements UserRepository {
 				emailVerifiedAt: string | null;
 				avatarKey: string | null;
 				passwordHash: string;
+				passwordUpdatedAt: string | null;
 				isAdmin: number;
 			}>();
 		return result
@@ -108,6 +112,7 @@ export class UserRepositoryD1 implements UserRepository {
 					emailVerifiedAt: result.emailVerifiedAt,
 					avatarKey: result.avatarKey,
 					passwordHash: result.passwordHash,
+					passwordUpdatedAt: result.passwordUpdatedAt,
 					isAdmin: !!result.isAdmin,
 				}
 			: null;
@@ -168,6 +173,10 @@ export class UserRepositoryD1 implements UserRepository {
 		if (updates.passwordHash !== undefined) {
 			sets.push("password_hash = ?");
 			binds.push(updates.passwordHash);
+		}
+		if (updates.passwordUpdatedAt !== undefined) {
+			sets.push("password_updated_at = ?");
+			binds.push(updates.passwordUpdatedAt);
 		}
 		if (updates.isAdmin !== undefined) {
 			sets.push("is_admin = ?");

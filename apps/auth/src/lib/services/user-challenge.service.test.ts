@@ -114,6 +114,7 @@ function makeUser(overrides?: Partial<UserWithPassword>): UserWithPassword {
 		emailVerifiedAt: null,
 		avatarKey: null,
 		passwordHash: "stored-hash",
+		passwordUpdatedAt: null,
 		isAdmin: false,
 		...overrides,
 	};
@@ -432,7 +433,10 @@ describe("UserChallengeService", () => {
 				argonHasher: env.ARGON_HASHER,
 				hashMethod: "argon",
 			});
-			expect(userRepo.update).toHaveBeenCalledWith("user-1", { passwordHash: "$argon2id$new-hash" });
+			expect(userRepo.update).toHaveBeenCalledWith("user-1", {
+				passwordHash: "$argon2id$new-hash",
+				passwordUpdatedAt: "2026-04-06T13:10:00.000Z",
+			});
 			expect(challengeRepo.markConsumed).toHaveBeenCalledWith(
 				"challenge-1",
 				"2026-04-06T13:10:00.000Z"

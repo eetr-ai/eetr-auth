@@ -473,7 +473,10 @@ export class UserChallengeService {
 			argonHasher: this.cfEnv.ARGON_HASHER,
 			hashMethod: resolveHashMethod(this.env),
 		});
-		await this.userRepo.update(userId, { passwordHash: hash });
+		await this.userRepo.update(userId, {
+			passwordHash: hash,
+			passwordUpdatedAt: new Date().toISOString(),
+		});
 		await this.challengeRepo.markConsumed(challengeId, new Date().toISOString());
 		// Self-service reset: the user whose password changed is also the actor.
 		await this.auditLog.logAction({
