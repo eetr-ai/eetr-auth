@@ -8,7 +8,7 @@
  *
  * Optional overrides (non-empty wins over Terraform): --issuer-base-url, --auth-url, --jwks-cdn-base-url
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import stripJsonComments from "strip-json-comments";
 
@@ -145,7 +145,17 @@ function main() {
 		config.vars.JWT_KID = jwtKid;
 	}
 
-	writeFileSync(outPath, JSON.stringify(config, null, "\t") + "\n", "utf8");
+	const rendered = JSON.stringify(config, null, "\t") + "\n";
+	// Back up any existing config before overwriting so a re-render for a different
+	// account/project can't silently clobber a prior instance's config. Backups are
+	// timestamped (never overwrite each other) and gitignored alongside the config.
+	if (existsSync(outPath) && readFileSync(outPath, "utf8") !== rendered) {
+		const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+		const backupPath = `${outPath}.${stamp}.bak`;
+		copyFileSync(outPath, backupPath);
+		console.log("Backed up previous config to", backupPath);
+	}
+	writeFileSync(outPath, rendered, "utf8");
 	console.log("Wrote", outPath);
 }
 
