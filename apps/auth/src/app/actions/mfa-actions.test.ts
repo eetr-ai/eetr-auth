@@ -103,15 +103,39 @@ describe("beginSignInChallenge — method availability", () => {
 		expect(r).toEqual({ ok: true, challenge: "none" });
 	});
 
-	it("falls back to email verification for an unverified non-admin with no MFA methods", async () => {
+	it("requires email verification for an unverified non-admin when email MFA is enabled globally", async () => {
+		const { userChallengeService } = setup({
+			user: { ...baseUser, emailVerifiedAt: null },
+			site: { mfaEnabled: true, mfaCanEnable: true },
+			totpEnrolled: false,
+		});
+		const r = await beginSignInChallenge("alice", "pw");
+		// Email MFA is the user's sole method, so they go through the MFA challenge,
+		// which also verifies email ownership on completion.
+		expect(r).toEqual({ ok: true, challenge: "mfa", methods: ["email"] });
+		expect(userChallengeService.createMfaOtpAndSendEmail).toHaveBeenCalledOnce();
+	});
+
+	it("signs in an unverified non-admin without email verification when email MFA is off globally", async () => {
 		const { userChallengeService } = setup({
 			user: { ...baseUser, emailVerifiedAt: null },
 			site: { mfaEnabled: false, mfaCanEnable: false },
 			totpEnrolled: false,
 		});
 		const r = await beginSignInChallenge("alice", "pw");
-		expect(r).toEqual({ ok: true, challenge: "email_verification" });
-		expect(userChallengeService.createEmailVerificationOtpAndSendEmail).toHaveBeenCalledOnce();
+		expect(r).toEqual({ ok: true, challenge: "none" });
+		expect(userChallengeService.createEmailVerificationOtpAndSendEmail).not.toHaveBeenCalled();
+	});
+
+	it("signs in a non-admin with no email address when email MFA is off globally", async () => {
+		const { userChallengeService } = setup({
+			user: { ...baseUser, email: null, emailVerifiedAt: null },
+			site: { mfaEnabled: false, mfaCanEnable: false },
+			totpEnrolled: false,
+		});
+		const r = await beginSignInChallenge("alice", "pw");
+		expect(r).toEqual({ ok: true, challenge: "none" });
+		expect(userChallengeService.createEmailVerificationOtpAndSendEmail).not.toHaveBeenCalled();
 	});
 
 	it("rejects an invalid password", async () => {

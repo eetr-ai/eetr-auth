@@ -103,8 +103,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 				const siteRow = await siteRepo.get();
 				const mfaEnabled = siteRow?.mfaEnabled ?? false;
 				const siteUrl = siteRow?.siteUrl?.trim();
-				const emailMfaActive = mfaEnabled && !!siteUrl && !!user.email?.trim();
-				const requiresEmailVerification = !user.isAdmin && !user.emailVerifiedAt;
+				// Email MFA and email verification both depend on the global email toggle
+				// being on with a Site URL configured.
+				const emailMfaGloballyEnabled = mfaEnabled && !!siteUrl;
+				const emailMfaActive = emailMfaGloballyEnabled && !!user.email?.trim();
+				// Email verification is only enforced when email MFA is enabled globally;
+				// otherwise there's no way to send a code, so don't block sign-in (including
+				// accounts with no email address).
+				const requiresEmailVerification =
+					emailMfaGloballyEnabled && !user.isAdmin && !user.emailVerifiedAt;
 
 				const requestCtx: RequestContext = { env, cf, ctx };
 				const { userChallengeService: challengeSvc, totpService } = getServices(requestCtx);

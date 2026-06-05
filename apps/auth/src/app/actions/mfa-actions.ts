@@ -76,14 +76,19 @@ export async function beginSignInChallenge(username: string, password: string) {
 		if (user.isAdmin) {
 			return { ok: true as const, challenge: "none" as const };
 		}
-		if (!user.email?.trim()) {
-			return { ok: false as const, error: "Your account has no email address; contact an administrator." };
-		}
 
-		if (user.emailVerifiedAt) {
+		// Email verification on sign-in is only enforced when email MFA is enabled
+		// globally — it shares the same email infrastructure, so when that's off there's
+		// no way to send a verification code. Don't block sign-in (including accounts
+		// with no email address) on a check we can't perform.
+		const emailMfaEnabledGlobally = siteWantsEmailMfa && site.mfaCanEnable;
+		if (!emailMfaEnabledGlobally || user.emailVerifiedAt) {
 			jar.delete(MFA_CHALLENGE_COOKIE);
 			jar.delete(EMAIL_VERIFICATION_CHALLENGE_COOKIE);
 			return { ok: true as const, challenge: "none" as const };
+		}
+		if (!user.email?.trim()) {
+			return { ok: false as const, error: "Your account has no email address; contact an administrator." };
 		}
 
 		const challengeId = await userChallengeService.createEmailVerificationOtpAndSendEmail(user);
