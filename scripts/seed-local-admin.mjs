@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "
 import md5 from "md5";
 import stripJsonComments from "strip-json-comments";
 
-const DEFAULT_LOCAL_WRANGLER_CONFIGS = ["wrangler.generated.jsonc", "infra/wrangler.template.jsonc"];
+const DEFAULT_LOCAL_WRANGLER_CONFIGS = ["wrangler.generated.jsonc", "../../infra/wrangler.template.jsonc"];
 
 const username = "admin";
 const password = "admin";

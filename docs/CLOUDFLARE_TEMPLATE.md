@@ -41,7 +41,7 @@ npm install
 ## Step 2 — Customize the Worker Name
 
 The auth worker is named `eetr-auth` by default. To use a custom name, set `worker_name` in
-`apps/auth/infra/terraform/terraform.tfvars`:
+`infra/terraform/terraform.tfvars`:
 
 ```hcl
 worker_name = "my-auth-server"
@@ -59,7 +59,7 @@ automatically — you do not edit a Wrangler file by hand.
 ## Step 3 — Configure Your Domain
 
 Set the domain/subdomain where the auth server will be accessible — it is used in OAuth flows and email
-links. Configure these in `apps/auth/infra/terraform/terraform.tfvars`; they are written into the rendered
+links. Configure these in `infra/terraform/terraform.tfvars`; they are written into the rendered
 Wrangler config automatically:
 
 ```hcl
@@ -77,7 +77,7 @@ repository root:
 
 ```bash
 # 1. Provision D1 + R2
-cd apps/auth/infra/terraform && terraform init && terraform apply && cd -
+cd infra/terraform && terraform init && terraform apply && cd -
 
 # 2. Deploy the password hasher, then run automated setup
 npm run deploy:argon-hasher
@@ -173,8 +173,8 @@ Configure these in the admin dashboard under **Dashboard → Setup → Site iden
 
 These are deployment knobs, not branding:
 
-- **Worker name** — set `worker_name` in `apps/auth/infra/terraform/terraform.tfvars`.
-- **Client ID prefix** — change the `CLIENT_KEY_PREFIX` var in `apps/auth/infra/wrangler.template.jsonc` (e.g. `myapp`).
+- **Worker name** — set `worker_name` in `infra/terraform/terraform.tfvars`.
+- **Client ID prefix** — change the `CLIENT_KEY_PREFIX` var in `infra/wrangler.template.jsonc` (e.g. `myapp`).
 
 ### Email
 
@@ -186,7 +186,7 @@ Default scopes are seeded during `db:bootstrap`. Add custom scopes in the admin 
 
 ### Password Hashing
 
-The default is `argon` (Argon2id via the `argon-hasher` worker). To use an alternative method, set `HASH_METHOD` in `apps/auth/infra/wrangler.template.jsonc` and implement the hash interface in `apps/auth/src/lib/auth/`.
+The default is `argon` (Argon2id via the `argon-hasher` worker). To use an alternative method, set `HASH_METHOD` in `infra/wrangler.template.jsonc` and implement the hash interface in `apps/auth/src/lib/auth/`.
 
 ---
 
@@ -197,12 +197,12 @@ These files contain instance-specific values and are **gitignored** — you gene
 | File | Description |
 |---|---|
 | `apps/auth/wrangler.generated.jsonc` | Generated from Terraform with real D1/R2 IDs |
-| `apps/auth/infra/out/terraform.tf.json` | Terraform output JSON |
-| `apps/auth/infra/terraform/terraform.tfvars` | Your account ID and resource names |
+| `infra/out/terraform.tf.json` | Terraform output JSON |
+| `infra/terraform/terraform.tfvars` | Your account ID and resource names |
 | `apps/auth/.env.local` | Local env vars |
 | `apps/auth/.dev.vars` | Wrangler local dev secrets |
 
-The committed `apps/auth/infra/wrangler.template.jsonc` is the **template** — it contains placeholders that get rendered into `wrangler.generated.jsonc` by the infra scripts (`infra:render-wrangler`, run as part of `setup:remote`).
+The committed `infra/wrangler.template.jsonc` is the **template** — it contains placeholders that get rendered into `wrangler.generated.jsonc` by the infra scripts (`infra:render-wrangler`, run as part of `setup:remote`).
 
 ---
 
@@ -216,7 +216,7 @@ git fetch upstream
 git merge upstream/main
 ```
 
-Then re-run the automated upgrade, which applies any new versioned schema patches from `apps/auth/db/patches/`
+Then re-run the automated upgrade, which applies any new versioned schema patches from `db/patches/`
 (via `db:migrate:remote`), refreshes config, provisions only missing secrets, and redeploys:
 
 ```bash

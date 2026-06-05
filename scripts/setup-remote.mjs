@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 
 function parseArgs(argv) {
 	const out = {
-		tfJson: "infra/out/terraform.tf.json",
+		tfJson: "../../infra/out/terraform.tf.json",
 		wranglerConfig: process.env.WRANGLER_CONFIG?.trim() || "wrangler.generated.jsonc",
 		adminEmail: process.env.ADMIN_EMAIL?.trim() || "",
 		forceRotate: false,
@@ -63,16 +63,16 @@ function runOpenNextDeploy(configPath) {
 function main() {
 	const args = parseArgs(process.argv.slice(2));
 
-	runNodeScript("scripts/terraform-output.mjs", ["--tf-json", args.tfJson]);
-	runNodeScript("scripts/render-wrangler-config.mjs", [
+	runNodeScript("../../scripts/terraform-output.mjs", ["--tf-json", args.tfJson]);
+	runNodeScript("../../scripts/render-wrangler-config.mjs", [
 		"--base",
-		"infra/wrangler.template.jsonc",
+		"../../infra/wrangler.template.jsonc",
 		"--tf-json",
 		args.tfJson,
 		"--out",
 		args.wranglerConfig,
 	]);
-	runNodeScript("scripts/validate-remote-setup.mjs", [
+	runNodeScript("../../scripts/validate-remote-setup.mjs", [
 		"--mode",
 		"clean-install",
 		"--tf-json",
@@ -80,16 +80,16 @@ function main() {
 		"--config",
 		args.wranglerConfig,
 	]);
-	runNodeScript("scripts/provision-env.mjs", [
+	runNodeScript("../../scripts/provision-env.mjs", [
 		"--tf-json",
 		args.tfJson,
 		"--config",
 		args.wranglerConfig,
 		args.forceRotate ? "--force-rotate" : "--skip-existing",
 	]);
-	runNodeScript("scripts/run-d1-migrate.mjs", [
+	runNodeScript("../../scripts/run-d1-migrate.mjs", [
 		"--remote",
-		"--file=db/schema.sql",
+		"--file=../../db/schema.sql",
 		"--config",
 		args.wranglerConfig,
 	]);
@@ -99,7 +99,7 @@ function main() {
 	if (args.adminEmail) {
 		seedArgs.push("--email", args.adminEmail);
 	}
-	runNodeScript("scripts/seed-remote-admin.mjs", seedArgs);
+	runNodeScript("../../scripts/seed-remote-admin.mjs", seedArgs);
 
 	console.log("");
 	console.log("Remote setup complete.");

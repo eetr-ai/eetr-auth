@@ -73,10 +73,10 @@ npm install                                  # installs all workspace dependenci
 ### 3. Configure Terraform variables
 
 ```bash
-cp apps/auth/infra/terraform/terraform.tfvars.example apps/auth/infra/terraform/terraform.tfvars
+cp infra/terraform/terraform.tfvars.example infra/terraform/terraform.tfvars
 ```
 
-Edit `apps/auth/infra/terraform/terraform.tfvars`:
+Edit `infra/terraform/terraform.tfvars`:
 
 ```hcl
 account_id        = "YOUR_CLOUDFLARE_ACCOUNT_ID"      # from `npx wrangler whoami` or the dashboard
@@ -100,7 +100,7 @@ Notes:
 ### 4. Provision D1 + R2 via Terraform
 
 ```bash
-cd apps/auth/infra/terraform
+cd infra/terraform
 terraform init
 terraform apply
 cd -            # return to the repository root for the remaining steps
@@ -187,7 +187,7 @@ Expected response:
 Then sign in at your auth hostname and exercise the OAuth/token flows you depend on.
 
 > Schema details (fresh snapshot vs. versioned patches) are documented in
-> [../apps/auth/db/README.md](../apps/auth/db/README.md). `setup:remote` applies the fresh snapshot for you.
+> [../db/README.md](../db/README.md). `setup:remote` applies the fresh snapshot for you.
 
 ## Recommended Cloudflare WAF & Rate Limiting
 

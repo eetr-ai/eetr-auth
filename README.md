@@ -91,10 +91,10 @@ npm install
 
 ### 2. Provision infrastructure with Terraform
 
-Fill in `apps/auth/infra/terraform/terraform.tfvars` (see DEPLOYMENT.md for each variable), then:
+Fill in `infra/terraform/terraform.tfvars` (see DEPLOYMENT.md for each variable), then:
 
 ```bash
-cd apps/auth/infra/terraform && terraform init && terraform apply && cd -
+cd infra/terraform && terraform init && terraform apply && cd -
 ```
 
 ### 3. Deploy the hasher, then run automated setup

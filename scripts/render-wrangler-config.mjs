@@ -2,9 +2,9 @@
 /**
  * Merge the template Wrangler config with terraform output JSON (infra/out/terraform.tf.json).
  *
- * Usage:
+ * Usage (terraform step runs from repo root; the script runs from apps/auth):
  *   terraform -chdir=infra/terraform output -json > infra/out/terraform.tf.json
- *   node scripts/render-wrangler-config.mjs [--base infra/wrangler.template.jsonc] [--tf-json path] [--out wrangler.generated.jsonc]
+ *   node scripts/render-wrangler-config.mjs [--base ../../infra/wrangler.template.jsonc] [--tf-json path] [--out wrangler.generated.jsonc]
  *
  * Optional overrides (non-empty wins over Terraform): --issuer-base-url, --auth-url, --jwks-cdn-base-url
  */
@@ -16,7 +16,7 @@ const MANAGED_VAR_KEYS = new Set(["AUTH_URL", "ISSUER_BASE_URL", "JWKS_CDN_BASE_
 
 function parseArgs(argv) {
 	const out = {
-		base: "infra/wrangler.template.jsonc",
+		base: "../../infra/wrangler.template.jsonc",
 		tfJson: null,
 		outFile: "wrangler.generated.jsonc",
 		issuerBaseUrl: "",
@@ -79,7 +79,7 @@ function main() {
 	if (!tfPath) {
 		console.error("Missing --tf-json <path> (or use stdin with - if implemented).");
 		console.error("Example: terraform -chdir=infra/terraform output -json > infra/out/terraform.tf.json");
-		console.error("         node scripts/render-wrangler-config.mjs --tf-json infra/out/terraform.tf.json");
+		console.error("         node scripts/render-wrangler-config.mjs --tf-json ../../infra/out/terraform.tf.json");
 		process.exit(1);
 	}
 

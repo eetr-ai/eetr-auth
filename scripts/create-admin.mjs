@@ -1,24 +1,30 @@
 #!/usr/bin/env node
 /**
- * Set site_settings.site_url in local and/or remote D1.
+ * Create an admin user in local and/or remote D1.
  *
- * Usage: node scripts/set-site-url.mjs <site-url>
- *    or: SITE_URL=https://auth.example.com node scripts/set-site-url.mjs
- * Options: --local-only | --remote-only | --config <wrangler-config> | --site-url <url>
+ * The inserted password hash is a random placeholder that cannot be used to sign in.
+ * Complete account setup via the password reset flow.
+ *
+ * Usage: node scripts/create-admin.mjs <username> <email>
+ *    or: ADMIN_USERNAME=x ADMIN_EMAIL=y node scripts/create-admin.mjs
+ *    or: USER_USERNAME=x USER_EMAIL=y node scripts/create-admin.mjs
+ * Options: --local-only | --remote-only | --config <wrangler-config> | --username <u> | --email <e>
  * Env: WRANGLER_CONFIG (used when --config is not provided)
  */
+import { randomUUID, randomBytes } from "node:crypto";
 import { writeFileSync, unlinkSync, mkdirSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import stripJsonComments from "strip-json-comments";
 
-const DEFAULT_LOCAL_WRANGLER_CONFIGS = ["wrangler.generated.jsonc", "infra/wrangler.template.jsonc"];
+const DEFAULT_LOCAL_WRANGLER_CONFIGS = ["wrangler.generated.jsonc", "../../infra/wrangler.template.jsonc"];
 
 const args = process.argv.slice(2);
 let localOnly = false;
 let remoteOnly = false;
 let wranglerConfig = process.env.WRANGLER_CONFIG?.trim() || "";
-let siteUrlFlag = "";
+let usernameFlag = "";
+let emailFlag = "";
 const filteredArgs = [];
 
 for (let i = 0; i < args.length; i++) {
@@ -39,15 +45,29 @@ for (let i = 0; i < args.length; i++) {
 		wranglerConfig = a.slice("--config=".length);
 		continue;
 	}
-	if (a === "--site-url" && args[i + 1]) {
-		siteUrlFlag = args[++i];
+	if (a === "--username" && args[i + 1]) {
+		usernameFlag = args[++i];
 		continue;
 	}
-	if (a.startsWith("--site-url=")) {
-		siteUrlFlag = a.slice("--site-url=".length);
+	if (a.startsWith("--username=")) {
+		usernameFlag = a.slice("--username=".length);
+		continue;
+	}
+	if (a === "--email" && args[i + 1]) {
+		emailFlag = args[++i];
+		continue;
+	}
+	if (a.startsWith("--email=")) {
+		emailFlag = a.slice("--email=".length);
 		continue;
 	}
 	filteredArgs.push(a);
+}
+
+// Backward-compatible positional config support:
+// node scripts/create-admin.mjs --remote-only wrangler.generated.jsonc user pass
+if (!wranglerConfig && filteredArgs.length >= 3 && /wrangler.*\.jsonc?$/i.test(filteredArgs[0])) {
+	wranglerConfig = filteredArgs.shift() || "";
 }
 
 if (!localOnly && !wranglerConfig) {
@@ -88,47 +108,43 @@ if (wranglerConfig) {
 	}
 }
 
-const siteUrlRaw = siteUrlFlag || filteredArgs[0] || process.env.SITE_URL || "";
-const normalizedSiteUrl = normalizeSiteUrl(siteUrlRaw);
-if (!normalizedSiteUrl) {
+const username =
+	usernameFlag || filteredArgs[0] || process.env.ADMIN_USERNAME || process.env.USER_USERNAME || "";
+const email = (emailFlag || filteredArgs[1] || process.env.ADMIN_EMAIL || process.env.USER_EMAIL || "")
+	.trim()
+	.toLowerCase();
+
+if (!username.trim() || !email) {
 	console.error(
-		"Usage: node scripts/set-site-url.mjs <site-url>\n" +
-			"   or: SITE_URL=https://auth.example.com node scripts/set-site-url.mjs\n" +
-			"Options: --local-only | --remote-only | --config <wrangler-config> | --site-url <url>"
+		"Usage: node scripts/create-admin.mjs <username> <email>\n" +
+			"   or: ADMIN_USERNAME=x ADMIN_EMAIL=y node scripts/create-admin.mjs\n" +
+			"   or: USER_USERNAME=x USER_EMAIL=y node scripts/create-admin.mjs\n" +
+			"Options: --local-only | --remote-only | --config <wrangler-config> | --username <u> | --email <e>"
 	);
 	process.exit(1);
 }
 
-function normalizeSiteUrl(value) {
-	const trimmed = String(value || "").trim();
-	if (!trimmed) return "";
-	const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-	try {
-		const url = new URL(candidate);
-		if (url.protocol !== "http:" && url.protocol !== "https:") {
-			throw new Error("unsupported protocol");
-		}
-		url.hash = "";
-		url.search = "";
-		url.pathname = "";
-		return url.toString().replace(/\/+$/, "");
-	} catch {
-		console.error("Invalid site URL.");
-		process.exit(1);
-	}
+if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+	console.error("Invalid email format.");
+	process.exit(1);
 }
 
 function escapeSql(value) {
 	return String(value).replace(/'/g, "''");
 }
 
-const sql =
-	"INSERT INTO site_settings (id, site_url) VALUES ('default', '" +
-	escapeSql(normalizedSiteUrl) +
-	"') ON CONFLICT(id) DO UPDATE SET site_url=excluded.site_url;";
+const id = randomUUID();
+const passwordHash = `reset-required:${randomBytes(32).toString("hex")}`;
+const emailVerifiedAt = new Date().toISOString();
+const escapedUsername = escapeSql(username.trim());
+const escapedEmail = escapeSql(email);
+const escapedEmailVerifiedAt = escapeSql(emailVerifiedAt);
+const escapedHash = escapeSql(passwordHash);
+
+const sql = `INSERT INTO users (id, username, email, email_verified_at, password_hash, is_admin) VALUES ('${id}', '${escapedUsername}', '${escapedEmail}', '${escapedEmailVerifiedAt}', '${escapedHash}', 1);`;
 
 const tmpDir = join(process.cwd(), ".tmp");
-const sqlPath = join(tmpDir, `set-site-url-${Date.now()}.sql`);
+const sqlPath = join(tmpDir, `create-admin-${Date.now()}.sql`);
 
 try {
 	if (!existsSync(tmpDir)) mkdirSync(tmpDir, { recursive: true });
@@ -141,7 +157,7 @@ try {
 	const remoteDbTarget = process.env.D1_DATABASE_NAME || configDbName;
 	if (!localOnly && !remoteDbTarget) {
 		console.error(
-			"Remote site URL updates require wrangler.generated.jsonc, --config <path>, or D1_DATABASE_NAME. Run npm run infra:render-wrangler first."
+			"Remote admin creation requires wrangler.generated.jsonc, --config <path>, or D1_DATABASE_NAME. Run npm run infra:render-wrangler first."
 		);
 		process.exit(1);
 	}
@@ -156,7 +172,6 @@ try {
 	if (!process.env.D1_DATABASE_NAME && configDbName) {
 		console.log(`Using D1 database_name from config: ${configDbName}`);
 	}
-
 	const run = (target) => {
 		const flag = target === "local" ? "--local" : "--remote";
 		const dbTarget = target === "local" ? localDbTarget : remoteDbTarget;
@@ -171,17 +186,18 @@ try {
 	};
 
 	if (!remoteOnly) {
-		console.log("Setting site URL in local D1...");
+		console.log("Creating admin in local D1...");
 		run("local");
 		console.log("Local: done.");
 	}
 	if (!localOnly) {
-		console.log("Setting site URL in remote D1...");
+		console.log("Creating admin in remote D1...");
 		run("remote");
 		console.log("Remote: done.");
 	}
 
-	console.log(`site_settings.site_url set to: ${normalizedSiteUrl}`);
+	console.log(`Admin "${username}" created (id: ${id}, email: ${email}).`);
+	console.log("A random placeholder password was stored. Complete setup via the password reset flow.");
 } catch (err) {
 	console.error(err.message || err);
 	process.exit(1);

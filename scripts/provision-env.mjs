@@ -6,7 +6,7 @@
  * Requires wrangler login / CLOUDFLARE_API_TOKEN for Wrangler.
  *
  * Usage:
- *   node scripts/provision-env.mjs [--tf-json infra/out/terraform.tf.json] [--config wrangler.generated.jsonc]
+ *   node scripts/provision-env.mjs [--tf-json ../../infra/out/terraform.tf.json] [--config wrangler.generated.jsonc]
  *
  * RESEND_API_KEY: Terraform output resend_api_key if non-empty, else env RESEND_API_KEY / .env.provision (not loaded here).
  */
@@ -17,7 +17,7 @@ import { execFileSync } from "node:child_process";
 
 function parseArgs(argv) {
 	const out = {
-		tfJson: "infra/out/terraform.tf.json",
+		tfJson: "../../infra/out/terraform.tf.json",
 		wranglerConfig: process.env.WRANGLER_CONFIG || "wrangler.generated.jsonc",
 		skipExisting: true,
 		forceRotate: false,
@@ -144,7 +144,7 @@ function main() {
 	}
 
 	console.log("Running JWT + JWKS upload (setup-jwt-secrets)...");
-	const jwtArgs = ["scripts/setup-jwt-secrets.mjs", "--config", args.wranglerConfig, "--bucket", bucket];
+	const jwtArgs = ["../../scripts/setup-jwt-secrets.mjs", "--config", args.wranglerConfig, "--bucket", bucket];
 	if (args.forceRotate) {
 		jwtArgs.push("--force-rotate");
 	} else if (args.skipExisting) {

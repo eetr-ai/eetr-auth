@@ -1,6 +1,6 @@
 # Remote setup
 
-The full, step-by-step deployment guide lives in **[../../../docs/DEPLOYMENT.md](../../../docs/DEPLOYMENT.md)**.
+The full, step-by-step deployment guide lives in **[../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md)**.
 It is the single source of truth for both fresh installs and upgrades — use it for the detailed commands,
 Terraform variables, environment-variable reference, and troubleshooting.
 
@@ -26,8 +26,8 @@ credentials.
 ## Local-only setup
 
 For local development without Terraform or a remote deploy, see the **Local Development** section of
-[../../../docs/DEPLOYMENT.md](../../../docs/DEPLOYMENT.md) and the local quickstart in
-[../README.md](../README.md). The one-shot bootstrap is `npm run setup:local`.
+[../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md) and the local quickstart in
+[../apps/auth/README.md](../apps/auth/README.md). The one-shot bootstrap is `npm run setup:local`.
 
 ## Ongoing
 
