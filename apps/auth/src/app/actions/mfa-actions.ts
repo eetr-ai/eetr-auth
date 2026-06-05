@@ -5,8 +5,31 @@ import { cookies } from "next/headers";
 import { onPublicServerAction } from "@/lib/context/on-public-server-action";
 import { EMAIL_VERIFICATION_CHALLENGE_COOKIE } from "@/lib/auth/email-verification-cookie";
 import { MFA_CHALLENGE_COOKIE } from "@/lib/auth/mfa-cookie";
+import {
+	decodePendingAuthorizationCookie,
+	getPendingCookieName,
+} from "@/lib/auth/oauth-pending-cookie";
+import { summarizePasswordPolicyViolations } from "@/lib/auth/password-policy-validation";
+import type { ClientService } from "@/lib/services/client.service";
 const MFA_COOKIE_MAX_AGE = 600;
 const EMAIL_VERIFICATION_COOKIE_MAX_AGE = 600;
+
+/**
+ * Environment of the OAuth client the user is signing in to, read from the pending
+ * authorization cookie, or null for a non-OAuth (e.g. dashboard) sign-in or an unknown
+ * client. Used to scope the password-complexity policy to the client's environment.
+ */
+async function resolvePendingEnvironmentId(
+	clientService: ClientService,
+	env: Record<string, unknown>
+): Promise<string | null> {
+	const jar = await cookies();
+	const params = await decodePendingAuthorizationCookie(jar.get(getPendingCookieName())?.value, env);
+	const clientId = params?.client_id?.trim();
+	if (!clientId) return null;
+	const client = await clientService.getByClientIdentifier(clientId);
+	return client?.environmentId ?? null;
+}
 
 export async function clearSignInChallenge() {
 	const jar = await cookies();
@@ -27,8 +50,8 @@ export async function signOutFromChallenge() {
 }
 
 export async function beginSignInChallenge(username: string, password: string) {
-	return onPublicServerAction(async (_ctx, getServices) => {
-		const { userChallengeService, siteSettingsService, totpService, passwordPolicyService } =
+	return onPublicServerAction(async (ctx, getServices) => {
+		const { userChallengeService, siteSettingsService, totpService, passwordPolicyService, clientService } =
 			getServices();
 		const site = await siteSettingsService.get();
 		const user = await userChallengeService.verifyUsernamePassword(username, password);
@@ -47,6 +70,31 @@ export async function beginSignInChallenge(username: string, password: string) {
 			jar.delete(MFA_CHALLENGE_COOKIE);
 			jar.delete(EMAIL_VERIFICATION_CHALLENGE_COOKIE);
 			return { ok: true as const, challenge: "password_expired" as const, emailSent };
+		}
+
+		// Password complexity gate. Like the max-age gate above, runs before MFA so an
+		// out-of-policy credential can't reach a session. The policy is scoped to the
+		// environment of the client being signed in to (admins use the admin policy). The
+		// user proved the current password; they must set a compliant one in place to continue.
+		const environmentId = await resolvePendingEnvironmentId(clientService, ctx.env as unknown as Record<string, unknown>);
+		const complexity = await passwordPolicyService.checkSignInPasswordComplexity({
+			userId: user.id,
+			isAdmin: user.isAdmin,
+			environmentId,
+			password,
+			identifiers: { username: user.username, email: user.email },
+		});
+		if (!complexity.ok && complexity.policy) {
+			const jar = await cookies();
+			jar.delete(MFA_CHALLENGE_COOKIE);
+			jar.delete(EMAIL_VERIFICATION_CHALLENGE_COOKIE);
+			return {
+				ok: true as const,
+				challenge: "password_complexity" as const,
+				policy: complexity.policy,
+				username: user.username,
+				email: user.email,
+			};
 		}
 
 		const totpEnrolled = (await totpService.getStatus(user.id)).enrolled;
@@ -115,6 +163,55 @@ export async function beginSignInChallenge(username: string, password: string) {
 		});
 		jar.delete(MFA_CHALLENGE_COOKIE);
 		return { ok: true as const, challenge: "email_verification" as const };
+	});
+}
+
+/**
+ * In-place password change during the sign-in complexity gate. The user has proven the
+ * current password but it fails the policy of the client's environment, so they set a
+ * compliant one here before continuing. Public (no session yet); re-verifies the current
+ * password and validates the new one server-side against the same policy.
+ */
+export async function changePasswordAtSignIn(
+	username: string,
+	currentPassword: string,
+	newPassword: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+	return onPublicServerAction(async (ctx, getServices) => {
+		const { userChallengeService, passwordPolicyService, clientService, userService } = getServices();
+		const user = await userChallengeService.verifyUsernamePassword(username, currentPassword);
+		if (!user) {
+			return { ok: false as const, error: "Invalid username or password." };
+		}
+		// New password must actually differ — block resubmitting the same failing password.
+		if (await userChallengeService.verifyUsernamePassword(username, newPassword)) {
+			return { ok: false as const, error: "Choose a password different from your current one." };
+		}
+
+		const environmentId = await resolvePendingEnvironmentId(clientService, ctx.env as unknown as Record<string, unknown>);
+		const complexity = await passwordPolicyService.checkSignInPasswordComplexity({
+			userId: user.id,
+			isAdmin: user.isAdmin,
+			environmentId,
+			password: newPassword,
+			identifiers: { username: user.username, email: user.email },
+		});
+		if (!complexity.ok) {
+			return { ok: false as const, error: summarizePasswordPolicyViolations(complexity.violations) };
+		}
+
+		// updateUser hashes, stamps password_updated_at, and writes the audit entry.
+		await userService.updateUser(user.id, { password: newPassword }, user.id);
+		console.info(
+			JSON.stringify({
+				event: "sign_in_password_change",
+				ts: new Date().toISOString(),
+				outcome: "success",
+				userId: user.id,
+				username: user.username,
+			})
+		);
+		return { ok: true as const };
 	});
 }
 

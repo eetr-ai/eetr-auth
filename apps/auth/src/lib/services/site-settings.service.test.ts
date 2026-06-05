@@ -45,6 +45,7 @@ function createPasswordPolicyRepoMock(): PasswordPolicyRepository {
 		getPolicyForEnvironment: vi.fn(),
 		getAdminPolicy: vi.fn(),
 		getStrictestEnabledMaxAgeDaysForUser: vi.fn(),
+		getEnabledPoliciesForUser: vi.fn(),
 	};
 }
 

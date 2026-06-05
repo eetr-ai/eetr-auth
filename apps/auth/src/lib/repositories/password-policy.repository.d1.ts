@@ -240,4 +240,18 @@ export class PasswordPolicyRepositoryD1 implements PasswordPolicyRepository {
 			.first<{ value: number | null }>();
 		return row?.value ?? null;
 	}
+
+	async getEnabledPoliciesForUser(userId: string): Promise<PasswordPolicy[]> {
+		const result = await this.db
+			.prepare(
+				`SELECT DISTINCT ${selectColumns("p")}
+				FROM users_environments ue
+				JOIN password_policy_environments ppe ON ppe.environment_id = ue.environment_id
+				JOIN password_policies p ON p.id = ppe.policy_id
+				WHERE ue.user_id = ? AND p.enabled = 1`
+			)
+			.bind(userId)
+			.all<PolicyRow>();
+		return (result.results ?? []).map(mapRow);
+	}
 }

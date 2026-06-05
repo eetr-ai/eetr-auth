@@ -5,15 +5,21 @@ import { startAuthentication, browserSupportsWebAuthnAutofill } from "@simpleweb
 import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/types";
 import {
 	beginSignInChallenge,
+	changePasswordAtSignIn,
 	clearSignInChallenge,
 	signOutFromChallenge,
 	requestEmailMfaCode,
 } from "@/app/actions/mfa-actions";
 import { submitSignIn, submitPasskeySignIn } from "@/app/actions/sign-in-actions";
+import type { PasswordPolicy } from "@/lib/repositories/password-policy.repository";
 import { PasswordStep } from "./_components/password-step";
 import { ChooseMethodStep } from "./_components/choose-method-step";
 import { OtpStep } from "./_components/otp-step";
 import { PasswordExpiredStep } from "./_components/password-expired-step";
+import { PasswordComplexityStep } from "./_components/password-complexity-step";
+
+/** A successful sign-in challenge response (the `ok: false` case is handled before routing). */
+type SignInChallenge = Extract<Awaited<ReturnType<typeof beginSignInChallenge>>, { ok: true }>;
 
 type Props = {
 	mfaEnabled: boolean;
@@ -21,8 +27,12 @@ type Props = {
 };
 
 export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
-	const [step, setStep] = useState<"password" | "choose" | "otp" | "password_expired">("password");
+	const [step, setStep] = useState<
+		"password" | "choose" | "otp" | "password_expired" | "password_complexity"
+	>("password");
 	const [passwordResetEmailSent, setPasswordResetEmailSent] = useState(false);
+	const [complexityPolicy, setComplexityPolicy] = useState<PasswordPolicy | null>(null);
+	const [complexityEmail, setComplexityEmail] = useState<string | null>(null);
 	const [otpPurpose, setOtpPurpose] = useState<"mfa" | "email_verification">("mfa");
 	const [mfaMethods, setMfaMethods] = useState<("totp" | "email")[]>([]);
 	const [mfaMethod, setMfaMethod] = useState<"totp" | "email">("totp");
@@ -115,6 +125,43 @@ export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
 		}
 	};
 
+	// Routes a successful challenge response to the right step. Shared by the initial
+	// password submit and the post-password-change continuation, so both behave identically.
+	// `activePassword` is the password to carry into the eventual submitSignIn (the new one
+	// after an in-place complexity change).
+	const routeChallenge = async (r: SignInChallenge, activePassword: string) => {
+		if (r.challenge === "none") {
+			await submitSignIn({ username, password: activePassword, callbackUrl });
+			return;
+		}
+		if (r.challenge === "password_expired") {
+			setPasswordResetEmailSent(r.emailSent);
+			setStep("password_expired");
+			return;
+		}
+		if (r.challenge === "password_complexity") {
+			setComplexityPolicy(r.policy);
+			setComplexityEmail(r.email);
+			setStep("password_complexity");
+			return;
+		}
+		setOtp("");
+		if (r.challenge === "email_verification") {
+			setOtpPurpose("email_verification");
+			setStep("otp");
+			return;
+		}
+		// MFA challenge: one or two methods available for this user.
+		setOtpPurpose("mfa");
+		setMfaMethods(r.methods);
+		if (r.methods.length > 1) {
+			setStep("choose");
+		} else {
+			setMfaMethod(r.methods[0]);
+			setStep("otp");
+		}
+	};
+
 	const onPasswordSubmit = (e: React.FormEvent) => {
 		e.preventDefault();
 		setError(null);
@@ -124,30 +171,27 @@ export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
 				setError(r.error);
 				return;
 			}
-			if (r.challenge === "none") {
-				await submitSignIn({ username, password, callbackUrl });
+			await routeChallenge(r, password);
+		});
+	};
+
+	// In-place password change at the complexity gate: persist the new password, adopt it,
+	// then re-run the challenge so sign-in continues transparently (into MFA/none).
+	const onComplexitySubmit = (newPassword: string) => {
+		setError(null);
+		startTransition(async () => {
+			const changed = await changePasswordAtSignIn(username, password, newPassword);
+			if (!changed.ok) {
+				setError(changed.error);
 				return;
 			}
-			if (r.challenge === "password_expired") {
-				setPasswordResetEmailSent(r.emailSent);
-				setStep("password_expired");
+			setPassword(newPassword);
+			const r = await beginSignInChallenge(username, newPassword);
+			if (!r.ok) {
+				setError(r.error);
 				return;
 			}
-			setOtp("");
-			if (r.challenge === "email_verification") {
-				setOtpPurpose("email_verification");
-				setStep("otp");
-				return;
-			}
-			// MFA challenge: one or two methods available for this user.
-			setOtpPurpose("mfa");
-			setMfaMethods(r.methods);
-			if (r.methods.length > 1) {
-				setStep("choose");
-			} else {
-				setMfaMethod(r.methods[0]);
-				setStep("otp");
-			}
+			await routeChallenge(r, newPassword);
 		});
 	};
 
@@ -220,6 +264,24 @@ export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
 		return (
 			<PasswordExpiredStep
 				emailSent={passwordResetEmailSent}
+				onBack={() => {
+					setError(null);
+					setPassword("");
+					setStep("password");
+				}}
+			/>
+		);
+	}
+
+	if (step === "password_complexity" && complexityPolicy) {
+		return (
+			<PasswordComplexityStep
+				policy={complexityPolicy}
+				username={username}
+				email={complexityEmail}
+				pending={pending}
+				error={error}
+				onSubmit={onComplexitySubmit}
 				onBack={() => {
 					setError(null);
 					setPassword("");
