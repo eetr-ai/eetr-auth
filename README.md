@@ -89,7 +89,17 @@ cd eetr-auth
 npm install
 ```
 
-### 2. Provision infrastructure with Terraform
+### 2. Authenticate to Cloudflare
+
+Terraform and Wrangler both read a Cloudflare **API token** from the environment — there is no provider block, so without this `terraform apply` fails with _"must provide exactly one of api_key, api_token…"_. Create a **Custom token** (Cloudflare dashboard → My Profile → API Tokens), scoped to your account, with: **D1** → Edit, **Workers R2 Storage** → Edit, **Workers Scripts** → Edit, and (optional) **Account Settings** → Read. Then export it in the shell you run the install from:
+
+```bash
+export CLOUDFLARE_API_TOKEN=your_token_here
+```
+
+Keep it exported for the rest of the flow — Terraform, `setup:remote`, and Wrangler all reuse it. See [infra/terraform/README.md](infra/terraform/README.md#L10) for the full permission rationale.
+
+### 3. Provision infrastructure with Terraform
 
 Fill in `infra/terraform/terraform.tfvars` (see DEPLOYMENT.md for each variable), then:
 
@@ -97,7 +107,7 @@ Fill in `infra/terraform/terraform.tfvars` (see DEPLOYMENT.md for each variable)
 cd infra/terraform && terraform init && terraform apply && cd -
 ```
 
-### 3. Deploy the hasher, then run automated setup
+### 4. Deploy the hasher, then run automated setup
 
 Run these from the repository root. `argon-hasher` must be deployed before the auth Worker:
 
