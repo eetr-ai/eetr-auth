@@ -16,13 +16,14 @@ export class UserRepositoryD1 implements UserRepository {
 		email: string | null,
 		emailVerifiedAt: string | null,
 		passwordHash: string,
+		passwordUpdatedAt: string | null,
 		isAdmin: boolean
 	): Promise<void> {
 		await this.db
 			.prepare(
-				"INSERT INTO users (id, username, name, email, email_verified_at, password_hash, is_admin) VALUES (?, ?, ?, ?, ?, ?, ?)"
+				"INSERT INTO users (id, username, name, email, email_verified_at, password_hash, password_updated_at, is_admin) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
 			)
-			.bind(id, username, name, email, emailVerifiedAt, passwordHash, isAdmin ? 1 : 0)
+			.bind(id, username, name, email, emailVerifiedAt, passwordHash, passwordUpdatedAt, isAdmin ? 1 : 0)
 			.run();
 	}
 
@@ -40,6 +41,15 @@ export class UserRepositoryD1 implements UserRepository {
 				avatarKey: string | null;
 				isAdmin: number;
 			}>();
+		const grants = await this.db
+			.prepare("SELECT user_id as userId, environment_id as environmentId FROM users_environments")
+			.all<{ userId: string; environmentId: string }>();
+		const envByUser = new Map<string, string[]>();
+		for (const row of grants.results ?? []) {
+			const list = envByUser.get(row.userId) ?? [];
+			list.push(row.environmentId);
+			envByUser.set(row.userId, list);
+		}
 		return (result.results ?? []).map((row) => ({
 			id: row.id,
 			username: row.username,
@@ -48,13 +58,14 @@ export class UserRepositoryD1 implements UserRepository {
 			emailVerifiedAt: row.emailVerifiedAt,
 			avatarKey: row.avatarKey,
 			isAdmin: !!row.isAdmin,
+			environmentIds: envByUser.get(row.id) ?? [],
 		}));
 	}
 
 	async findByUsername(username: string): Promise<UserWithPassword | null> {
 		const result = await this.db
 			.prepare(
-				"SELECT id, username, name, email, email_verified_at as emailVerifiedAt, avatar_key as avatarKey, password_hash as passwordHash, is_admin as isAdmin FROM users WHERE username = ?"
+				"SELECT id, username, name, email, email_verified_at as emailVerifiedAt, avatar_key as avatarKey, password_hash as passwordHash, password_updated_at as passwordUpdatedAt, is_admin as isAdmin FROM users WHERE username = ?"
 			)
 			.bind(username)
 			.first<{
@@ -65,6 +76,7 @@ export class UserRepositoryD1 implements UserRepository {
 				emailVerifiedAt: string | null;
 				avatarKey: string | null;
 				passwordHash: string;
+				passwordUpdatedAt: string | null;
 				isAdmin: number;
 			}>();
 		return result
@@ -76,6 +88,7 @@ export class UserRepositoryD1 implements UserRepository {
 					emailVerifiedAt: result.emailVerifiedAt,
 					avatarKey: result.avatarKey,
 					passwordHash: result.passwordHash,
+					passwordUpdatedAt: result.passwordUpdatedAt,
 					isAdmin: !!result.isAdmin,
 				}
 			: null;
@@ -86,7 +99,7 @@ export class UserRepositoryD1 implements UserRepository {
 		if (!normalized) return null;
 		const result = await this.db
 			.prepare(
-				"SELECT id, username, name, email, email_verified_at as emailVerifiedAt, avatar_key as avatarKey, password_hash as passwordHash, is_admin as isAdmin FROM users WHERE lower(trim(email)) = ?"
+				"SELECT id, username, name, email, email_verified_at as emailVerifiedAt, avatar_key as avatarKey, password_hash as passwordHash, password_updated_at as passwordUpdatedAt, is_admin as isAdmin FROM users WHERE lower(trim(email)) = ?"
 			)
 			.bind(normalized)
 			.first<{
@@ -97,6 +110,7 @@ export class UserRepositoryD1 implements UserRepository {
 				emailVerifiedAt: string | null;
 				avatarKey: string | null;
 				passwordHash: string;
+				passwordUpdatedAt: string | null;
 				isAdmin: number;
 			}>();
 		return result
@@ -108,6 +122,7 @@ export class UserRepositoryD1 implements UserRepository {
 					emailVerifiedAt: result.emailVerifiedAt,
 					avatarKey: result.avatarKey,
 					passwordHash: result.passwordHash,
+					passwordUpdatedAt: result.passwordUpdatedAt,
 					isAdmin: !!result.isAdmin,
 				}
 			: null;
@@ -169,6 +184,10 @@ export class UserRepositoryD1 implements UserRepository {
 			sets.push("password_hash = ?");
 			binds.push(updates.passwordHash);
 		}
+		if (updates.passwordUpdatedAt !== undefined) {
+			sets.push("password_updated_at = ?");
+			binds.push(updates.passwordUpdatedAt);
+		}
 		if (updates.isAdmin !== undefined) {
 			sets.push("is_admin = ?");
 			binds.push(updates.isAdmin ? 1 : 0);
@@ -184,6 +203,28 @@ export class UserRepositoryD1 implements UserRepository {
 
 	async delete(id: string): Promise<void> {
 		await this.db.prepare("DELETE FROM users WHERE id = ?").bind(id).run();
+	}
+
+	async getUserEnvironments(userId: string): Promise<string[]> {
+		const result = await this.db
+			.prepare("SELECT environment_id as environmentId FROM users_environments WHERE user_id = ?")
+			.bind(userId)
+			.all<{ environmentId: string }>();
+		return (result.results ?? []).map((row) => row.environmentId);
+	}
+
+	async setUserEnvironments(userId: string, environmentIds: string[]): Promise<void> {
+		const unique = [...new Set(environmentIds)];
+		await this.db.batch([
+			this.db.prepare("DELETE FROM users_environments WHERE user_id = ?").bind(userId),
+			...unique.map((environmentId) =>
+				this.db
+					.prepare(
+						"INSERT INTO users_environments (id, user_id, environment_id) VALUES (?, ?, ?)"
+					)
+					.bind(crypto.randomUUID(), userId, environmentId)
+			),
+		]);
 	}
 
 	async deleteWithAudit(id: string, auditRow: AdminAuditLogRow): Promise<void> {

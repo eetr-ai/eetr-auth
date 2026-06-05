@@ -13,6 +13,8 @@ interface UpdateUserInput {
 	isAdmin?: boolean;
 	avatarKey?: string | null;
 	emailVerifiedAt?: string | null;
+	/** When provided, replaces the user's full set of environment grants. */
+	environmentIds?: string[];
 }
 
 export interface UserServiceDependencies {
@@ -106,6 +108,7 @@ export class UserService {
 		const normalizedName = normalizeOptionalProfileField(name);
 		const normalizedEmail = normalizeOptionalProfileField(email);
 		const emailVerifiedAt = isAdmin ? new Date().toISOString() : null;
+		const passwordUpdatedAt = new Date().toISOString();
 		await this.userRepository.create(
 			id,
 			normalizedUsername,
@@ -113,6 +116,7 @@ export class UserService {
 			normalizedEmail,
 			emailVerifiedAt,
 			passwordHash,
+			passwordUpdatedAt,
 			isAdmin
 		);
 		await this.adminAuditLogService.logAction({
@@ -151,6 +155,7 @@ export class UserService {
 			email?: string | null;
 			emailVerifiedAt?: string | null;
 			passwordHash?: string;
+			passwordUpdatedAt?: string | null;
 			isAdmin?: boolean;
 			avatarKey?: string | null;
 		} = {};
@@ -183,6 +188,7 @@ export class UserService {
 				argonHasher: this.argonHasher,
 				hashMethod: this.hashMethod,
 			});
+			patch.passwordUpdatedAt = new Date().toISOString();
 		}
 		if (updates.avatarKey !== undefined) {
 			patch.avatarKey = updates.avatarKey;
@@ -202,15 +208,25 @@ export class UserService {
 		}
 
 		await this.userRepository.update(id, patch);
+		// Environment grants live in a separate table; replace the full set when provided.
+		const environmentsChanged = updates.environmentIds !== undefined;
+		if (environmentsChanged) {
+			await this.userRepository.setUserEnvironments(id, updates.environmentIds!);
+		}
 		const updated = await this.userRepository.getById(id);
 		if (!updated) {
 			throw new Error("User not found");
 		}
 
-		// Never log the password value — only that it changed.
-		const changedFields = Object.keys(patch).map((field) =>
-			field === "passwordHash" ? "password" : field
-		);
+		// Never log the password value — only that it changed. `passwordUpdatedAt` is
+		// internal bookkeeping that always accompanies a password change, so exclude it
+		// from the reported fields (and from the password-only detection below).
+		const changedFields = Object.keys(patch)
+			.filter((field) => field !== "passwordUpdatedAt")
+			.map((field) => (field === "passwordHash" ? "password" : field));
+		if (environmentsChanged) {
+			changedFields.push("environments");
+		}
 		if (changedFields.length > 0) {
 			const passwordOnly = changedFields.length === 1 && changedFields[0] === "password";
 			await this.adminAuditLogService.logAction({
@@ -221,6 +237,7 @@ export class UserService {
 				details: {
 					username: updated.username,
 					changedFields,
+					...(environmentsChanged ? { environmentIds: updates.environmentIds } : {}),
 				},
 			});
 		}

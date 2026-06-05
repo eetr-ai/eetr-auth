@@ -13,6 +13,7 @@ import { submitSignIn, submitPasskeySignIn } from "@/app/actions/sign-in-actions
 import { PasswordStep } from "./_components/password-step";
 import { ChooseMethodStep } from "./_components/choose-method-step";
 import { OtpStep } from "./_components/otp-step";
+import { PasswordExpiredStep } from "./_components/password-expired-step";
 
 type Props = {
 	mfaEnabled: boolean;
@@ -20,7 +21,8 @@ type Props = {
 };
 
 export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
-	const [step, setStep] = useState<"password" | "choose" | "otp">("password");
+	const [step, setStep] = useState<"password" | "choose" | "otp" | "password_expired">("password");
+	const [passwordResetEmailSent, setPasswordResetEmailSent] = useState(false);
 	const [otpPurpose, setOtpPurpose] = useState<"mfa" | "email_verification">("mfa");
 	const [mfaMethods, setMfaMethods] = useState<("totp" | "email")[]>([]);
 	const [mfaMethod, setMfaMethod] = useState<"totp" | "email">("totp");
@@ -126,6 +128,11 @@ export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
 				await submitSignIn({ username, password, callbackUrl });
 				return;
 			}
+			if (r.challenge === "password_expired") {
+				setPasswordResetEmailSent(r.emailSent);
+				setStep("password_expired");
+				return;
+			}
 			setOtp("");
 			if (r.challenge === "email_verification") {
 				setOtpPurpose("email_verification");
@@ -208,6 +215,19 @@ export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
 			setOtp("");
 		});
 	};
+
+	if (step === "password_expired") {
+		return (
+			<PasswordExpiredStep
+				emailSent={passwordResetEmailSent}
+				onBack={() => {
+					setError(null);
+					setPassword("");
+					setStep("password");
+				}}
+			/>
+		);
+	}
 
 	if (step === "choose") {
 		return (

@@ -1,6 +1,11 @@
 import type { FormEvent } from "react";
-import { Lock } from "lucide-react";
+import { Check, Circle, Lock } from "lucide-react";
 import { Banner, Button, FormField, Input, SectionCard } from "@/components/ui";
+import type { PasswordPolicy } from "@/lib/repositories/password-policy.repository";
+import {
+	listPolicyRequirements,
+	validatePasswordAgainstPolicy,
+} from "@/lib/auth/password-policy-validation";
 
 interface ChangePasswordSectionProps {
 	currentPassword: string;
@@ -13,6 +18,11 @@ interface ChangePasswordSectionProps {
 	error: string | null;
 	success: string | null;
 	onSubmit: (e: FormEvent) => void;
+	/** Active admin sign-in policy, for live requirement feedback. Null = no policy. */
+	policy: PasswordPolicy | null;
+	/** Identifiers for the "must not contain username/email" rule. */
+	username: string | null;
+	email: string | null;
 }
 
 export function ChangePasswordSection({
@@ -26,7 +36,22 @@ export function ChangePasswordSection({
 	error,
 	success,
 	onSubmit,
+	policy,
+	username,
+	email,
 }: ChangePasswordSectionProps) {
+	const activePolicy = policy && policy.enabled ? policy : null;
+	const requirements = activePolicy ? listPolicyRequirements(activePolicy) : [];
+	const failedCodes = activePolicy
+		? new Set(
+				validatePasswordAgainstPolicy(activePolicy, newPassword, { username, email }).violations.map(
+					(v) => v.code
+				)
+			)
+		: new Set<string>();
+	// Only block submit once something has been typed; an empty field is handled by `required`.
+	const policyUnmet = newPassword.length > 0 && failedCodes.size > 0;
+
 	return (
 		<SectionCard title="Change password" icon={Lock}>
 			<Banner variant="error" message={error} />
@@ -61,7 +86,29 @@ export function ChangePasswordSection({
 						/>
 					</FormField>
 				</div>
-				<Button type="submit" disabled={pending}>
+
+				{requirements.length > 0 ? (
+					<ul className="space-y-1" aria-label="Password requirements">
+						{requirements.map((req) => {
+							const met = newPassword.length > 0 && !failedCodes.has(req.code);
+							return (
+								<li
+									key={req.code}
+									className={`flex items-center gap-2 text-sm ${met ? "text-foreground" : "text-muted-foreground"}`}
+								>
+									{met ? (
+										<Check className="h-4 w-4 shrink-0 text-green-600" aria-hidden />
+									) : (
+										<Circle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+									)}
+									<span>{req.label}</span>
+								</li>
+							);
+						})}
+					</ul>
+				) : null}
+
+				<Button type="submit" disabled={pending || policyUnmet}>
 					{pending ? "Changing…" : "Change password"}
 				</Button>
 			</form>

@@ -9,13 +9,16 @@ import {
 	listUsers,
 	updateUser,
 } from "@/app/actions/user-actions";
+import { listEnvironments } from "@/app/actions/environment-actions";
 import type { UserRecord } from "@/lib/repositories/admin.repository";
+import type { Environment } from "@/lib/repositories/environment.repository";
 import { FullPageSpinner } from "@/components/ui";
 import { CreateUserForm } from "./_components/create-user-form";
 import { UsersSection } from "./_components/users-section";
 
 enum UsersPageActionType {
 	SET_USERS = "SET_USERS",
+	SET_ENVIRONMENTS = "SET_ENVIRONMENTS",
 	SET_LOADING = "SET_LOADING",
 	SET_ERROR = "SET_ERROR",
 	SET_USERNAME = "SET_USERNAME",
@@ -29,6 +32,7 @@ enum UsersPageActionType {
 	SET_EDITING_EMAIL = "SET_EDITING_EMAIL",
 	SET_EDITING_PASSWORD = "SET_EDITING_PASSWORD",
 	SET_EDITING_IS_ADMIN = "SET_EDITING_IS_ADMIN",
+	SET_EDITING_ENVIRONMENT_IDS = "SET_EDITING_ENVIRONMENT_IDS",
 	SET_UPLOADING_AVATAR_USER_ID = "SET_UPLOADING_AVATAR_USER_ID",
 	SET_RESETTING_VERIFICATION_USER_ID = "SET_RESETTING_VERIFICATION_USER_ID",
 	SET_CONFIRMING_DELETE_USER_ID = "SET_CONFIRMING_DELETE_USER_ID",
@@ -37,6 +41,7 @@ enum UsersPageActionType {
 
 interface UsersPageState {
 	users: UserRecord[];
+	environments: Environment[];
 	loading: boolean;
 	error: string | null;
 	username: string;
@@ -50,6 +55,7 @@ interface UsersPageState {
 	editingEmail: string;
 	editingPassword: string;
 	editingIsAdmin: boolean;
+	editingEnvironmentIds: string[];
 	uploadingAvatarUserId: string | null;
 	resettingVerificationUserId: string | null;
 	confirmingDeleteUserId: string | null;
@@ -58,6 +64,7 @@ interface UsersPageState {
 
 const initialState: UsersPageState = {
 	users: [],
+	environments: [],
 	loading: true,
 	error: null,
 	username: "",
@@ -71,6 +78,7 @@ const initialState: UsersPageState = {
 	editingEmail: "",
 	editingPassword: "",
 	editingIsAdmin: true,
+	editingEnvironmentIds: [],
 	uploadingAvatarUserId: null,
 	resettingVerificationUserId: null,
 	confirmingDeleteUserId: null,
@@ -84,6 +92,8 @@ function reducer(
 	switch (action.type) {
 		case UsersPageActionType.SET_USERS:
 			return { ...state, users: (action.data as UserRecord[]) ?? [] };
+		case UsersPageActionType.SET_ENVIRONMENTS:
+			return { ...state, environments: (action.data as Environment[]) ?? [] };
 		case UsersPageActionType.SET_LOADING:
 			return { ...state, loading: (action.data as boolean | undefined) ?? false };
 		case UsersPageActionType.SET_ERROR:
@@ -110,6 +120,8 @@ function reducer(
 			return { ...state, editingPassword: (action.data as string) ?? "" };
 		case UsersPageActionType.SET_EDITING_IS_ADMIN:
 			return { ...state, editingIsAdmin: (action.data as boolean | undefined) ?? false };
+		case UsersPageActionType.SET_EDITING_ENVIRONMENT_IDS:
+			return { ...state, editingEnvironmentIds: (action.data as string[]) ?? [] };
 		case UsersPageActionType.SET_UPLOADING_AVATAR_USER_ID:
 			return { ...state, uploadingAvatarUserId: (action.data as string | null) ?? null };
 		case UsersPageActionType.SET_RESETTING_VERIFICATION_USER_ID:
@@ -141,6 +153,7 @@ function UsersPageContent() {
 	const { state, dispatch } = useUsersPageState();
 	const {
 		users,
+		environments,
 		loading,
 		error,
 		username,
@@ -154,6 +167,7 @@ function UsersPageContent() {
 		editingEmail,
 		editingPassword,
 		editingIsAdmin,
+		editingEnvironmentIds,
 		uploadingAvatarUserId,
 		resettingVerificationUserId,
 		confirmingDeleteUserId,
@@ -163,8 +177,9 @@ function UsersPageContent() {
 	const load = async () => {
 		dispatch({ type: UsersPageActionType.SET_LOADING, data: true });
 		try {
-			const items = await listUsers();
+			const [items, envs] = await Promise.all([listUsers(), listEnvironments()]);
 			dispatch({ type: UsersPageActionType.SET_USERS, data: items });
+			dispatch({ type: UsersPageActionType.SET_ENVIRONMENTS, data: envs });
 		} catch (err) {
 			dispatch({
 				type: UsersPageActionType.SET_ERROR,
@@ -205,6 +220,10 @@ function UsersPageContent() {
 		dispatch({ type: UsersPageActionType.SET_EDITING_EMAIL, data: user.email ?? "" });
 		dispatch({ type: UsersPageActionType.SET_EDITING_PASSWORD, data: "" });
 		dispatch({ type: UsersPageActionType.SET_EDITING_IS_ADMIN, data: user.isAdmin });
+		dispatch({
+			type: UsersPageActionType.SET_EDITING_ENVIRONMENT_IDS,
+			data: user.environmentIds ?? [],
+		});
 	};
 
 	const handleUpdate = async (e: React.FormEvent) => {
@@ -218,12 +237,14 @@ function UsersPageContent() {
 				email: editingEmail,
 				password: editingPassword,
 				isAdmin: editingIsAdmin,
+				environmentIds: editingEnvironmentIds,
 			});
 			dispatch({ type: UsersPageActionType.SET_EDITING_USER_ID, data: null });
 			dispatch({ type: UsersPageActionType.SET_EDITING_USERNAME, data: "" });
 			dispatch({ type: UsersPageActionType.SET_EDITING_NAME, data: "" });
 			dispatch({ type: UsersPageActionType.SET_EDITING_EMAIL, data: "" });
 			dispatch({ type: UsersPageActionType.SET_EDITING_PASSWORD, data: "" });
+			dispatch({ type: UsersPageActionType.SET_EDITING_ENVIRONMENT_IDS, data: [] });
 			await load();
 		} catch (err) {
 			dispatch({
@@ -342,6 +363,7 @@ function UsersPageContent() {
 
 				<UsersSection
 					users={users}
+					environments={environments}
 					editingUserId={editingUserId}
 					editingUsername={editingUsername}
 					onEditingUsernameChange={(value) =>
@@ -362,6 +384,10 @@ function UsersPageContent() {
 					editingIsAdmin={editingIsAdmin}
 					onEditingIsAdminChange={(value) =>
 						dispatch({ type: UsersPageActionType.SET_EDITING_IS_ADMIN, data: value })
+					}
+					editingEnvironmentIds={editingEnvironmentIds}
+					onEditingEnvironmentIdsChange={(ids) =>
+						dispatch({ type: UsersPageActionType.SET_EDITING_ENVIRONMENT_IDS, data: ids })
 					}
 					onUpdate={handleUpdate}
 					onCancelEdit={() =>

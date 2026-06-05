@@ -15,6 +15,7 @@ export async function updateSiteSettings(input: {
 	siteUrl?: string | null;
 	cdnUrl?: string | null;
 	mfaEnabled?: boolean;
+	adminPasswordPolicyId?: string | null;
 }) {
 	const session = await auth();
 	const actorUserId = session?.user?.id ?? null;

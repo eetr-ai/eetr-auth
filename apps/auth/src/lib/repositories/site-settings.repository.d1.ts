@@ -11,7 +11,7 @@ export class SiteSettingsRepositoryD1 implements SiteSettingsRepository {
 	async get(): Promise<SiteSettingsRow | null> {
 		const row = await this.db
 			.prepare(
-				"SELECT site_title as siteTitle, site_url as siteUrl, cdn_url as cdnUrl, logo_key as logoKey, mfa_enabled as mfaEnabled FROM site_settings WHERE id = ?"
+				"SELECT site_title as siteTitle, site_url as siteUrl, cdn_url as cdnUrl, logo_key as logoKey, mfa_enabled as mfaEnabled, admin_password_policy_id as adminPasswordPolicyId FROM site_settings WHERE id = ?"
 			)
 			.bind(DEFAULT_ID)
 			.first<{
@@ -20,6 +20,7 @@ export class SiteSettingsRepositoryD1 implements SiteSettingsRepository {
 				cdnUrl: string | null;
 				logoKey: string | null;
 				mfaEnabled: number | null;
+				adminPasswordPolicyId: string | null;
 			}>();
 		if (!row) return null;
 		return {
@@ -34,6 +35,7 @@ export class SiteSettingsRepositoryD1 implements SiteSettingsRepository {
 		cdnUrl?: string | null;
 		logoKey?: string | null;
 		mfaEnabled?: boolean;
+		adminPasswordPolicyId?: string | null;
 	}): Promise<void> {
 		const sets: string[] = [];
 		const values: unknown[] = [];
@@ -56,6 +58,10 @@ export class SiteSettingsRepositoryD1 implements SiteSettingsRepository {
 		if (patch.mfaEnabled !== undefined) {
 			sets.push("mfa_enabled = ?");
 			values.push(patch.mfaEnabled ? 1 : 0);
+		}
+		if (patch.adminPasswordPolicyId !== undefined) {
+			sets.push("admin_password_policy_id = ?");
+			values.push(patch.adminPasswordPolicyId);
 		}
 		if (sets.length === 0) return;
 		values.push(DEFAULT_ID);

@@ -453,6 +453,22 @@ export class UserChallengeService {
 		}
 	}
 
+	/**
+	 * Emails a password-reset link to an already-authenticated user whose password has
+	 * expired (the login age gate). Unlike {@link requestPasswordReset}, the caller has
+	 * already proven the account exists, so this reports whether an email was actually
+	 * dispatched: false when delivery isn't configured (no site URL / RESEND key) or the
+	 * user has no address — the UI then tells them to contact an administrator.
+	 */
+	async sendExpiredPasswordReset(user: UserWithPassword): Promise<boolean> {
+		const site = await this.siteRepo.get();
+		const canEmail =
+			!!site?.siteUrl?.trim() && !!this.mail.getResendApiKey() && !!user.email?.trim();
+		if (!canEmail) return false;
+		await this.requestPasswordReset(user.email!.trim());
+		return true;
+	}
+
 	async completePasswordReset(token: string, newPassword: string): Promise<void> {
 		logPasswordReset({ step: "complete_start" });
 		const { challengeId, userId } = await verifyPasswordResetJwt(this.env, token);
@@ -473,7 +489,10 @@ export class UserChallengeService {
 			argonHasher: this.cfEnv.ARGON_HASHER,
 			hashMethod: resolveHashMethod(this.env),
 		});
-		await this.userRepo.update(userId, { passwordHash: hash });
+		await this.userRepo.update(userId, {
+			passwordHash: hash,
+			passwordUpdatedAt: new Date().toISOString(),
+		});
 		await this.challengeRepo.markConsumed(challengeId, new Date().toISOString());
 		// Self-service reset: the user whose password changed is also the actor.
 		await this.auditLog.logAction({

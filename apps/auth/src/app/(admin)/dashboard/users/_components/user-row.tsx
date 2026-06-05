@@ -2,12 +2,14 @@ import type { FormEvent } from "react";
 import { Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { IconButton, InlineDeleteConfirm } from "@/components/ui";
 import type { UserRecord } from "@/lib/repositories/admin.repository";
+import type { Environment } from "@/lib/repositories/environment.repository";
 import { UserAvatar } from "./user-avatar";
 import { VerificationStatus } from "./verification-status";
 import { EditUserForm } from "./edit-user-form";
 
 interface UserRowProps {
 	user: UserRecord;
+	environments: Environment[];
 	isEditing: boolean;
 	editingUsername: string;
 	onEditingUsernameChange: (value: string) => void;
@@ -19,6 +21,8 @@ interface UserRowProps {
 	onEditingPasswordChange: (value: string) => void;
 	editingIsAdmin: boolean;
 	onEditingIsAdminChange: (value: boolean) => void;
+	editingEnvironmentIds: string[];
+	onEditingEnvironmentIdsChange: (ids: string[]) => void;
 	onUpdate: (e: FormEvent) => void;
 	onCancelEdit: () => void;
 	onStartEdit: () => void;
@@ -36,6 +40,7 @@ interface UserRowProps {
 
 export function UserRow({
 	user,
+	environments,
 	isEditing,
 	editingUsername,
 	onEditingUsernameChange,
@@ -47,6 +52,8 @@ export function UserRow({
 	onEditingPasswordChange,
 	editingIsAdmin,
 	onEditingIsAdminChange,
+	editingEnvironmentIds,
+	onEditingEnvironmentIdsChange,
 	onUpdate,
 	onCancelEdit,
 	onStartEdit,
@@ -75,6 +82,9 @@ export function UserRow({
 					onPasswordChange={onEditingPasswordChange}
 					isAdmin={editingIsAdmin}
 					onIsAdminChange={onEditingIsAdminChange}
+					environments={environments}
+					environmentIds={editingEnvironmentIds}
+					onEnvironmentIdsChange={onEditingEnvironmentIdsChange}
 					onSubmit={onUpdate}
 					onCancel={onCancelEdit}
 				/>
@@ -92,6 +102,7 @@ export function UserRow({
 							<span className="text-xs text-muted-foreground">
 								{user.isAdmin ? "Admin" : "User"}
 							</span>
+							<EnvironmentBadges user={user} environments={environments} />
 						</div>
 					</div>
 					<div className="flex items-center gap-2">
@@ -145,5 +156,36 @@ export function UserRow({
 				</div>
 			)}
 		</li>
+	);
+}
+
+function EnvironmentBadges({
+	user,
+	environments,
+}: {
+	user: UserRecord;
+	environments: Environment[];
+}) {
+	const nameById = new Map(environments.map((env) => [env.id, env.name]));
+	const names = (user.environmentIds ?? [])
+		.map((id) => nameById.get(id))
+		.filter((name): name is string => !!name)
+		.sort((a, b) => a.localeCompare(b));
+
+	if (names.length === 0) {
+		return <span className="mt-1 text-xs text-muted-foreground">No environments</span>;
+	}
+
+	return (
+		<div className="mt-1 flex flex-wrap gap-1">
+			{names.map((name) => (
+				<span
+					key={name}
+					className="rounded-full bg-brand-muted/40 px-2 py-0.5 text-xs text-muted-foreground"
+				>
+					{name}
+				</span>
+			))}
+		</div>
 	);
 }

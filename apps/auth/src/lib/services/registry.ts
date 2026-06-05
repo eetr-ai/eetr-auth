@@ -11,6 +11,7 @@ import { RefreshTokenRepositoryD1 } from "@/lib/repositories/refresh-token.repos
 import { EnvironmentRepositoryD1 } from "@/lib/repositories/environment.repository.d1";
 import { PasskeyRepositoryD1 } from "@/lib/repositories/passkey.repository.d1";
 import { ScopeRepositoryD1 } from "@/lib/repositories/scope.repository.d1";
+import { PasswordPolicyRepositoryD1 } from "@/lib/repositories/password-policy.repository.d1";
 import { TokenActivityLogRepositoryD1 } from "@/lib/repositories/token-activity-log.repository.d1";
 import { AdminAuditLogRepositoryD1 } from "@/lib/repositories/admin-audit-log.repository.d1";
 import { SiteAdminApiClientsRepositoryD1 } from "@/lib/repositories/site-admin-api-clients.repository.d1";
@@ -19,6 +20,7 @@ import { getAvatarCdnBaseUrl } from "@/lib/users/profile";
 import { UserService } from "./user.service";
 import { EnvironmentService } from "./environment.service";
 import { ScopeService } from "./scope.service";
+import { PasswordPolicyService } from "./password-policy.service";
 import { ClientService } from "./client.service";
 import { OauthAuthorizationService } from "./oauth-authorization.service";
 import { OauthTokenService } from "./oauth-token.service";
@@ -34,6 +36,7 @@ export interface Services {
 	userService: UserService;
 	environmentService: EnvironmentService;
 	scopeService: ScopeService;
+	passwordPolicyService: PasswordPolicyService;
 	clientService: ClientService;
 	oauthAuthorizationService: OauthAuthorizationService;
 	oauthTokenService: OauthTokenService;
@@ -71,6 +74,7 @@ export function getServices(ctx: RequestContext): Services {
 	const siteRepo = new SiteSettingsRepositoryD1(db);
 	const passkeyRepo = new PasskeyRepositoryD1(db);
 	const scopeRepo = new ScopeRepositoryD1(db);
+	const passwordPolicyRepo = new PasswordPolicyRepositoryD1(db);
 	const tokenActivityLogRepo = new TokenActivityLogRepositoryD1(db);
 	const adminAuditLogRepo = new AdminAuditLogRepositoryD1(db);
 	const adminClientsRepo = new SiteAdminApiClientsRepositoryD1(db);
@@ -81,6 +85,7 @@ export function getServices(ctx: RequestContext): Services {
 		siteRepo,
 		adminClientsRepo,
 		clientRepo,
+		passwordPolicyRepo,
 		adminAuditLogService,
 		avatarCdnBaseUrl,
 		resendApiKey: resolveOptionalEnvString(resolvedEnv, "RESEND_API_KEY"),
@@ -98,6 +103,10 @@ export function getServices(ctx: RequestContext): Services {
 		}),
 		environmentService: new EnvironmentService({ envRepo, adminAuditLogService }),
 		scopeService: new ScopeService({ scopeRepo, adminAuditLogService }),
+		passwordPolicyService: new PasswordPolicyService({
+			policyRepo: passwordPolicyRepo,
+			adminAuditLogService,
+		}),
 		clientService: new ClientService({
 			clientRepo,
 			adminAuditLogService,

@@ -24,6 +24,8 @@ function setup(opts: {
 	user: User | null;
 	site: { mfaEnabled: boolean; mfaCanEnable: boolean };
 	totpEnrolled: boolean;
+	passwordExpired?: boolean;
+	expiredEmailSent?: boolean;
 }) {
 	const jar = { set: vi.fn(), delete: vi.fn(), get: vi.fn() };
 	cookiesMock.mockResolvedValue(jar as never);
@@ -32,15 +34,19 @@ function setup(opts: {
 		verifyUsernamePassword: vi.fn().mockResolvedValue(opts.user),
 		createMfaOtpAndSendEmail: vi.fn().mockResolvedValue("mfa-challenge-id"),
 		createEmailVerificationOtpAndSendEmail: vi.fn().mockResolvedValue("ev-challenge-id"),
+		sendExpiredPasswordReset: vi.fn().mockResolvedValue(opts.expiredEmailSent ?? false),
 	};
 	const siteSettingsService = { get: vi.fn().mockResolvedValue(opts.site) };
 	const totpService = { getStatus: vi.fn().mockResolvedValue({ enrolled: opts.totpEnrolled }) };
+	const passwordPolicyService = {
+		isPasswordExpiredForUser: vi.fn().mockResolvedValue(opts.passwordExpired ?? false),
+	};
 
-	const services = { userChallengeService, siteSettingsService, totpService };
+	const services = { userChallengeService, siteSettingsService, totpService, passwordPolicyService };
 	onPublicServerActionMock.mockImplementation((fn) =>
 		(fn as (ctx: unknown, get: () => unknown) => unknown)({}, () => services) as never
 	);
-	return { jar, userChallengeService };
+	return { jar, userChallengeService, totpService, passwordPolicyService };
 }
 
 const baseUser: User = {
@@ -142,6 +148,34 @@ describe("beginSignInChallenge — method availability", () => {
 		setup({ user: null, site: { mfaEnabled: false, mfaCanEnable: false }, totpEnrolled: false });
 		const r = await beginSignInChallenge("alice", "bad");
 		expect(r).toEqual({ ok: false, error: "Invalid username or password." });
+	});
+
+	it("forces a password reset before MFA when the password is expired (email sent)", async () => {
+		const { userChallengeService, totpService } = setup({
+			user: baseUser,
+			site: { mfaEnabled: true, mfaCanEnable: true },
+			totpEnrolled: true,
+			passwordExpired: true,
+			expiredEmailSent: true,
+		});
+		const r = await beginSignInChallenge("alice", "pw");
+		expect(r).toEqual({ ok: true, challenge: "password_expired", emailSent: true });
+		expect(userChallengeService.sendExpiredPasswordReset).toHaveBeenCalledOnce();
+		// Gate runs before MFA: no method evaluation, no MFA email.
+		expect(totpService.getStatus).not.toHaveBeenCalled();
+		expect(userChallengeService.createMfaOtpAndSendEmail).not.toHaveBeenCalled();
+	});
+
+	it("reports emailSent=false when expired but reset delivery is not configured", async () => {
+		setup({
+			user: baseUser,
+			site: { mfaEnabled: false, mfaCanEnable: false },
+			totpEnrolled: false,
+			passwordExpired: true,
+			expiredEmailSent: false,
+		});
+		const r = await beginSignInChallenge("alice", "pw");
+		expect(r).toEqual({ ok: true, challenge: "password_expired", emailSent: false });
 	});
 
 	it("errors when site MFA is on but misconfigured and the user has no TOTP fallback", async () => {

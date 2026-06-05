@@ -62,6 +62,8 @@ function createUserRepoMock() {
 		getById: vi.fn(),
 		update: vi.fn(),
 		delete: vi.fn(),
+		getUserEnvironments: vi.fn().mockResolvedValue([]),
+		setUserEnvironments: vi.fn(),
 		deleteWithAudit: vi.fn(),
 	} satisfies UserRepository;
 }
