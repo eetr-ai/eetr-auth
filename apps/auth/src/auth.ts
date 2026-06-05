@@ -321,10 +321,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 				const { env } = await getCloudflareContext({ async: true });
 				const db = getDb(env);
 				const repo = new UserRepositoryD1(db);
+				const siteRepo = new SiteSettingsRepositoryD1(db);
 				const passkeySvc = new PasskeyService({
 					repo: new PasskeyRepositoryD1(db),
 					userRepo: repo,
-					siteRepo: new SiteSettingsRepositoryD1(db),
+					siteRepo,
 					env,
 				});
 
@@ -356,7 +357,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 					);
 					return null;
 				}
-				if (!user.isAdmin && !user.emailVerifiedAt) {
+				// Email verification is only enforced when email MFA is enabled globally —
+				// otherwise there's no way to verify, so don't block sign-in (mirrors the
+				// password provider and beginSignInChallenge).
+				const siteRow = await siteRepo.get();
+				const emailMfaGloballyEnabled = (siteRow?.mfaEnabled ?? false) && !!siteRow?.siteUrl?.trim();
+				if (emailMfaGloballyEnabled && !user.isAdmin && !user.emailVerifiedAt) {
 					console.info(
 						JSON.stringify({
 							event: "sign_in_authorize",
