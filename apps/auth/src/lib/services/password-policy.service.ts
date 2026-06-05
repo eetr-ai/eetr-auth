@@ -1,9 +1,15 @@
 import type {
 	CreatePasswordPolicyInput,
+	PasswordPolicy,
 	PasswordPolicyRepository,
 	PasswordPolicyWithEnvironments,
 	UpdatePasswordPolicyInput,
 } from "@/lib/repositories/password-policy.repository";
+import {
+	validatePasswordAgainstPolicy,
+	type PasswordIdentifiers,
+	type PasswordPolicyCheckResult,
+} from "@/lib/auth/password-policy-validation";
 import type { AdminAuditLogService } from "./admin-audit-log.service";
 import { AUDIT_ACTION, AUDIT_RESOURCE } from "./audit-actions";
 
@@ -203,6 +209,26 @@ export class PasswordPolicyService {
 	/** Strictest enabled max password age (days) for a user, via their environments. */
 	async getMaxPasswordAgeDaysForUser(userId: string): Promise<number | null> {
 		return this.policyRepo.getStrictestEnabledMaxAgeDaysForUser(userId);
+	}
+
+	/** The policy selected as the admin sign-in policy, or null when none is set. */
+	async getAdminPolicy(): Promise<PasswordPolicy | null> {
+		return this.policyRepo.getAdminPolicy();
+	}
+
+	/**
+	 * Validates a candidate password against the admin sign-in policy (complexity rules).
+	 * Returns `ok: true` with no violations when no admin policy is selected or it is
+	 * disabled — i.e. only an active policy is enforced. `identifiers` enables the optional
+	 * "must not contain the username/email" rule.
+	 */
+	async validateAdminPassword(
+		password: string,
+		identifiers: PasswordIdentifiers = {}
+	): Promise<PasswordPolicyCheckResult> {
+		const policy = await this.policyRepo.getAdminPolicy();
+		if (!policy) return { ok: true, violations: [] };
+		return validatePasswordAgainstPolicy(policy, password, identifiers);
 	}
 
 	/**

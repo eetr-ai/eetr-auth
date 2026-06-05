@@ -8,7 +8,16 @@ import type {
 } from "@simplewebauthn/types";
 import { UserCircle } from "lucide-react";
 import { FullPageSpinner } from "@/components/ui";
-import { updateDisplayName, changePassword } from "@/app/actions/user-settings-actions";
+import {
+	updateDisplayName,
+	changePassword,
+	getAdminPasswordPolicy,
+} from "@/app/actions/user-settings-actions";
+import type { PasswordPolicy } from "@/lib/repositories/password-policy.repository";
+import {
+	summarizePasswordPolicyViolations,
+	validatePasswordAgainstPolicy,
+} from "@/lib/auth/password-policy-validation";
 // updateUsername is intentionally omitted — username is read-only for users
 import { getCurrentUser, getUserById } from "@/app/actions/user-actions";
 import {
@@ -65,6 +74,7 @@ export default function SettingsPage() {
 	const [passwordError, setPasswordError] = useState<string | null>(null);
 	const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
 	const [passwordPending, startPasswordTransition] = useTransition();
+	const [adminPolicy, setAdminPolicy] = useState<PasswordPolicy | null>(null);
 
 	// Authenticator app (TOTP)
 	const [totpStatus, setTotpStatus] = useState<{
@@ -89,6 +99,8 @@ export default function SettingsPage() {
 			setDisplayName(u.name ?? "");
 			setAvatarPreview(u.avatarUrl ?? null);
 		});
+		// Admin sign-in policy drives the live requirement checklist (null for non-admins).
+		void getAdminPasswordPolicy().then(setAdminPolicy);
 	}, []);
 
 	const loadPasskeys = useCallback(async () => {
@@ -381,7 +393,17 @@ export default function SettingsPage() {
 			setPasswordError("New passwords do not match.");
 			return;
 		}
-		if (newPassword.length < 8) {
+		const activePolicy = adminPolicy && adminPolicy.enabled ? adminPolicy : null;
+		if (activePolicy) {
+			const { ok, violations } = validatePasswordAgainstPolicy(activePolicy, newPassword, {
+				username: user?.username,
+				email: user?.email,
+			});
+			if (!ok) {
+				setPasswordError(summarizePasswordPolicyViolations(violations));
+				return;
+			}
+		} else if (newPassword.length < 8) {
 			setPasswordError("New password must be at least 8 characters.");
 			return;
 		}
@@ -460,6 +482,9 @@ export default function SettingsPage() {
 					error={passwordError}
 					success={passwordSuccess}
 					onSubmit={handlePasswordSave}
+					policy={adminPolicy}
+					username={user?.username ?? null}
+					email={user?.email ?? null}
 				/>
 
 				{/* Authenticator app (TOTP) — second MFA method alongside email */}

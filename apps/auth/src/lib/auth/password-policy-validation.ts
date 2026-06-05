@@ -3,9 +3,9 @@ import type { PasswordPolicy } from "@/lib/repositories/password-policy.reposito
 /**
  * Pure password-complexity validation against a {@link PasswordPolicy}.
  *
- * NOTE: as of this iteration this utility is intentionally NOT wired into the
- * password-set flows (createUser/updateUser/changePassword/reset). It exists so the
- * rules are defined and unit-tested in one place; enforcement is a later step.
+ * Enforced today when an admin changes their own password (against the admin sign-in
+ * policy). Wiring it into the remaining password-set flows (createUser/updateUser/reset
+ * for non-admins) is a later step.
  */
 
 export type PasswordPolicyViolation =
@@ -105,4 +105,92 @@ export function validatePasswordAgainstPolicy(
 	}
 
 	return { ok: violations.length === 0, violations };
+}
+
+function plural(n: number, noun: string): string {
+	return `${n} ${noun}${n === 1 ? "" : "s"}`;
+}
+
+/** Human-readable requirement phrase for a single violation. */
+function violationRequirement(violation: PasswordPolicyViolation): string {
+	switch (violation.code) {
+		case "too_short":
+			return `at least ${plural(violation.min, "character")}`;
+		case "too_long":
+			return `at most ${plural(violation.max, "character")}`;
+		case "too_few_uppercase":
+			return `at least ${plural(violation.min, "uppercase letter")}`;
+		case "too_few_lowercase":
+			return `at least ${plural(violation.min, "lowercase letter")}`;
+		case "too_few_number":
+			return `at least ${plural(violation.min, "number")}`;
+		case "too_few_special":
+			return `at least ${plural(violation.min, "special character")}`;
+		case "contains_identifier":
+			return "no part of your username or email address";
+	}
+}
+
+export interface PasswordPolicyRequirement {
+	/** The violation this requirement maps to; the rule is met when that code is absent. */
+	code: PasswordPolicyViolation["code"];
+	/** Imperative checklist label, e.g. "At least 2 special characters". */
+	label: string;
+}
+
+/**
+ * The active rules of `policy` as a checklist, for live "as you type" feedback. Pair with
+ * {@link validatePasswordAgainstPolicy}: a requirement is satisfied when its `code` is not
+ * among the returned violations. Empty for a disabled policy (no rules apply).
+ */
+export function listPolicyRequirements(policy: PasswordPolicy): PasswordPolicyRequirement[] {
+	if (!policy.enabled) return [];
+	const requirements: PasswordPolicyRequirement[] = [
+		{ code: "too_short", label: `At least ${plural(policy.minLength, "character")}` },
+	];
+	if (policy.maxLength !== null) {
+		requirements.push({ code: "too_long", label: `At most ${plural(policy.maxLength, "character")}` });
+	}
+	if (policy.minUppercase > 0) {
+		requirements.push({
+			code: "too_few_uppercase",
+			label: `At least ${plural(policy.minUppercase, "uppercase letter")}`,
+		});
+	}
+	if (policy.minLowercase > 0) {
+		requirements.push({
+			code: "too_few_lowercase",
+			label: `At least ${plural(policy.minLowercase, "lowercase letter")}`,
+		});
+	}
+	if (policy.minNumber > 0) {
+		requirements.push({
+			code: "too_few_number",
+			label: `At least ${plural(policy.minNumber, "number")}`,
+		});
+	}
+	if (policy.minSpecial > 0) {
+		requirements.push({
+			code: "too_few_special",
+			label: `At least ${plural(policy.minSpecial, "special character")}`,
+		});
+	}
+	if (policy.rejectContainsIdentifier) {
+		requirements.push({
+			code: "contains_identifier",
+			label: "No part of your username or email address",
+		});
+	}
+	return requirements;
+}
+
+/**
+ * Builds a single user-facing sentence describing why a password failed the policy.
+ * Returns an empty string when there are no violations.
+ */
+export function summarizePasswordPolicyViolations(violations: PasswordPolicyViolation[]): string {
+	if (violations.length === 0) return "";
+	return `Password does not meet the policy: it must contain ${violations
+		.map(violationRequirement)
+		.join(", ")}.`;
 }

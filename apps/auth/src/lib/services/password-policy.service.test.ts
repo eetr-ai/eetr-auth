@@ -297,7 +297,7 @@ describe("PasswordPolicyService", () => {
 			await expect(service.isPasswordExpiredForUser("user-1", sixtyDaysAgo)).resolves.toBe(true);
 		});
 
-		describe("admin path", () => {
+		describe("admin path (max age)", () => {
 			const sixtyDaysAgo = "2026-04-02T00:00:00.000Z";
 
 			it("uses the admin policy (not the user's environments) when isAdmin is true", async () => {
@@ -328,6 +328,45 @@ describe("PasswordPolicyService", () => {
 				);
 				await expect(service.isPasswordExpiredForUser("admin-1", sixtyDaysAgo, true)).resolves.toBe(false);
 			});
+		});
+	});
+
+	describe("validateAdminPassword", () => {
+		it("passes when no admin policy is selected", async () => {
+			vi.mocked(mockRepo.getAdminPolicy).mockResolvedValue(null);
+			const service = createService(mockRepo);
+			const result = await service.validateAdminPassword("anything");
+			expect(result.ok).toBe(true);
+			expect(result.violations).toEqual([]);
+		});
+
+		it("passes when the admin policy is disabled", async () => {
+			vi.mocked(mockRepo.getAdminPolicy).mockResolvedValue(
+				makePolicy({ enabled: false, minLength: 100, minSpecial: 5 })
+			);
+			const service = createService(mockRepo);
+			await expect(service.validateAdminPassword("short")).resolves.toMatchObject({ ok: true });
+		});
+
+		it("reports violations against an active admin policy", async () => {
+			vi.mocked(mockRepo.getAdminPolicy).mockResolvedValue(
+				makePolicy({ enabled: true, minLength: 8, minUppercase: 1, minSpecial: 2 })
+			);
+			const service = createService(mockRepo);
+			const result = await service.validateAdminPassword("abc");
+			expect(result.ok).toBe(false);
+			expect(result.violations.map((v) => v.code)).toEqual(
+				expect.arrayContaining(["too_short", "too_few_uppercase", "too_few_special"])
+			);
+		});
+
+		it("applies the contains-identifier rule using the provided identifiers", async () => {
+			vi.mocked(mockRepo.getAdminPolicy).mockResolvedValue(
+				makePolicy({ enabled: true, minLength: 1, rejectContainsIdentifier: true })
+			);
+			const service = createService(mockRepo);
+			const result = await service.validateAdminPassword("xxadminxx", { username: "admin" });
+			expect(result.violations.map((v) => v.code)).toContain("contains_identifier");
 		});
 	});
 });

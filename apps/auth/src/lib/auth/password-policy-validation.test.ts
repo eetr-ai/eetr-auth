@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import type { PasswordPolicy } from "@/lib/repositories/password-policy.repository";
-import { validatePasswordAgainstPolicy } from "@/lib/auth/password-policy-validation";
+import {
+	listPolicyRequirements,
+	summarizePasswordPolicyViolations,
+	validatePasswordAgainstPolicy,
+} from "@/lib/auth/password-policy-validation";
 
 function makePolicy(overrides?: Partial<PasswordPolicy>): PasswordPolicy {
 	return {
@@ -102,6 +106,64 @@ describe("validatePasswordAgainstPolicy", () => {
 		it("does not run when the rule is disabled", () => {
 			const off = makePolicy({ minLength: 1, rejectContainsIdentifier: false });
 			expect(codes(off, "alice", { username: "alice" })).not.toContain("contains_identifier");
+		});
+	});
+
+	describe("listPolicyRequirements", () => {
+		it("returns no requirements for a disabled policy", () => {
+			expect(listPolicyRequirements(makePolicy({ enabled: false, minUppercase: 3 }))).toEqual([]);
+		});
+
+		it("lists active rules with codes that align with validation violations", () => {
+			const policy = makePolicy({
+				minLength: 8,
+				maxLength: 64,
+				minUppercase: 1,
+				minSpecial: 2,
+				rejectContainsIdentifier: true,
+			});
+			const reqs = listPolicyRequirements(policy);
+			expect(reqs.map((r) => r.code)).toEqual([
+				"too_short",
+				"too_long",
+				"too_few_uppercase",
+				"too_few_special",
+				"contains_identifier",
+			]);
+			// A failing password's violation codes are a subset of the requirement codes,
+			// so the UI can mark each requirement met/unmet by code.
+			const violationCodes = new Set(
+				validatePasswordAgainstPolicy(policy, "abc", { username: "abc" }).violations.map((v) => v.code)
+			);
+			const reqCodes = new Set(reqs.map((r) => r.code));
+			for (const code of violationCodes) {
+				expect(reqCodes.has(code)).toBe(true);
+			}
+		});
+
+		it("omits character-class rules set to zero", () => {
+			const reqs = listPolicyRequirements(makePolicy({ minLength: 6, maxLength: null }));
+			expect(reqs.map((r) => r.code)).toEqual(["too_short"]);
+		});
+	});
+
+	describe("summarizePasswordPolicyViolations", () => {
+		it("returns an empty string when there are no violations", () => {
+			expect(summarizePasswordPolicyViolations([])).toBe("");
+		});
+
+		it("describes each violation with correct pluralization", () => {
+			const message = summarizePasswordPolicyViolations([
+				{ code: "too_short", min: 8 },
+				{ code: "too_few_uppercase", min: 1, found: 0 },
+				{ code: "too_few_special", min: 2, found: 1 },
+				{ code: "contains_identifier" },
+			]);
+			expect(message).toBe(
+				"Password does not meet the policy: it must contain at least 8 characters, " +
+					"at least 1 uppercase letter, at least 2 special characters, " +
+					"no part of your username or email address."
+			);
 		});
 	});
 });
