@@ -120,6 +120,12 @@ is only sent once email is actually chosen.
 - Configurable client ID prefix (`CLIENT_KEY_PREFIX`)
 
 ### Scopes
+- **Default OIDC scopes seeded on install:** `openid`, `profile`, and `email` are created by
+  the schema/seed (`db/schema.sql`, and patch `0.4.2.sql` for existing databases) so OpenID
+  Connect works out of the box. `openid` is required to mint an id_token and to call
+  `/userinfo`; `profile` and `email` gate their respective claims. Seeding only **defines**
+  the scopes — an admin still grants them to each client, and the client must request them at
+  `/authorize` (or request no `scope`, which defaults to all of that client's grants).
 - Custom scope definitions
 - Per-client scope allowlist
 - Scope propagation through token rotation

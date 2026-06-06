@@ -1,5 +1,5 @@
 -- eetr-auth D1 schema (SQLite)
--- Current schema version: 0.4.1
+-- Current schema version: 0.4.2
 -- Apply with: npm run db:schema (fresh local), npm run db:schema:remote (fresh remote),
 -- or the db:migrate variants when upgrading an existing environment
 
@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS schema_metadata (
 );
 
 INSERT INTO schema_metadata (key, value)
-VALUES ('schema_version', '0.4.1')
+VALUES ('schema_version', '0.4.2')
 ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 
 -- Environments (e.g. development, staging, production)
@@ -86,6 +86,17 @@ CREATE TABLE IF NOT EXISTS scopes (
   id TEXT PRIMARY KEY,
   scope_name TEXT NOT NULL UNIQUE
 );
+
+-- Default OIDC scopes. Seeded so a fresh install can perform OpenID Connect out of the box:
+-- `openid` is required to mint an id_token and to call /userinfo; `profile` and `email` gate
+-- their respective claims (mirroring buildIdToken / buildUserInfoClaims). Seeding only DEFINES
+-- the scopes -- an admin still grants them to specific clients, and the client must request
+-- them (or request no scope, which defaults to all of its grants). INSERT OR IGNORE against
+-- the UNIQUE(scope_name) constraint keeps this replay-safe.
+INSERT OR IGNORE INTO scopes (id, scope_name) VALUES
+  (lower(hex(randomblob(16))), 'openid'),
+  (lower(hex(randomblob(16))), 'profile'),
+  (lower(hex(randomblob(16))), 'email');
 
 -- Client-scope assignments (which scopes a client can request)
 CREATE TABLE IF NOT EXISTS client_scopes (
