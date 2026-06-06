@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UserRecord, UserRepository } from "@/lib/repositories/admin.repository";
 import type { AdminAuditLogRepository } from "@/lib/repositories/admin-audit-log.repository";
+import type { UserChallengeRepository } from "@/lib/repositories/user-challenge.repository";
 import { UserService } from "@/lib/services/user.service";
 import { AdminAuditLogService } from "@/lib/services/admin-audit-log.service";
 
@@ -29,6 +30,18 @@ function createUserRepoMock(): UserRepository {
 		getUserEnvironments: vi.fn().mockResolvedValue([]),
 		setUserEnvironments: vi.fn(),
 		deleteWithAudit: vi.fn(),
+	};
+}
+
+function createChallengeRepoMock(): UserChallengeRepository {
+	return {
+		insert: vi.fn(),
+		getById: vi.fn(),
+		deleteById: vi.fn(),
+		deleteByUserIdAndKind: vi.fn(),
+		markConsumed: vi.fn(),
+		deleteExpiredBefore: vi.fn(),
+		incrementOtpFailedAttempts: vi.fn(),
 	};
 }
 
@@ -251,6 +264,42 @@ describe("UserService", () => {
 				"user-1",
 				expect.objectContaining({ passwordHash: "hashed-password" })
 			);
+		});
+
+		it("invalidates pending password-reset challenges when the password changes", async () => {
+			const user = makeUserRecord();
+			vi.mocked(mockRepo.getById).mockResolvedValueOnce(user).mockResolvedValueOnce(user);
+			const challengeRepo = createChallengeRepoMock();
+			const service = new UserService({
+				userRepository: mockRepo,
+				adminAuditLogService: createAuditLogService(),
+				avatarCdnBaseUrl: "https://cdn.example.com",
+				argonHasher: { fetch: vi.fn() } as unknown as Fetcher,
+				hashMethod: "argon",
+				userChallengeRepository: challengeRepo,
+			});
+
+			await service.updateUser("user-1", { password: "new-password" }, "actor-1");
+
+			expect(challengeRepo.deleteByUserIdAndKind).toHaveBeenCalledWith("user-1", "password_reset");
+		});
+
+		it("does not touch reset challenges when the update has no password", async () => {
+			const user = makeUserRecord();
+			vi.mocked(mockRepo.getById).mockResolvedValueOnce(user).mockResolvedValueOnce(user);
+			const challengeRepo = createChallengeRepoMock();
+			const service = new UserService({
+				userRepository: mockRepo,
+				adminAuditLogService: createAuditLogService(),
+				avatarCdnBaseUrl: "https://cdn.example.com",
+				argonHasher: { fetch: vi.fn() } as unknown as Fetcher,
+				hashMethod: "argon",
+				userChallengeRepository: challengeRepo,
+			});
+
+			await service.updateUser("user-1", { name: "Alice B" }, "actor-1");
+
+			expect(challengeRepo.deleteByUserIdAndKind).not.toHaveBeenCalled();
 		});
 
 		it("stamps passwordUpdatedAt when the password changes", async () => {

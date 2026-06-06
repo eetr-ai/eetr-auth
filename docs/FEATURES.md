@@ -29,7 +29,9 @@
 ### Password Authentication
 - Passwords hashed with **Argon2id** via the `argon-hasher` Cloudflare Worker
 - Configurable fallback hash method via `HASH_METHOD` environment variable
-- Password reset via time-limited JWT token sent to email
+- Password reset via time-limited JWT token sent to email. Single-use and DB-backed;
+  requesting a new reset purges earlier pending links, and any password change (admin,
+  self-service, or another reset) invalidates outstanding reset links
 
 ### Password Policies
 Per-environment password policies are managed from **Setup → Password policies**.

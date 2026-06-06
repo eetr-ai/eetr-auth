@@ -542,9 +542,15 @@ describe("UserChallengeService", () => {
 
 			await service.requestPasswordReset("alice@example.com");
 
+			// Prior pending reset links are purged before the new one is inserted, so only
+			// the most recent link is ever valid.
+			expect(challengeRepo.deleteByUserIdAndKind).toHaveBeenCalledWith("user-1", "password_reset");
 			expect(challengeRepo.insert).toHaveBeenCalledWith(
 				expect.objectContaining({ userId: "user-1", kind: "password_reset" })
 			);
+			const purgeOrder = challengeRepo.deleteByUserIdAndKind.mock.invocationCallOrder[0];
+			const insertOrder = challengeRepo.insert.mock.invocationCallOrder[0];
+			expect(purgeOrder).toBeLessThan(insertOrder);
 			expect(mail.send).toHaveBeenCalledWith(
 				expect.objectContaining({
 					to: "alice@example.com",
