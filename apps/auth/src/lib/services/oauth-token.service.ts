@@ -864,8 +864,10 @@ export class OauthTokenService {
 	async validateAccessToken(
 		token: string | null,
 		requiredScopes: string[],
-		environmentName: string | null
+		environmentName: string | null,
+		expectedAudience: string | null = null
 	): Promise<ValidateTokenResult> {
+		const normalizedAudience = expectedAudience?.trim() || null;
 		const normalizedEnvironmentName = environmentName?.trim() ?? "";
 		const expectedEnvironmentName =
 			normalizedEnvironmentName.length > 0 ? normalizedEnvironmentName : null;
@@ -889,7 +891,12 @@ export class OauthTokenService {
 		const trimmed = token.trim();
 
 		if (isJwtFormat(trimmed)) {
-			return this.validateAccessTokenJwt(trimmed, requiredScopes, expectedEnvironmentName);
+			return this.validateAccessTokenJwt(
+				trimmed,
+				requiredScopes,
+				expectedEnvironmentName,
+				normalizedAudience
+			);
 		}
 
 		const tokenRecord = await this.tokenRepo.getAccessTokenByTokenId(trimmed);
@@ -919,7 +926,11 @@ export class OauthTokenService {
 				? true
 				: tokenRecord.environmentName.toLocaleLowerCase() ===
 					expectedEnvironmentName.toLocaleLowerCase();
-		const valid = active && missingScopes.length === 0 && environmentMatch;
+		// Audience binding: a token is only valid for the client it was issued to. The
+		// owning client (tokenRecord.clientId) is the authoritative audience.
+		const audienceMatch =
+			normalizedAudience == null ? true : tokenRecord.clientId === normalizedAudience;
+		const valid = active && missingScopes.length === 0 && environmentMatch && audienceMatch;
 
 		return {
 			valid,
@@ -940,7 +951,8 @@ export class OauthTokenService {
 	private async validateAccessTokenJwt(
 		token: string,
 		requiredScopes: string[],
-		expectedEnvironmentName: string | null
+		expectedEnvironmentName: string | null,
+		expectedAudience: string | null = null
 	): Promise<ValidateTokenResult> {
 		const env = this.env as unknown as Record<string, unknown>;
 		const authAssets = env.AUTH_ASSETS as { get(key: string): Promise<{ body: ReadableStream } | null> } | undefined;
@@ -1014,11 +1026,17 @@ export class OauthTokenService {
 					? true
 					: tokenRecord.environmentName.toLocaleLowerCase() ===
 						expectedEnvironmentName.toLocaleLowerCase();
-			const valid = active && missingScopes.length === 0 && environmentMatch;
+			// Audience binding: the owning client (tokenRecord.clientId, which equals the
+			// JWT `aud`) is the authoritative audience. Prevents a token minted for client A
+			// from being accepted by a resource server that identifies as client B.
+			const audienceMatch =
+				expectedAudience == null ? true : tokenRecord.clientId === expectedAudience;
+			const valid = active && missingScopes.length === 0 && environmentMatch && audienceMatch;
 			if (!valid) {
 				console.warn("[oauth_token] JWT validation: token found but valid=false.", {
 					active,
 					environmentMatch,
+					audienceMatch,
 					expectedEnvironmentName,
 					tokenEnvironmentName: tokenRecord.environmentName,
 					missingScopes: missingScopes.length ? missingScopes : undefined,
@@ -1086,7 +1104,10 @@ export class OauthTokenService {
 
 		try {
 			const JWKS = createLocalJWKSet(jwks as Parameters<typeof createLocalJWKSet>[0]);
-			const { payload } = await jwtVerify(token, JWKS);
+			// Pin the accepted signature algorithm to RS256 (the only alg we sign with).
+			// Defends against alg-confusion / "alg: none" even if a non-RSA key is ever
+			// published to the JWKS.
+			const { payload } = await jwtVerify(token, JWKS, { algorithms: ["RS256"] });
 			const jti = payload.jti as string | undefined;
 			if (!jti) return invalidResult();
 			const subject = typeof payload.sub === "string" ? payload.sub : null;

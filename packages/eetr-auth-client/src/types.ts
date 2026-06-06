@@ -7,6 +7,12 @@ export interface TokenResponse {
   id_token?: string;
 }
 
+/**
+ * UserInfo claims. Only `sub` is always present; the server gates the remaining
+ * claims on the access token's granted scopes — `name`/`preferred_username`/`picture`
+ * require the `profile` scope and `email`/`email_verified` require the `email` scope.
+ * The endpoint itself requires the `openid` scope.
+ */
 export interface UserInfoResponse {
   sub: string;
   name?: string;

@@ -1056,6 +1056,31 @@ describe("OauthTokenService", () => {
 			expect(result.valid).toBe(false);
 			expect(result.environmentMatch).toBe(false);
 		});
+
+		it("stays valid when the expected audience matches the owning client", async () => {
+			const tokenRepo = createTokenRepoMock();
+			tokenRepo.getAccessTokenByTokenId.mockResolvedValue(
+				makeAccessTokenRecord({ clientId: "client-app-id", expiresAt: "2026-04-06T14:10:00.000Z" })
+			);
+			const service = createService({ tokenRepo });
+
+			const result = await service.validateAccessToken("at_existing", [], null, "client-app-id");
+			expect(result.valid).toBe(true);
+		});
+
+		it("returns valid=false when the expected audience is a different client", async () => {
+			const tokenRepo = createTokenRepoMock();
+			tokenRepo.getAccessTokenByTokenId.mockResolvedValue(
+				makeAccessTokenRecord({ clientId: "client-app-id", expiresAt: "2026-04-06T14:10:00.000Z" })
+			);
+			const service = createService({ tokenRepo });
+
+			// Token belongs to client-app-id but a sibling client tries to consume it.
+			const result = await service.validateAccessToken("at_existing", [], null, "other-client");
+			expect(result.valid).toBe(false);
+			// The token is still genuinely active — it's just not for this audience.
+			expect(result.active).toBe(true);
+		});
 	});
 
 	describe("exchange (miscellaneous)", () => {
@@ -1325,6 +1350,28 @@ describe("OauthTokenService", () => {
 			expect(result.valid).toBe(true);
 			expect(result.active).toBe(true);
 			expect(result.subject).toBe("user-123");
+		});
+
+		it("rejects a signed JWT when the expected audience is a different client", async () => {
+			const tokenRepo = createTokenRepoMock();
+			tokenRepo.getAccessTokenByTokenId.mockResolvedValue(
+				makeAccessTokenRecord({
+					tokenId: "jti-test-001",
+					clientId: "client-app-id",
+					expiresAt: "2026-04-06T14:10:00.000Z",
+				})
+			);
+			const service = createService({
+				tokenRepo,
+				env: { JWT_JWKS_JSON: jwksJson } as unknown as CloudflareEnv,
+			});
+
+			const match = await service.validateAccessToken(signedJwt, [], null, "client-app-id");
+			expect(match.valid).toBe(true);
+
+			const mismatch = await service.validateAccessToken(signedJwt, [], null, "other-client");
+			expect(mismatch.valid).toBe(false);
+			expect(mismatch.active).toBe(true);
 		});
 
 		it("falls back to DB lookup by jti when no JWKS is available", async () => {

@@ -198,7 +198,9 @@ export function getOpenApiDocument(serverUrl?: string) {
 					tags: ["OAuth"],
 					summary: "Validate opaque access token",
 					description:
-						"Pass token via Bearer auth header or request body. environmentName is required.",
+						"Pass token via Bearer auth header or request body. environmentName is required. " +
+						"Optionally pass clientId to bind validation to a specific audience: when set, the " +
+						"token is only valid if it was issued to that client.",
 					security: [{ bearerAuth: [] }],
 					requestBody: {
 						required: true,
@@ -210,6 +212,12 @@ export function getOpenApiDocument(serverUrl?: string) {
 									properties: {
 										token: { type: "string" },
 										environmentName: { type: "string" },
+										clientId: {
+											type: "string",
+											description:
+												"Optional audience binding: the resource server's own client_id. " +
+												"When provided, a token issued to a different client is reported invalid.",
+										},
 										scopes: {
 											oneOf: [
 												{ type: "string", description: "Whitespace-delimited scopes" },
@@ -226,6 +234,7 @@ export function getOpenApiDocument(serverUrl?: string) {
 									properties: {
 										token: { type: "string" },
 										environmentName: { type: "string" },
+										clientId: { type: "string" },
 										scopes: { type: "string" },
 									},
 								},
@@ -256,15 +265,19 @@ export function getOpenApiDocument(serverUrl?: string) {
 				get: {
 					tags: ["OAuth"],
 					summary: "OpenID Connect userinfo",
+					description:
+						"Requires an access token with the `openid` scope. Claims are returned only for the " +
+						"scopes the token was granted: `profile` yields name/preferred_username/picture and " +
+						"`email` yields email/email_verified. `sub` is always returned.",
 					security: [{ bearerAuth: [] }],
 					responses: {
 						"200": {
-							description: "User profile for token subject",
+							description: "User profile for token subject (claims gated by granted scopes)",
 							content: {
 								"application/json": {
 									schema: {
 										type: "object",
-										required: ["sub", "email", "email_verified", "preferred_username"],
+										required: ["sub"],
 										properties: {
 											sub: { type: "string" },
 											name: { type: "string" },
@@ -279,6 +292,12 @@ export function getOpenApiDocument(serverUrl?: string) {
 						},
 						"401": {
 							description: "Invalid or missing access token",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"403": {
+							description: "Token lacks the required openid scope",
 							content: {
 								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
 							},

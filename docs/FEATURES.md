@@ -16,7 +16,9 @@
 
 - `/.well-known/openid-configuration` — full OIDC discovery metadata
 - `/.well-known/oauth-authorization-server` — RFC 8414 OAuth server metadata
-- `/userinfo` — OpenID Connect userinfo endpoint (Bearer token required)
+- `/userinfo` — OpenID Connect userinfo endpoint (requires an access token with the `openid`
+  scope; claims are gated by scope — `profile` → name/preferred_username/picture, `email` →
+  email/email_verified, mirroring the id_token)
 - JWKS endpoint served from R2 CDN for public key verification
 - ID tokens signed with RS256 (asymmetric key pair, rotatable)
 
@@ -85,13 +87,16 @@ is only sent once email is actually chosen.
 ### Access Tokens
 - Short-lived JWTs (RS256)
 - Scoped per OAuth client grant
-- Introspection endpoint (`POST /token/validate`)
+- Introspection endpoint (`POST /token/validate`) — optional `clientId` audience binding so a
+  resource server only accepts tokens issued to itself (not a sibling client in the same environment)
 - Activity logging on every use
 
 ### Refresh Tokens
 - Long-lived, single-use with rotation
 - Revocable (full token + associated refresh chain)
 - Scope-preserved through rotation
+- User environment access is re-checked on every refresh: revoking a user's access to a client's
+  environment stops new tokens immediately rather than at the refresh token's natural expiry
 
 ### Authorization Codes
 - Single-use, short-lived

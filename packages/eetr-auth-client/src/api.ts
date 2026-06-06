@@ -94,6 +94,13 @@ export interface IntrospectTokenParams {
   token: string;
   scopes?: string[];
   environmentName: string;
+  /**
+   * Optional audience binding. When set to the calling resource server's own
+   * client_id, the token is only reported valid if it was issued to that client —
+   * preventing a token minted for a sibling client in the same environment from
+   * being accepted here. Omit to keep the previous (audience-agnostic) behavior.
+   */
+  clientId?: string;
 }
 
 export interface IntrospectTokenConfig {
@@ -111,6 +118,7 @@ export async function introspectToken(
       token: params.token,
       scopes: params.scopes ?? [],
       environmentName: params.environmentName,
+      ...(params.clientId ? { clientId: params.clientId } : {}),
     }),
   });
   return res.json() as Promise<TokenValidationResponse>;

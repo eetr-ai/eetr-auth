@@ -94,7 +94,8 @@ export async function verifyPasswordResetJwt(
 	}
 	const issuer = resolveIssuerBaseUrl(env);
 	const JWKS = createLocalJWKSet(jwks as Parameters<typeof createLocalJWKSet>[0]);
-	const { payload } = await jwtVerify(token, JWKS, { issuer });
+	// Pin to RS256 (the only alg we sign reset tokens with) as alg-confusion defense-in-depth.
+	const { payload } = await jwtVerify(token, JWKS, { issuer, algorithms: ["RS256"] });
 	if (payload.purpose !== PASSWORD_RESET_JWT_PURPOSE) {
 		throw new Error("Invalid token purpose.");
 	}

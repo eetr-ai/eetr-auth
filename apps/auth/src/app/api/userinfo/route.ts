@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { withApiContext } from "@/lib/context/with-api-context";
-import { getAvatarUrl } from "@/lib/users/profile";
+import { buildUserInfoClaims } from "@/lib/users/userinfo-claims";
 
 function parseBearerToken(authorizationHeader: string | null): string | null {
 	if (!authorizationHeader) return null;
@@ -26,16 +26,25 @@ export const GET = withApiContext(async (req, ctx, getServices) => {
 		);
 	}
 	const { oauthTokenService, userService } = getServices();
-	const validation = await oauthTokenService.validateAccessToken(token, [], null);
+	// UserInfo is an OIDC endpoint: require the `openid` scope to access it at all.
+	const validation = await oauthTokenService.validateAccessToken(token, ["openid"], null);
 
 	if (!validation.valid || !validation.subject) {
+		// Distinguish "token is fine but lacks openid" (403 insufficient_scope) from a
+		// missing/expired/invalid token (401), per RFC 6750.
+		const insufficientScope = validation.active && validation.missingScopes.length > 0;
 		return NextResponse.json(
-			{ error: "invalid_token", error_description: "Invalid or missing access token." },
+			insufficientScope
+				? { error: "insufficient_scope", error_description: "The openid scope is required." }
+				: { error: "invalid_token", error_description: "Invalid or missing access token." },
 			{
-				status: 401,
+				status: insufficientScope ? 403 : 401,
 				headers: {
 					"Cache-Control": "no-store",
 					Pragma: "no-cache",
+					"WWW-Authenticate": insufficientScope
+						? 'Bearer error="insufficient_scope", scope="openid"'
+						: 'Bearer error="invalid_token"',
 				},
 			}
 		);
@@ -55,22 +64,15 @@ export const GET = withApiContext(async (req, ctx, getServices) => {
 		);
 	}
 
+	// Data minimization: only return claims the token was actually granted.
 	const env = ctx.env as unknown as Record<string, unknown>;
-	return NextResponse.json(
-		{
-			sub: user.id,
-			name: user.name ?? user.username,
-			email: user.email,
-			email_verified: Boolean(user.emailVerifiedAt),
-			picture: getAvatarUrl(user.avatarKey, env),
-			preferred_username: user.username,
+	const claims = buildUserInfoClaims(user, validation.tokenScopes, env);
+
+	return NextResponse.json(claims, {
+		status: 200,
+		headers: {
+			"Cache-Control": "no-store",
+			Pragma: "no-cache",
 		},
-		{
-			status: 200,
-			headers: {
-				"Cache-Control": "no-store",
-				Pragma: "no-cache",
-			},
-		}
-	);
+	});
 });

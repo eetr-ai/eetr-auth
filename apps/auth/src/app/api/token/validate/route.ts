@@ -51,6 +51,10 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 	let token: string | null = parseBearerToken(req.headers.get("authorization"));
 	let scopes: string[] = [];
 	let environmentName: string | null = null;
+	// Optional audience binding: when a resource server passes its own client_id, the
+	// token is only valid if it was issued to that client (defends against a token minted
+	// for a sibling client in the same environment being replayed here).
+	let expectedAudience: string | null = null;
 
 	const contentType = req.headers.get("content-type") ?? "";
 	if (contentType.includes("application/json")) {
@@ -58,6 +62,7 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 			token?: unknown;
 			scopes?: unknown;
 			environmentName?: unknown;
+			clientId?: unknown;
 		};
 		if (!token) {
 			token = typeof body.token === "string" ? body.token : null;
@@ -65,11 +70,13 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 		scopes = normalizeScopes(body.scopes);
 		environmentName =
 			typeof body.environmentName === "string" ? body.environmentName.trim() : null;
+		expectedAudience = typeof body.clientId === "string" ? body.clientId.trim() || null : null;
 	} else {
 		const body = await req.formData();
 		const tokenEntry = body.get("token");
 		const scopesEntry = body.getAll("scopes");
 		const environmentEntry = body.get("environmentName");
+		const clientIdEntry = body.get("clientId");
 		if (!token) {
 			token = typeof tokenEntry === "string" ? tokenEntry : null;
 		}
@@ -78,6 +85,7 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 		}
 		environmentName =
 			typeof environmentEntry === "string" ? environmentEntry.trim() : null;
+		expectedAudience = typeof clientIdEntry === "string" ? clientIdEntry.trim() || null : null;
 	}
 
 	if (!environmentName || environmentName.length === 0) {
@@ -108,7 +116,8 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 	const validation = await oauthTokenService.validateAccessToken(
 		token,
 		scopes,
-		environmentName
+		environmentName,
+		expectedAudience
 	);
 
 	if (!validation.valid) {
