@@ -1,6 +1,7 @@
 export type {
   TokenResponse,
   UserInfoResponse,
+  UserProfile,
   OIDCDiscovery,
   OAuthServerMetadata,
   AuthClientConfig,
@@ -8,6 +9,15 @@ export type {
   IDTokenClaims,
   TokenValidationResponse,
 } from "./types.js";
+
+export {
+  OIDCScope,
+  STANDARD_OIDC_SCOPES,
+  resolveScopeParam,
+} from "./scopes.js";
+export type { OIDCScopeValue } from "./scopes.js";
+
+export { toUserProfile } from "./profile.js";
 
 export { fetchOIDCDiscovery, fetchOAuthMetadata } from "./discovery.js";
 

@@ -200,9 +200,11 @@ is only sent once email is actually chosen.
 |---|---|
 | OIDC discovery | Fetch and parse server metadata from `/.well-known/openid-configuration` |
 | Token exchange | Typed `exchangeToken()` for all grant types |
-| Token introspection | `introspectToken()` against `/token/validate` |
+| Token introspection | `introspectToken()` against `/token/validate` (optional `clientId` audience binding) |
 | Token revocation | `revokeToken()` |
-| User info | `getUserInfo()` against `/userinfo` |
+| Scope helpers | `OIDCScope`/`STANDARD_OIDC_SCOPES` constants + a `scopes[]` array on `buildAuthorizationUrl()`/`exchangeToken()` so `openid` can't be dropped by a typo |
+| User info | `getUserInfo()` against `/userinfo`; a 403 surfaces as `OAuthError.isInsufficientScope` (token valid but missing `openid`) |
+| Profile normalization | `toUserProfile()` merges UserInfo + id_token claims into a camelCased `UserProfile` |
 | Token lifecycle | `TokenManager` — automatic refresh, revocation |
 | JWT validation | Validate JWTs against server JWKS using `jose` |
 | JWT decoding | Decode payload without verification (for inspecting claims) |

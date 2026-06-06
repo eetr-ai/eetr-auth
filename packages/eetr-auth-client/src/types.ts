@@ -22,6 +22,22 @@ export interface UserInfoResponse {
   preferred_username?: string;
 }
 
+/**
+ * Normalized user profile, merged from the `/userinfo` response and (optionally) the
+ * id_token claims via {@link toUserProfile}. Claim names are camelCased. Every field
+ * except `sub` is optional because the server only returns claims the access token's
+ * scopes allow (`profile` → name/preferredUsername/picture, `email` →
+ * email/emailVerified).
+ */
+export interface UserProfile {
+  sub: string;
+  name?: string;
+  preferredUsername?: string;
+  picture?: string;
+  email?: string;
+  emailVerified?: boolean;
+}
+
 export interface OIDCDiscovery {
   issuer: string;
   authorization_endpoint: string;
