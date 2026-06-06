@@ -103,6 +103,15 @@ function main() {
 	}
 	config.name = workerName.trim();
 
+	// Pin the Cloudflare account so `wrangler deploy` targets the right account even
+	// when the API token can access several accounts (otherwise Wrangler guesses and
+	// can deploy to the wrong one — a 10000 auth error on an unexpected account id).
+	const accountId = tf.account_id;
+	if (typeof accountId !== "string" || !accountId.trim()) {
+		throw new Error("terraform output account_id is missing or empty.");
+	}
+	config.account_id = accountId.trim();
+
 	if (Array.isArray(config.services)) {
 		for (const s of config.services) {
 			if (s && s.binding === "WORKER_SELF_REFERENCE") {

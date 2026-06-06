@@ -103,9 +103,10 @@ Terraform and Wrangler both read a Cloudflare **API token** from the environment
 
 ```bash
 export CLOUDFLARE_API_TOKEN=your_token_here
+export CLOUDFLARE_ACCOUNT_ID=your_account_id   # same as account_id in terraform.tfvars
 ```
 
-Keep it exported for the rest of the flow — Terraform, `setup:remote`, and Wrangler all reuse it. See [infra/terraform/README.md](infra/terraform/README.md#L10) for the full permission rationale.
+Keep both exported for the rest of the flow — Terraform, `setup:remote`, and Wrangler all reuse them. Set `CLOUDFLARE_ACCOUNT_ID` if your token can access more than one account, or Wrangler may deploy to the wrong one (a `code: 10000` error whose URL shows an unexpected account id). See [infra/terraform/README.md](infra/terraform/README.md#L10) for the full permission rationale.
 
 ### 3. Provision infrastructure with Terraform
 

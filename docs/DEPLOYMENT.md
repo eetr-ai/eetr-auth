@@ -23,6 +23,7 @@ Before running Terraform, complete the Cloudflare setup for the target account:
 
 ```bash
 export CLOUDFLARE_API_TOKEN=your_token_here
+export CLOUDFLARE_ACCOUNT_ID=your_account_id   # same value as account_id in terraform.tfvars
 ```
 
 Required permissions for the install flow in this repo:
@@ -33,6 +34,8 @@ Required permissions for the install flow in this repo:
 - `Account -> Workers Scripts -> Edit`
 
 Best practice for this repo: use one properly scoped API token for the entire install and deploy flow. Keep `CLOUDFLARE_API_TOKEN` exported for Terraform, `infra:provision`, and Wrangler deploy commands.
+
+**Export `CLOUDFLARE_ACCOUNT_ID` too** if your token can access more than one Cloudflare account. Wrangler does not read `terraform.tfvars`, so without it Wrangler picks a default account and may deploy to the wrong one — surfacing as an `Authentication error [code: 10000]` whose URL contains an account id that is *not* your `terraform.tfvars` `account_id`. The rendered `wrangler.generated.jsonc` pins `account_id` for the auth Worker automatically, but the `argon-hasher` Worker is deployed straight from its `wrangler.toml`, so it relies on this variable. If you hit a `10000`, first check the account id in the error URL matches your target account before adjusting token scopes.
 
 ---
 
