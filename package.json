@@ -38,6 +38,8 @@
     "setup:hmac-key": "bash scripts/setup-hmac-key.sh",
     "jwt:setup-secrets": "cd apps/auth && node ../../scripts/setup-jwt-secrets.mjs",
     "jwt:generate-local-cert": "cd apps/auth && node ../../scripts/generate-local-jwt-cert.mjs",
+    "verify": "cd apps/auth && node ../../scripts/verify-setup.mjs --local",
+    "verify:remote": "cd apps/auth && node ../../scripts/verify-setup.mjs --remote",
     "infra:prepare-config": "npm run infra:terraform-output && npm run infra:render-wrangler",
     "infra:validate:setup": "cd apps/auth && node ../../scripts/validate-remote-setup.mjs --mode clean-install",
     "infra:validate:upgrade": "cd apps/auth && node ../../scripts/validate-remote-setup.mjs --mode upgrade",

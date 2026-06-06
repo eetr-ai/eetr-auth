@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
 import { calculateJwkThumbprint, exportJWK, importSPKI } from "jose";
+import stripJsonComments from "strip-json-comments";
 
 const AUTH_PLACEHOLDER = "changeme-local-auth-secret";
 
@@ -130,6 +132,72 @@ async function resolveJwtMaterial(envLocal, devVars) {
 	};
 }
 
+function resolveWranglerConfigPath() {
+	// Local dev reads wrangler.generated.jsonc; fall back to the infra template.
+	for (const candidate of [
+		"wrangler.generated.jsonc",
+		join("..", "..", "infra", "wrangler.template.jsonc"),
+	]) {
+		const path = resolve(root, candidate);
+		if (existsSync(path)) return path;
+	}
+	return null;
+}
+
+/**
+ * Upload the freshly-written JWKS to the LOCAL R2 bucket. The token service prefers
+ * the `kid` from R2's jwks.json when signing, so if R2 holds a stale key the server
+ * signs tokens with a kid the verifier (env JWKS) can't resolve — and /userinfo and
+ * /token/validate reject every locally-issued token. Seeding R2 here keeps the signing
+ * kid and the verification key in lockstep. Best-effort: warns (does not fail setup).
+ */
+function seedLocalR2Jwks(jwksFilePath) {
+	const configPath = resolveWranglerConfigPath();
+	if (!configPath) {
+		console.warn(
+			"Skipped local R2 JWKS seed: no wrangler config found (run npm run infra:render-wrangler)."
+		);
+		return;
+	}
+	let bucket;
+	let jwksKey = "jwks.json";
+	try {
+		const config = JSON.parse(stripJsonComments(readFileSync(configPath, "utf8")));
+		bucket = config?.r2_buckets?.[0]?.bucket_name;
+		const keyVar = config?.vars?.JWKS_R2_KEY;
+		if (typeof keyVar === "string" && keyVar.trim()) jwksKey = keyVar.trim();
+	} catch (error) {
+		console.warn(`Skipped local R2 JWKS seed: could not read ${configPath} (${error.message}).`);
+		return;
+	}
+	if (typeof bucket !== "string" || !bucket.trim() || bucket.startsWith("REPLACE_WITH")) {
+		console.warn("Skipped local R2 JWKS seed: R2 bucket is not configured in the wrangler config.");
+		return;
+	}
+	try {
+		execFileSync(
+			"npx",
+			[
+				"wrangler",
+				"r2",
+				"object",
+				"put",
+				`${bucket.trim()}/${jwksKey}`,
+				`--file=${jwksFilePath}`,
+				"--content-type",
+				"application/json",
+				"--local",
+			],
+			{ cwd: root, stdio: ["ignore", "ignore", "inherit"] }
+		);
+		console.log(`Seeded local R2 ${bucket.trim()}/${jwksKey} from ${jwksFilePath}`);
+	} catch (error) {
+		console.warn(
+			`Could not seed local R2 JWKS (${error.message}). Local token verification may fail until R2 holds this JWKS.`
+		);
+	}
+}
+
 async function main() {
 	ensureFromExample(envLocalPath, envExamplePath);
 	ensureFromExample(devVarsPath, devVarsExamplePath);
@@ -174,6 +242,7 @@ async function main() {
 	console.log("Updated", devVarsPath);
 	console.log(jwt.generated ? "Generated" : "Reused", "local JWT signing material");
 	console.log("Wrote", jwksPath);
+	seedLocalR2Jwks(jwksPath);
 	console.log("Local development env is ready.");
 }
 
