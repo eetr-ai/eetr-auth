@@ -1,12 +1,17 @@
 #!/usr/bin/env node
 /**
  * Run `terraform output -json` in the repo-root infra/terraform and write
- * infra/out/terraform.tf.json. Invoked from apps/auth (npm run infra:terraform-output),
+ * infra/out/terraform.tf.json. Self-chdir to apps/auth (npm run infra:terraform-output),
  * so infra resolves two levels up.
  */
 import { execSync } from "node:child_process";
 import { mkdirSync, existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Run from apps/auth regardless of the caller's cwd — wrangler config, db/, infra/, and
+// the sibling argon-hasher workspace all resolve relative to apps/auth.
+process.chdir(fileURLToPath(new URL("../apps/auth", import.meta.url)));
 
 const root = process.cwd();
 const tfDir = resolve(root, "../../infra/terraform");

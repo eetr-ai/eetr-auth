@@ -11,6 +11,11 @@ import { generateKeyPairSync } from "node:crypto";
 import { writeFileSync, readFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { importSPKI, exportJWK, calculateJwkThumbprint } from "jose";
+import { fileURLToPath } from "node:url";
+
+// Run from apps/auth regardless of the caller's cwd — wrangler config, db/, infra/, and
+// the sibling argon-hasher workspace all resolve relative to apps/auth.
+process.chdir(fileURLToPath(new URL("../apps/auth", import.meta.url)));
 
 	const tmpDir = join(process.cwd(), ".tmp");
 	const jwksPath = join(tmpDir, "jwks.json");

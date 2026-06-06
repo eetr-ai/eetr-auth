@@ -3,13 +3,18 @@
  * Run wrangler d1 execute with D1_DATABASE_NAME or the remote Wrangler config database name.
  * When no --file is provided, this applies versioned SQL patches from the repo-root db/patches.
  * Databases without schema metadata are treated as schema version 0.0.0.
- * Runs from apps/auth (npm workspace), so db/ resolves two levels up.
- * Usage: node ../../scripts/run-d1-migrate.mjs --local|--remote [--file=../../db/schema.sql]
+ * Self-chdir to apps/auth (npm workspace), so db/ resolves two levels up.
+ * Usage: node scripts/run-d1-migrate.mjs --local|--remote [--file=../../db/schema.sql]
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import stripJsonComments from "strip-json-comments";
+import { fileURLToPath } from "node:url";
+
+// Run from apps/auth regardless of the caller's cwd — wrangler config, db/, infra/, and
+// the sibling argon-hasher workspace all resolve relative to apps/auth.
+process.chdir(fileURLToPath(new URL("../apps/auth", import.meta.url)));
 
 const INITIAL_SCHEMA_VERSION = "0.0.0";
 const DEFAULT_LOCAL_WRANGLER_CONFIGS = ["wrangler.generated.jsonc", "../../infra/wrangler.template.jsonc"];
@@ -51,7 +56,7 @@ if (remote && !configPath) {
 }
 
 if (!local && !remote) {
-	console.error("Usage: node ../../scripts/run-d1-migrate.mjs --local|--remote [--file=../../db/schema.sql]");
+	console.error("Usage: node scripts/run-d1-migrate.mjs --local|--remote [--file=../../db/schema.sql]");
 	process.exit(1);
 }
 

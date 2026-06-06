@@ -52,6 +52,12 @@ export interface RefreshTokenRepository {
 	 * refresh-token reuse (OAuth 2.1 §4.3.1). Returns how many members it revoked.
 	 */
 	revokeFamily(rootId: string, revokedAt: string): Promise<number>;
+	/**
+	 * Returns the access-token row ids (tokens.id) bound to every member of the rotation
+	 * family reachable from `rootId`. Used alongside {@link revokeFamily} to also kill the
+	 * access tokens issued across the family on detected reuse.
+	 */
+	listFamilyAccessTokenIds(rootId: string): Promise<string[]>;
 	listRefreshTokenActivity(clientId?: string): Promise<RefreshTokenActivity[]>;
 	deleteByTokenId(refreshTokenId: string): Promise<boolean>;
 	deleteExpired(nowIso: string): Promise<number>;

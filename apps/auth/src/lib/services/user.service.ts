@@ -1,5 +1,6 @@
 import type { HashMethod } from "@/lib/config/hash-method";
 import type { UserRecord, UserRepository } from "@/lib/repositories/admin.repository";
+import type { UserChallengeRepository } from "@/lib/repositories/user-challenge.repository";
 import { hashPassword } from "@/lib/auth/password-hash";
 import { normalizeOptionalProfileField } from "@/lib/users/profile";
 import type { AdminAuditLogService } from "./admin-audit-log.service";
@@ -23,6 +24,11 @@ export interface UserServiceDependencies {
 	avatarCdnBaseUrl: string;
 	argonHasher?: Fetcher;
 	hashMethod: HashMethod;
+	/**
+	 * Optional: when provided, a password change invalidates the user's pending
+	 * self-service password-reset challenges (so an outstanding reset link stops working).
+	 */
+	userChallengeRepository?: UserChallengeRepository;
 }
 
 export class UserService {
@@ -31,6 +37,7 @@ export class UserService {
 	private readonly avatarCdnBaseUrl: string;
 	private readonly argonHasher?: Fetcher;
 	private readonly hashMethod: HashMethod;
+	private readonly userChallengeRepository?: UserChallengeRepository;
 
 	constructor({
 		userRepository,
@@ -38,12 +45,14 @@ export class UserService {
 		avatarCdnBaseUrl,
 		argonHasher,
 		hashMethod,
+		userChallengeRepository,
 	}: UserServiceDependencies) {
 		this.userRepository = userRepository;
 		this.adminAuditLogService = adminAuditLogService;
 		this.avatarCdnBaseUrl = avatarCdnBaseUrl.replace(/\/+$/, "");
 		this.argonHasher = argonHasher;
 		this.hashMethod = hashMethod;
+		this.userChallengeRepository = userChallengeRepository;
 	}
 
 	private async resolveUser(idOrUsername: string): Promise<UserRecord | null> {
@@ -112,7 +121,10 @@ export class UserService {
 		});
 		const normalizedName = normalizeOptionalProfileField(name);
 		const normalizedEmail = normalizeOptionalProfileField(email);
-		const emailVerifiedAt = isAdmin ? new Date().toISOString() : null;
+		// Admin-managed emails are trusted (auto-verified), but only when one is
+		// actually provided. Stamping verification on a missing email leaves a stale
+		// timestamp that later surfaces as "Verified" the moment an email is added.
+		const emailVerifiedAt = isAdmin && normalizedEmail ? new Date().toISOString() : null;
 		const passwordUpdatedAt = new Date().toISOString();
 		await this.userRepository.create(
 			id,
@@ -213,6 +225,12 @@ export class UserService {
 		}
 
 		await this.userRepository.update(id, patch);
+		// A password change invalidates any outstanding self-service reset links: a
+		// previously-emailed reset token must not still be usable to set yet another
+		// password after the password has already been changed by another path.
+		if (patch.passwordHash !== undefined) {
+			await this.userChallengeRepository?.deleteByUserIdAndKind(id, "password_reset");
+		}
 		// Environment grants live in a separate table; replace the full set when provided.
 		const environmentsChanged = updates.environmentIds !== undefined;
 		if (environmentsChanged) {

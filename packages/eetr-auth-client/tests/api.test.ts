@@ -7,6 +7,7 @@ import {
   introspectToken,
   OAuthError,
 } from "../src/api.js";
+import { OIDCScope } from "../src/scopes.js";
 
 function jsonResponse(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
@@ -59,6 +60,28 @@ describe("exchangeToken", () => {
     expect(init?.body).toBeInstanceOf(URLSearchParams);
     expect((init?.body as URLSearchParams).toString()).toBe(
       "grant_type=authorization_code&client_id=client-123&client_secret=secret-456&scope=openid+profile&code=code-789&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&code_verifier=verifier-101112"
+    );
+  });
+
+  it("merges a scopes array into the scope param", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({ access_token: "at", token_type: "Bearer" })
+    );
+
+    await exchangeToken(
+      {
+        grantType: "client_credentials",
+        clientId: "client-123",
+        clientSecret: "secret",
+        scope: "openid",
+        scopes: [OIDCScope.OpenId, OIDCScope.Profile, OIDCScope.Email],
+      },
+      { tokenEndpoint: "https://auth.example.com/oauth/token" }
+    );
+
+    const [, init] = fetchMock.mock.calls[0] ?? [];
+    expect((init?.body as URLSearchParams).toString()).toContain(
+      "scope=openid+profile+email"
     );
   });
 
@@ -169,6 +192,43 @@ describe("getUserInfo", () => {
     );
   });
 
+  it("surfaces a 403 as insufficient_scope with status and hint", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(
+        {
+          error: "insufficient_scope",
+          error_description: "The openid scope is required.",
+        },
+        { status: 403, statusText: "Forbidden" }
+      )
+    );
+
+    const err = (await getUserInfo(
+      "access-token",
+      "https://auth.example.com/oauth/userinfo"
+    ).catch((e) => e)) as OAuthError;
+
+    expect(err).toBeInstanceOf(OAuthError);
+    expect(err.code).toBe("insufficient_scope");
+    expect(err.status).toBe(403);
+    expect(err.isInsufficientScope).toBe(true);
+    expect(err.message).toBe("The openid scope is required.");
+  });
+
+  it("defaults a 403 with no body to insufficient_scope", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("not-json", { status: 403, statusText: "Forbidden" })
+    );
+
+    const err = (await getUserInfo(
+      "access-token",
+      "https://auth.example.com/oauth/userinfo"
+    ).catch((e) => e)) as OAuthError;
+
+    expect(err.code).toBe("insufficient_scope");
+    expect(err.isInsufficientScope).toBe(true);
+  });
+
   it("falls back to invalid_token when the userinfo error body is not json", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response("not-json", { status: 401, statusText: "Unauthorized" })
@@ -208,6 +268,20 @@ describe("buildAuthorizationUrl", () => {
     expect(url.searchParams.get("scope")).toBe("openid profile email");
     expect(url.searchParams.get("state")).toBe("state-123");
     expect(url.searchParams.get("nonce")).toBe("n-0S6_WzA2Mj");
+  });
+
+  it("accepts a scopes array and merges/dedupes it with the scope string", () => {
+    const url = new URL(
+      buildAuthorizationUrl("https://auth.example.com/api/authorize", {
+        clientId: "client-app",
+        redirectUri: "https://app.example.com/callback",
+        codeChallenge: "s256-challenge",
+        scope: "openid",
+        scopes: [OIDCScope.OpenId, OIDCScope.Profile, OIDCScope.Email],
+      })
+    );
+
+    expect(url.searchParams.get("scope")).toBe("openid profile email");
   });
 
   it("omits optional params when not provided", () => {

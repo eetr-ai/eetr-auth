@@ -96,6 +96,27 @@ const url = buildAuthorizationUrl(discovery.authorization_endpoint, {
 });
 ```
 
+Prefer the `OIDCScope` constants and the `scopes` array so a typo can't silently
+drop `openid` (which would make `/userinfo` return `403 insufficient_scope`). `scope`
+and `scopes` are merged and de-duplicated, so either or both work:
+
+```ts
+import { OIDCScope, STANDARD_OIDC_SCOPES } from "@eetr/eetr-auth-client";
+
+const url = buildAuthorizationUrl(discovery.authorization_endpoint, {
+  clientId: "my-client",
+  redirectUri: "https://app.example.com/callback",
+  codeChallenge,
+  scopes: [OIDCScope.OpenId, OIDCScope.Profile, OIDCScope.Email], // or STANDARD_OIDC_SCOPES
+  state,
+  nonce,
+});
+```
+
+> The client must be **granted** these scopes by an admin, and `openid`/`profile`/`email`
+> are seeded on the server. Requesting a scope the client wasn't granted fails with
+> `invalid_scope`.
+
 ### Token exchange
 
 ```ts
@@ -206,8 +227,41 @@ const result = await introspectToken(
 getUserInfo(accessToken: string, userInfoEndpoint: string): Promise<UserInfoResponse>
 ```
 
-Returns the OIDC UserInfo claims (`sub`, `name`, `email`, `picture`, …) for the
-bearer token. Throws `OAuthError` on failure.
+Returns the OIDC UserInfo claims for the bearer token. The endpoint **requires the
+`openid` scope**; only `sub` is always present, and the remaining claims are gated by
+scope (`profile` → `name`/`preferred_username`/`picture`, `email` →
+`email`/`email_verified`).
+
+On failure it throws an [`OAuthError`](#error-handling). A token that is valid but
+lacks `openid` yields a `403`, surfaced as `code === "insufficient_scope"` (use
+`err.isInsufficientScope`) so you can re-authorize with the right scopes rather than
+discarding the token:
+
+```ts
+try {
+  const info = await getUserInfo(accessToken, discovery.userinfo_endpoint);
+} catch (err) {
+  if (err instanceof OAuthError && err.isInsufficientScope) {
+    // token is fine but missing `openid` — restart the dance requesting it
+  }
+}
+```
+
+#### Normalized profile
+
+```ts
+toUserProfile(userInfo: UserInfoResponse, idTokenClaims?: IDTokenClaims): UserProfile
+```
+
+Merges the UserInfo response (and optionally the decoded `id_token` claims) into a
+single camelCased `UserProfile` (`sub`, `name`, `preferredUsername`, `picture`,
+`email`, `emailVerified`). UserInfo wins; the id_token fills any gap.
+
+```ts
+const info = await getUserInfo(tokens.access_token, discovery.userinfo_endpoint);
+const profile = toUserProfile(info, decodeJwtPayload(tokens.id_token!));
+// → { sub, name?, preferredUsername?, picture?, email?, emailVerified? }
+```
 
 ### Admin API
 
@@ -273,17 +327,23 @@ try {
 }
 ```
 
+`OAuthError` also exposes the HTTP `status` and the server's `description`
+(`error_description`) when available, plus an `isInsufficientScope` convenience for
+the `/userinfo` 403 case (token valid but missing `openid`).
+
 The discovery helpers throw a plain `Error` with the HTTP status on failure.
 
 ## Types
 
 The package exports TypeScript types for every request and response shape, including
-`TokenResponse`, `UserInfoResponse`, `IDTokenClaims`, `OIDCDiscovery`,
+`TokenResponse`, `UserInfoResponse`, `UserProfile`, `IDTokenClaims`, `OIDCDiscovery`,
 `OAuthServerMetadata`, `AuthClientConfig`, `JWTPayload`, `TokenValidationResponse`,
 `GrantType`, `ExchangeTokenParams`/`Config`, `AuthorizationUrlParams`,
-`IntrospectTokenParams`/`Config`, `ValidateJwtOptions`, `ValidateIdTokenOptions`,
-`AdminUserRecord`, `AdminClientConfig`, `CreateUserParams`, `UpdateUserParams`,
-`PasskeySummary`, and `UserClientConfig`.
+`IntrospectTokenParams`/`Config`, `OIDCScopeValue`, `ValidateJwtOptions`,
+`ValidateIdTokenOptions`, `AdminUserRecord`, `AdminClientConfig`, `CreateUserParams`,
+`UpdateUserParams`, `PasskeySummary`, and `UserClientConfig`. It also exports the
+`OIDCScope` / `STANDARD_OIDC_SCOPES` constants, the `resolveScopeParam` helper, and
+the `toUserProfile` profile normalizer.
 
 ## License
 

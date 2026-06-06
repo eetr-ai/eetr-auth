@@ -100,6 +100,7 @@ export function getServices(ctx: RequestContext): Services {
 			avatarCdnBaseUrl,
 			argonHasher: ctx.env.ARGON_HASHER,
 			hashMethod,
+			userChallengeRepository: challengeRepo,
 		}),
 		environmentService: new EnvironmentService({ envRepo, adminAuditLogService }),
 		scopeService: new ScopeService({ scopeRepo, adminAuditLogService }),

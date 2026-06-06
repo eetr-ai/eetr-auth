@@ -23,5 +23,7 @@ declare module "next-auth/jwt" {
 		username?: string;
 		isAdmin?: boolean;
 		picture?: string | null;
+		/** Epoch ms of the last DB re-check of isAdmin (see session-admin-refresh). */
+		adminCheckedAt?: number;
 	}
 }

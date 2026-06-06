@@ -192,6 +192,30 @@ Then sign in at your auth hostname and exercise the OAuth/token flows you depend
 > Schema details (fresh snapshot vs. versioned patches) are documented in
 > [../db/README.md](../db/README.md). `setup:remote` applies the fresh snapshot for you.
 
+### 10. Verify configuration
+
+```bash
+npm run verify:remote
+```
+
+Confirms the deployment has the right settings — most importantly that the **JWT signing key
+and the published JWKS are consistent** (so issued tokens verify at `/userinfo` and
+`/token/validate`). It checks the deployed discovery document (`scopes_supported` includes
+`openid`, `jwks_uri` resolves), that the **R2 source JWKS and the CDN JWKS serve the same
+`kid`** (no stale CDN cache), and that the `JWT_PRIVATE_KEY` / `AUTH_SECRET` / `HMAC_KEY`
+secrets are set. A non-zero exit means something is inconsistent — fix it before relying on
+the deployment.
+
+If `scopes_supported` is missing `openid`, the OIDC scopes aren't seeded yet — apply the
+schema/patches with `npm run db:migrate:remote` (see [../db/README.md](../db/README.md)).
+
+To additionally verify a freshly minted token's signature against the published JWKS, pass a
+client-credentials client:
+
+```bash
+VERIFY_CLIENT_ID=... VERIFY_CLIENT_SECRET=... npm run verify:remote
+```
+
 ## Recommended Cloudflare WAF & Rate Limiting
 
 Once the Worker is routed to your hostname (step 8), put it behind Cloudflare's WAF as defense-in-depth.
@@ -216,11 +240,24 @@ your real traffic.
 | `POST /api/authorize`, `/api/authorize/complete` | Authorization-code abuse | ~30 requests / 1 min |
 | `POST /api/users/email-verification/request` | Email-send abuse (cost + spam) | ~5 requests / 5 min |
 | `POST /api/users/email-verification/verify` | Email OTP brute force | ~10 requests / 5 min |
-| `/forgot-password`, `/reset-password` and the password-reset action under `/api/auth/*` | Reset-email abuse + token guessing | ~5 requests / 5 min |
+| `POST /forgot-password`, `POST /reset-password` | Reset-email abuse + token guessing | ~5 requests / 5 min |
 | `POST /api/auth/passkey/verify`, `/api/users/passkey/verify` | WebAuthn assertion brute force | ~20 requests / 1 min |
 
 Recommended action when a limit is exceeded: **Managed Challenge** (or **Block** for the email-send
 endpoints). Match on the path and `http.request.method eq "POST"` so cached `GET`s are unaffected.
+
+> **Note — password-reset and other server actions.** The forgot/reset flows are Next.js
+> **server actions**, which POST to the page route that renders them (`/forgot-password`,
+> `/reset-password`), not to a dedicated `/api/...` endpoint. Rate-limit those page paths on
+> `POST`. `requestPasswordReset` intentionally returns the same response whether or not the
+> address exists; rate limiting is what blunts both reset-email bombing and timing-based
+> account enumeration, since there is no per-account app-level throttle on the request itself.
+
+These WAF rules are **defense-in-depth on top of** the app's own controls, not a substitute:
+email/MFA OTP codes are attempt-capped (`MFA_OTP_MAX_ATTEMPTS`, default 5) and expire in 10
+minutes; password-reset links are single-use and invalidated on any password change; refresh
+tokens re-check environment access on every rotation. The WAF adds the per-IP request ceiling
+the app deliberately does not implement itself.
 
 ### Restrict the admin surface
 
@@ -348,6 +385,17 @@ The auth server will be available at `http://localhost:3000`.
 
 > For passkey testing, you may need HTTPS. Use a tunneling tool (e.g., Cloudflare Tunnel) to expose your local server with a valid TLS certificate.
 
+### 6. Verify the local setup
+
+```bash
+npm run verify
+```
+
+Confirms the local JWT material, the local R2 `jwks.json` (the `kid` the server signs with),
+and the core secrets all line up — catching the case where the local R2 holds a stale key and
+locally-issued tokens fail verification. `npm run setup:local:env` seeds the local R2 JWKS, so
+a fresh `npm run setup:local` should pass.
+
 ---
 
 ## Ongoing
@@ -355,6 +403,8 @@ The auth server will be available at `http://localhost:3000`.
 `npm run infra:prepare-config` is safe to rerun when Terraform outputs change.
 
 `npm run infra:provision` now preserves existing secrets by default. Use explicit force-rotation when intentionally replacing `AUTH_SECRET`, `HMAC_KEY`, or JWT signing material.
+
+`npm run verify` (local) and `npm run verify:remote` (deployed) re-check that the JWT signing key, the published JWKS, the seeded OIDC scopes, and the required secrets are all consistent. Run `verify:remote` after any key rotation or schema migration.
 
 ---
 

@@ -40,6 +40,12 @@ export interface TokenRepository {
 	getAccessTokenByTokenId(tokenId: string): Promise<AccessTokenRecord | null>;
 	listAccessTokenActivity(clientId?: string): Promise<AccessTokenActivity[]>;
 	revokeAccessTokenByTokenId(tokenId: string, expiresAt: string): Promise<boolean>;
+	/**
+	 * Force-expire access tokens by their row id (tokens.id), never extending a token
+	 * that already expires sooner. Used to kill the access tokens bound to a revoked
+	 * refresh-token family on detected reuse. Returns how many rows it shortened.
+	 */
+	expireAccessTokensByIds(ids: string[], expiresAt: string): Promise<number>;
 	deleteAccessTokenByTokenId(tokenId: string): Promise<boolean>;
 	deleteExpiredAccessTokens(nowIso: string): Promise<number>;
 }

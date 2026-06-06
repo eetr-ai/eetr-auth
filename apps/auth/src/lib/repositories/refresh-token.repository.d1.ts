@@ -105,10 +105,12 @@ export class RefreshTokenRepositoryD1 implements RefreshTokenRepository {
 		return Number(result.meta.changes ?? 0) > 0;
 	}
 
-	async revokeFamily(rootId: string, revokedAt: string): Promise<number> {
-		// Collect the whole rotation family: ancestors (via rotated_from_id) and
-		// descendants (rows pointing back) reachable from rootId. BFS over the lineage
-		// rather than a recursive CTE — explicit, portable, and easy to mirror in tests.
+	/**
+	 * Collect the whole rotation family: ancestors (via rotated_from_id) and descendants
+	 * (rows pointing back) reachable from rootId. BFS over the lineage rather than a
+	 * recursive CTE — explicit, portable, and easy to mirror in tests.
+	 */
+	private async collectFamilyIds(rootId: string): Promise<string[]> {
 		const familyIds = new Set<string>();
 		const queue: string[] = [rootId];
 		while (queue.length > 0) {
@@ -132,8 +134,11 @@ export class RefreshTokenRepositoryD1 implements RefreshTokenRepository {
 				if (!familyIds.has(child.id)) queue.push(child.id);
 			}
 		}
+		return [...familyIds];
+	}
 
-		const ids = [...familyIds];
+	async revokeFamily(rootId: string, revokedAt: string): Promise<number> {
+		const ids = await this.collectFamilyIds(rootId);
 		if (ids.length === 0) return 0;
 		const placeholders = ids.map(() => "?").join(", ");
 		const result = await this.db
@@ -143,6 +148,19 @@ export class RefreshTokenRepositoryD1 implements RefreshTokenRepository {
 			.bind(revokedAt, ...ids)
 			.run();
 		return Number(result.meta.changes ?? 0);
+	}
+
+	async listFamilyAccessTokenIds(rootId: string): Promise<string[]> {
+		const ids = await this.collectFamilyIds(rootId);
+		if (ids.length === 0) return [];
+		const placeholders = ids.map(() => "?").join(", ");
+		const result = await this.db
+			.prepare(
+				`SELECT DISTINCT access_token_id FROM refresh_tokens WHERE access_token_id IS NOT NULL AND id IN (${placeholders})`
+			)
+			.bind(...ids)
+			.all<{ access_token_id: string }>();
+		return (result.results ?? []).map((row) => row.access_token_id);
 	}
 
 	async listRefreshTokenActivity(clientId?: string): Promise<RefreshTokenActivity[]> {

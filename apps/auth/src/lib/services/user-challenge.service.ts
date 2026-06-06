@@ -380,6 +380,11 @@ export class UserChallengeService {
 		const base = resolveIssuerBaseUrl(this.env);
 		const siteUrlHttp = siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`;
 
+		// Only the most recent reset link should be valid: drop any prior pending
+		// password_reset challenges before issuing a new one (mirrors the email-verification
+		// path). Without this, requesting a second reset leaves the first link live too.
+		await this.challengeRepo.deleteByUserIdAndKind(user.id, "password_reset");
+
 		const challengeId = crypto.randomUUID();
 		const now = new Date();
 		const expiresAt = new Date(now.getTime() + PASSWORD_RESET_JWT_TTL_SECONDS * 1000);

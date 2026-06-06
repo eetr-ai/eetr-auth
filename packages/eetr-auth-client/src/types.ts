@@ -7,6 +7,12 @@ export interface TokenResponse {
   id_token?: string;
 }
 
+/**
+ * UserInfo claims. Only `sub` is always present; the server gates the remaining
+ * claims on the access token's granted scopes — `name`/`preferred_username`/`picture`
+ * require the `profile` scope and `email`/`email_verified` require the `email` scope.
+ * The endpoint itself requires the `openid` scope.
+ */
 export interface UserInfoResponse {
   sub: string;
   name?: string;
@@ -14,6 +20,22 @@ export interface UserInfoResponse {
   email_verified?: boolean;
   picture?: string;
   preferred_username?: string;
+}
+
+/**
+ * Normalized user profile, merged from the `/userinfo` response and (optionally) the
+ * id_token claims via {@link toUserProfile}. Claim names are camelCased. Every field
+ * except `sub` is optional because the server only returns claims the access token's
+ * scopes allow (`profile` → name/preferredUsername/picture, `email` →
+ * email/emailVerified).
+ */
+export interface UserProfile {
+  sub: string;
+  name?: string;
+  preferredUsername?: string;
+  picture?: string;
+  email?: string;
+  emailVerified?: boolean;
 }
 
 export interface OIDCDiscovery {
