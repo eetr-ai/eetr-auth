@@ -96,7 +96,9 @@ function createUserRepoMock(user: UserRecord | null = makeUser()) {
 		getById: vi.fn().mockResolvedValue(user),
 		update: vi.fn(),
 		delete: vi.fn(),
-		getUserEnvironments: vi.fn().mockResolvedValue([]),
+		// Default: the user is granted makeClient()'s environment ("env-1") so refresh-token
+		// exchanges pass the per-user environment re-check. Denial tests override this.
+		getUserEnvironments: vi.fn().mockResolvedValue(["env-1"]),
 		setUserEnvironments: vi.fn(),
 		deleteWithAudit: vi.fn(),
 	} satisfies UserRepository;
@@ -504,6 +506,61 @@ describe("OauthTokenService", () => {
 			);
 			expect(result.access_token).toMatch(/^at_[0-9a-f]{64}$/);
 			expect(result.refresh_token).toMatch(/^rt_[0-9a-f]{64}$/);
+		});
+
+		it("rejects the refresh when the user lost access to the client's environment", async () => {
+			const clientRepo = createClientRepoMock();
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			// The user is granted "env-other", but the client belongs to "env-1".
+			const userRepo = createUserRepoMock();
+			userRepo.getUserEnvironments.mockResolvedValue(["env-other"]);
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient());
+			refreshTokenRepo.getByTokenId.mockResolvedValue(makeRefreshToken());
+			const service = createService({ clientRepo, tokenRepo, refreshTokenRepo, userRepo });
+
+			await expect(
+				service.exchange({
+					grantType: "refresh_token",
+					clientId: "client-app-id",
+					clientSecret: "plain-secret",
+					refreshToken: "rt_existing",
+				})
+			).rejects.toMatchObject({
+				code: "invalid_grant",
+				message: "User no longer has access to this environment.",
+				status: 400,
+			});
+			// The now-unauthorized token is revoked and no new pair is issued.
+			expect(refreshTokenRepo.revoke).toHaveBeenCalledWith("refresh-row-1", "2026-04-06T13:10:00.000Z");
+			expect(refreshTokenRepo.createRefreshToken).not.toHaveBeenCalled();
+			expect(tokenRepo.createAccessToken).not.toHaveBeenCalled();
+		});
+
+		it("does not environment-gate client_credentials refresh (no subject)", async () => {
+			const clientRepo = createClientRepoMock();
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			// A subject-less (client_credentials) refresh token must skip the per-user check
+			// even when getUserEnvironments would return nothing.
+			const userRepo = createUserRepoMock();
+			userRepo.getUserEnvironments.mockResolvedValue([]);
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient());
+			refreshTokenRepo.getByTokenId.mockResolvedValue(makeRefreshToken({ subject: null }));
+			tokenRepo.getClientScopeGrants.mockResolvedValue([
+				makeGrant({ clientScopeId: "client-scope-read", scopeName: "read:users" }),
+			]);
+			const service = createService({ clientRepo, tokenRepo, refreshTokenRepo, userRepo });
+
+			const result = await service.exchange({
+				grantType: "refresh_token",
+				clientId: "client-app-id",
+				clientSecret: "plain-secret",
+				refreshToken: "rt_existing",
+			});
+
+			expect(userRepo.getUserEnvironments).not.toHaveBeenCalled();
+			expect(result.access_token).toMatch(/^at_[0-9a-f]{64}$/);
 		});
 
 		it("treats a lost revoke race as reuse: cascades to the family and issues no tokens", async () => {

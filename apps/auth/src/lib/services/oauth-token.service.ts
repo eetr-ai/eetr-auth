@@ -641,6 +641,25 @@ export class OauthTokenService {
 			throw new OAuthServiceError("invalid_grant", "Refresh token has expired.", 400);
 		}
 
+		// Re-check environment access on every refresh. Access is enforced when the
+		// authorization code is minted (OauthAuthorizationService.authorize), but a refresh
+		// token lives 30 days — without this re-check, revoking a user's access to the
+		// client's environment would not take effect until the token naturally expires.
+		// client_credentials tokens have no subject and are not per-user environment-gated.
+		if (token.subject) {
+			const userEnvironmentIds = await this.userRepo.getUserEnvironments(token.subject);
+			if (!userEnvironmentIds.includes(client.environmentId)) {
+				// The grant is no longer authorized. Revoke the presented token so this
+				// session stops rotating; the user must re-authorize (which re-checks access).
+				await this.refreshTokenRepo.revoke(token.id, nowIso);
+				throw new OAuthServiceError(
+					"invalid_grant",
+					"User no longer has access to this environment.",
+					400
+				);
+			}
+		}
+
 		step = Date.now();
 		const allClientGrants = await this.tokenRepo.getClientScopeGrants(client.id);
 		logTokenStep("refresh_token_get_scope_grants", step);
