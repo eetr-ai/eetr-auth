@@ -2,7 +2,7 @@
 
 > A production-ready **OAuth 2.1 + OpenID Connect** authorization server, built for the Cloudflare edge.
 
-Current release baseline: `0.3.1`. See [CHANGELOG.md](CHANGELOG.md). <!-- x-release-please-version -->
+Current release baseline: `0.4.0`. See [CHANGELOG.md](CHANGELOG.md). <!-- x-release-please-version -->
 
 Public auth server package: `@eetr/auth`.
 
