@@ -4,6 +4,58 @@ All notable changes to this monorepo are documented in this file.
 
 The current released baseline for both the auth server and the client library is 0.3.1.
 
+## [0.4.0](https://github.com/eetr-ai/eetr-auth/compare/v0.3.1...v0.4.0) (2026-06-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* **oidc:** the database schema is bumped to 0.4.0 and requires applying db/patches/0.4.0.sql (npm run db:migrate / db:migrate:remote) before deploying; the new authorization_codes columns are absent on older databases. Additionally, access tokens minted via the direct POST /authorize path now carry `sub = user.id` instead of the username, so relying parties that keyed off the username `sub` must migrate to user.id (consistent with /userinfo).
+
+### Features
+
+* **audit:** cover client and setup management in the admin audit trail ([d2fca4a](https://github.com/eetr-ai/eetr-auth/commit/d2fca4ad41e42c1d34bb38d919f6ca9d938fdc38))
+* **client:** mirror id_token + nonce in @eetr/eetr-auth-client ([cabf463](https://github.com/eetr-ai/eetr-auth/commit/cabf46388690012cae444d049bf87a52932756d1))
+* **client:** OIDC scope helpers, insufficient_scope handling, profile normalizer ([86039ca](https://github.com/eetr-ai/eetr-auth/commit/86039ca8df4688032f52f22c02e0ed7aa59f7ccc))
+* **db:** seed default OIDC scopes (openid, profile, email) ([9a64de3](https://github.com/eetr-ai/eetr-auth/commit/9a64de3265f532c57b33847e67220bc221fdcdff))
+* **oauth:** enforce user environment access at sign-in and authorization ([71894b4](https://github.com/eetr-ai/eetr-auth/commit/71894b4a4a45ccc692c511ab41a529ff244aa192))
+* **oidc:** issue signed id_token with standard claims for the openid scope ([6787239](https://github.com/eetr-ai/eetr-auth/commit/678723939e21f86eadc6e9f1741f4a023982bce2))
+* **oidc:** OpenID Connect compliance — id_token, nonce, discovery ([635bba0](https://github.com/eetr-ai/eetr-auth/commit/635bba0d2d23f0820c3d5af543e7e4060f45831f))
+* **oidc:** persist nonce + auth_time on auth codes and standardize sub on user.id ([5434015](https://github.com/eetr-ai/eetr-auth/commit/5434015760173d1d0ae19a748edece319d00141e))
+* **oidc:** reconcile discovery metadata with implemented behavior ([bff406d](https://github.com/eetr-ai/eetr-auth/commit/bff406dafeed8b221f1239dadfa0b42dac6d8eb2))
+* **password-policy:** add complexity validation utility (not yet wired) ([d99370a](https://github.com/eetr-ai/eetr-auth/commit/d99370a71a3c0e6bb87c22834955d9f95a26492b))
+* **password-policy:** add dashboard server actions ([ab1c4a9](https://github.com/eetr-ai/eetr-auth/commit/ab1c4a9f2cf9d67bbf14eda7931cec303c941644))
+* **password-policy:** add Password policies tab to Setup ([34d812e](https://github.com/eetr-ai/eetr-auth/commit/34d812ef0b0e5be5b1764404e6120f65b761c867))
+* **password-policy:** add PasswordPolicyService + registry wiring ([74cc9d7](https://github.com/eetr-ai/eetr-auth/commit/74cc9d786dce3dab4ce16769f15dc9555ce04ee6))
+* **password-policy:** add policy repository + password-age stamping ([f9935ee](https://github.com/eetr-ai/eetr-auth/commit/f9935ee1c64ddd781d2b0d9a25e578c48491e00d))
+* **password-policy:** enforce + live-validate admin policy on password change ([a59d187](https://github.com/eetr-ai/eetr-auth/commit/a59d187ffecfde71eb01298e663b16ba412512d7))
+* **password-policy:** enforce password max age at login ([fffda25](https://github.com/eetr-ai/eetr-auth/commit/fffda25dfa043dc27f73ff113babc1307a808d87))
+* **password-policy:** per-class minimum counts + admin sign-in policy ([3e8743d](https://github.com/eetr-ai/eetr-auth/commit/3e8743d41c662c385e541d593825bfd74f8dfda0))
+* **password-policy:** prompt to change a non-compliant password at sign-in ([c3bdf0b](https://github.com/eetr-ai/eetr-auth/commit/c3bdf0be5745340c927aff73fa418eddc063ba36))
+* **scripts:** back up wrangler.generated.jsonc before re-rendering ([981edb0](https://github.com/eetr-ai/eetr-auth/commit/981edb0f60a5f524cf850a245a65545b2e6e05d4))
+* **scripts:** seed local R2 JWKS on setup + add verify / verify:remote ([23050ea](https://github.com/eetr-ai/eetr-auth/commit/23050ea657c918cbd3d5d6135401903a8091776f))
+* **users:** assign/remove environments per user in the users list ([6e136bc](https://github.com/eetr-ai/eetr-auth/commit/6e136bc53cf9fb0ec668ded32146064d5cd1de95))
+* **users:** manage per-user environment grants (backend) ([0e4f1f9](https://github.com/eetr-ai/eetr-auth/commit/0e4f1f992bd1326a5ba1fa21da24db994b709ae5))
+
+
+### Bug Fixes
+
+* **admin:** added check for admin on admin-only server actions ([77663de](https://github.com/eetr-ai/eetr-auth/commit/77663de152f711d9f996a96195583f1a1e09bd21))
+* **admin:** enforced redirect outside the admin layout for non-admin users ([23e26dd](https://github.com/eetr-ai/eetr-auth/commit/23e26dd5d3c4a20f26b31ccc390501b6d6e0ee33))
+* **admin:** Security audit fixes ([4dae255](https://github.com/eetr-ai/eetr-auth/commit/4dae255f1216919757e854c87cc7f0508b0af21a))
+* **auth:** invalidate pending password-reset links on password change ([34db753](https://github.com/eetr-ai/eetr-auth/commit/34db753a46ac426e4d4f2c7efb87e4ac2435fc99))
+* **auth:** re-derive isAdmin from the DB on JWT session reads ([6b5c77f](https://github.com/eetr-ai/eetr-auth/commit/6b5c77f1377aff396af0a2c3b3525cefd4172a2e))
+* **deploy:** pin Cloudflare account so wrangler targets the right one ([0d702f4](https://github.com/eetr-ai/eetr-auth/commit/0d702f4cfa72dae16aa4910c0b08b01883e6258f))
+* **oauth:** bind token audience and scope-gate /userinfo claims ([61b9c5c](https://github.com/eetr-ai/eetr-auth/commit/61b9c5c72b4c75965daf5cec4e3c16805dd8b9ec))
+* **oauth:** expire family access tokens on refresh-token reuse ([db91add](https://github.com/eetr-ai/eetr-auth/commit/db91add3185443823c51abbd310ad31d988c53e5))
+* **oauth:** re-check user environment access on refresh-token grant ([6b854b5](https://github.com/eetr-ai/eetr-auth/commit/6b854b5b3e4612c4dc206bc89d19332493fbadbb))
+* only enforce email verification on passkey sign-in when email MFA is enabled ([0d44579](https://github.com/eetr-ai/eetr-auth/commit/0d445790aa8fb1c3d840346b3809f90b5b15fe5d))
+* only require email verification when email MFA is enabled globally ([97597ba](https://github.com/eetr-ai/eetr-auth/commit/97597bae5a245e05009b4b5ed1c4658c6d57af42))
+* **security:** H1 atomic single-use authorization codes ([cc7ff48](https://github.com/eetr-ai/eetr-auth/commit/cc7ff486d6b1646dc28603ee9360bec736de890d))
+* **security:** H2 atomic refresh-token rotation with chain revocation ([5267f68](https://github.com/eetr-ai/eetr-auth/commit/5267f68aabda2a00214e111b204033c348594f04))
+* **security:** H3 secure-by-default password hashing ([65e6765](https://github.com/eetr-ai/eetr-auth/commit/65e676547e645a8e6ad44781925a27fdcc6cdcd8))
+* **security:** H5 whitelist user updates and audit admin-rights changes ([d4e1601](https://github.com/eetr-ai/eetr-auth/commit/d4e1601f711669407299015207f525c84e5cc799))
+* **users:** don't auto-verify email when admin user created without one ([c772ee9](https://github.com/eetr-ai/eetr-auth/commit/c772ee9473160f3255f40a0c9415db5e88c93812))
+
 ## [0.3.1](https://github.com/eetr-ai/eetr-auth/compare/v0.3.0...v0.3.1) (2026-05-31)
 
 
