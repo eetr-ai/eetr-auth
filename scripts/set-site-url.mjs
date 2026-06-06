@@ -11,6 +11,11 @@ import { writeFileSync, unlinkSync, mkdirSync, existsSync, readFileSync } from "
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import stripJsonComments from "strip-json-comments";
+import { fileURLToPath } from "node:url";
+
+// Run from apps/auth regardless of the caller's cwd — wrangler config, db/, infra/, and
+// the sibling argon-hasher workspace all resolve relative to apps/auth.
+process.chdir(fileURLToPath(new URL("../apps/auth", import.meta.url)));
 
 const DEFAULT_LOCAL_WRANGLER_CONFIGS = ["wrangler.generated.jsonc", "../../infra/wrangler.template.jsonc"];
 

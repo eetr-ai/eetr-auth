@@ -7,7 +7,7 @@
  *   npm run verify          # local  (.env.local/.dev.vars + local R2 + optional dev server)
  *   npm run verify:remote   # remote (deployed discovery + CDN JWKS + remote R2/secrets)
  *
- * Run from apps/auth (the npm scripts cd there). Read-only: it fetches public endpoints
+ * Run from apps/auth (self-chdir). Read-only: it fetches public endpoints
  * and runs read-only wrangler commands; it never writes secrets or R2 objects.
  *
  * Remote, end-to-end signature check (optional): set VERIFY_CLIENT_ID + VERIFY_CLIENT_SECRET
@@ -16,6 +16,11 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { resolve, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Run from apps/auth regardless of the caller's cwd — wrangler config, db/, infra/, and
+// the sibling argon-hasher workspace all resolve relative to apps/auth.
+process.chdir(fileURLToPath(new URL("../apps/auth", import.meta.url)));
 import { execFileSync } from "node:child_process";
 import { SignJWT, importPKCS8, jwtVerify, createLocalJWKSet } from "jose";
 import stripJsonComments from "strip-json-comments";

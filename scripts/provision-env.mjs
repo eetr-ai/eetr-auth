@@ -14,6 +14,11 @@ import { randomBytes } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+// Run from apps/auth regardless of the caller's cwd — wrangler config, db/, infra/, and
+// the sibling argon-hasher workspace all resolve relative to apps/auth.
+process.chdir(fileURLToPath(new URL("../apps/auth", import.meta.url)));
 
 function parseArgs(argv) {
 	const out = {

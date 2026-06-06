@@ -11,6 +11,11 @@
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import stripJsonComments from "strip-json-comments";
+import { fileURLToPath } from "node:url";
+
+// Run from apps/auth regardless of the caller's cwd — wrangler config, db/, infra/, and
+// the sibling argon-hasher workspace all resolve relative to apps/auth.
+process.chdir(fileURLToPath(new URL("../apps/auth", import.meta.url)));
 
 const MANAGED_VAR_KEYS = new Set(["AUTH_URL", "ISSUER_BASE_URL", "JWKS_CDN_BASE_URL", "JWT_KID"]);
 

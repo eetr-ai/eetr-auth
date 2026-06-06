@@ -5,6 +5,11 @@ import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { calculateJwkThumbprint, exportJWK, importSPKI } from "jose";
 import stripJsonComments from "strip-json-comments";
+import { fileURLToPath } from "node:url";
+
+// Run from apps/auth regardless of the caller's cwd — wrangler config, db/, infra/, and
+// the sibling argon-hasher workspace all resolve relative to apps/auth.
+process.chdir(fileURLToPath(new URL("../apps/auth", import.meta.url)));
 
 const AUTH_PLACEHOLDER = "changeme-local-auth-secret";
 
