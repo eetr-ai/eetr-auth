@@ -152,6 +152,14 @@ describe("UserService", () => {
 			vi.useRealTimers();
 		});
 
+		it("creates an admin user with no email as unverified (emailVerifiedAt null)", async () => {
+			const service = createService(mockRepo);
+			const result = await service.createUser("carol", "secret", true);
+			expect(result.email).toBeNull();
+			expect(result.emailVerifiedAt).toBeNull();
+			expect(result.isAdmin).toBe(true);
+		});
+
 		it("creates a non-admin user with emailVerifiedAt as null", async () => {
 			const service = createService(mockRepo);
 			const result = await service.createUser("bob", "secret", false);

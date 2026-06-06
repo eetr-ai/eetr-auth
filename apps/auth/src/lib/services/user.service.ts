@@ -121,7 +121,10 @@ export class UserService {
 		});
 		const normalizedName = normalizeOptionalProfileField(name);
 		const normalizedEmail = normalizeOptionalProfileField(email);
-		const emailVerifiedAt = isAdmin ? new Date().toISOString() : null;
+		// Admin-managed emails are trusted (auto-verified), but only when one is
+		// actually provided. Stamping verification on a missing email leaves a stale
+		// timestamp that later surfaces as "Verified" the moment an email is added.
+		const emailVerifiedAt = isAdmin && normalizedEmail ? new Date().toISOString() : null;
 		const passwordUpdatedAt = new Date().toISOString();
 		await this.userRepository.create(
 			id,
