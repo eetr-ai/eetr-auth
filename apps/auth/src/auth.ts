@@ -15,6 +15,7 @@ import { getServices } from "@/lib/services/registry";
 import { EMAIL_VERIFICATION_CHALLENGE_COOKIE } from "@/lib/auth/email-verification-cookie";
 import { isEmailMfaGloballyEnabled } from "@/lib/auth/email-mfa-enablement";
 import { MFA_CHALLENGE_COOKIE } from "@/lib/auth/mfa-cookie";
+import { refreshAdminClaim } from "@/lib/auth/session-admin-refresh";
 import {
 	decodePendingAuthorizationCookie,
 	getPendingCookieName,
@@ -399,7 +400,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 	],
 	session: { strategy: "jwt" },
 	callbacks: {
-		jwt({ token, user }) {
+		async jwt({ token, user }) {
 			if (user) {
 				token.id = user.id;
 				token.username = (user as { username?: string }).username;
@@ -407,9 +408,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 				token.email = user.email;
 				token.picture = user.image;
 				token.isAdmin = Boolean((user as { isAdmin?: boolean }).isAdmin);
+				token.adminCheckedAt = Date.now();
 				console.log("[auth] jwt: user added to token", { id: user.id, name: user.name });
+				return token;
 			}
-			return token;
+			// On subsequent requests the session is JWT-only, so isAdmin would otherwise be
+			// frozen at sign-in. Re-derive it from the DB (throttled) so revoking admin — or
+			// deleting the user — takes effect without waiting for the session to expire.
+			return refreshAdminClaim(token, {
+				now: Date.now(),
+				fetchIsAdmin: async (userId) => {
+					const { env } = await getCloudflareContext({ async: true });
+					const repo = new UserRepositoryD1(getDb(env));
+					const fresh = await repo.getById(userId);
+					return fresh ? Boolean(fresh.isAdmin) : null;
+				},
+			});
 		},
 		session({ session, token }) {
 			if (session.user) {
