@@ -1,6 +1,7 @@
 import type { ClientRepository } from "@/lib/repositories/client.repository";
 import type { TokenRepository } from "@/lib/repositories/token.repository";
 import type { AuthorizationCodeRepository } from "@/lib/repositories/authorization-code.repository";
+import type { UserRepository } from "@/lib/repositories/admin.repository";
 import { OAuthServiceError } from "./oauth.types";
 
 const AUTHORIZATION_CODE_TTL_SECONDS = 300;
@@ -33,21 +34,25 @@ export interface OauthAuthorizationServiceDeps {
 	clientRepo: ClientRepository;
 	tokenRepo: TokenRepository;
 	authorizationCodeRepo: AuthorizationCodeRepository;
+	userRepo: UserRepository;
 }
 
 export class OauthAuthorizationService {
 	private readonly clientRepo: ClientRepository;
 	private readonly tokenRepo: TokenRepository;
 	private readonly authorizationCodeRepo: AuthorizationCodeRepository;
+	private readonly userRepo: UserRepository;
 
 	constructor({
 		clientRepo,
 		tokenRepo,
 		authorizationCodeRepo,
+		userRepo,
 	}: OauthAuthorizationServiceDeps) {
 		this.clientRepo = clientRepo;
 		this.tokenRepo = tokenRepo;
 		this.authorizationCodeRepo = authorizationCodeRepo;
+		this.userRepo = userRepo;
 	}
 
 	async authorize(params: AuthorizeRequestParams): Promise<{ redirectTo: string }> {
@@ -86,6 +91,17 @@ export class OauthAuthorizationService {
 				"unauthorized_client",
 				"Client credentials have expired.",
 				401
+			);
+		}
+
+		// The user must be granted access to the environment this client belongs to.
+		// Enforced for all users (admins are environment-scoped for OAuth, not bypassed).
+		const userEnvironmentIds = await this.userRepo.getUserEnvironments(params.subject);
+		if (!userEnvironmentIds.includes(client.environmentId)) {
+			throw new OAuthServiceError(
+				"access_denied",
+				"You do not have access to this application.",
+				403
 			);
 		}
 

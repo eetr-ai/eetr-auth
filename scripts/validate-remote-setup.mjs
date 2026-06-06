@@ -7,7 +7,7 @@ import stripJsonComments from "strip-json-comments";
 function parseArgs(argv) {
 	const out = {
 		mode: "upgrade",
-		tfJson: "infra/out/terraform.tf.json",
+		tfJson: "../../infra/out/terraform.tf.json",
 		wranglerConfig: process.env.WRANGLER_CONFIG?.trim() || "wrangler.generated.jsonc",
 	};
 

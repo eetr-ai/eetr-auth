@@ -2,13 +2,13 @@
 /**
  * Merge the template Wrangler config with terraform output JSON (infra/out/terraform.tf.json).
  *
- * Usage:
+ * Usage (terraform step runs from repo root; the script runs from apps/auth):
  *   terraform -chdir=infra/terraform output -json > infra/out/terraform.tf.json
- *   node scripts/render-wrangler-config.mjs [--base infra/wrangler.template.jsonc] [--tf-json path] [--out wrangler.generated.jsonc]
+ *   node scripts/render-wrangler-config.mjs [--base ../../infra/wrangler.template.jsonc] [--tf-json path] [--out wrangler.generated.jsonc]
  *
  * Optional overrides (non-empty wins over Terraform): --issuer-base-url, --auth-url, --jwks-cdn-base-url
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import stripJsonComments from "strip-json-comments";
 
@@ -16,7 +16,7 @@ const MANAGED_VAR_KEYS = new Set(["AUTH_URL", "ISSUER_BASE_URL", "JWKS_CDN_BASE_
 
 function parseArgs(argv) {
 	const out = {
-		base: "infra/wrangler.template.jsonc",
+		base: "../../infra/wrangler.template.jsonc",
 		tfJson: null,
 		outFile: "wrangler.generated.jsonc",
 		issuerBaseUrl: "",
@@ -79,7 +79,7 @@ function main() {
 	if (!tfPath) {
 		console.error("Missing --tf-json <path> (or use stdin with - if implemented).");
 		console.error("Example: terraform -chdir=infra/terraform output -json > infra/out/terraform.tf.json");
-		console.error("         node scripts/render-wrangler-config.mjs --tf-json infra/out/terraform.tf.json");
+		console.error("         node scripts/render-wrangler-config.mjs --tf-json ../../infra/out/terraform.tf.json");
 		process.exit(1);
 	}
 
@@ -102,6 +102,15 @@ function main() {
 		throw new Error("terraform output worker_name is missing or empty.");
 	}
 	config.name = workerName.trim();
+
+	// Pin the Cloudflare account so `wrangler deploy` targets the right account even
+	// when the API token can access several accounts (otherwise Wrangler guesses and
+	// can deploy to the wrong one — a 10000 auth error on an unexpected account id).
+	const accountId = tf.account_id;
+	if (typeof accountId !== "string" || !accountId.trim()) {
+		throw new Error("terraform output account_id is missing or empty.");
+	}
+	config.account_id = accountId.trim();
 
 	if (Array.isArray(config.services)) {
 		for (const s of config.services) {
@@ -145,7 +154,17 @@ function main() {
 		config.vars.JWT_KID = jwtKid;
 	}
 
-	writeFileSync(outPath, JSON.stringify(config, null, "\t") + "\n", "utf8");
+	const rendered = JSON.stringify(config, null, "\t") + "\n";
+	// Back up any existing config before overwriting so a re-render for a different
+	// account/project can't silently clobber a prior instance's config. Backups are
+	// timestamped (never overwrite each other) and gitignored alongside the config.
+	if (existsSync(outPath) && readFileSync(outPath, "utf8") !== rendered) {
+		const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+		const backupPath = `${outPath}.${stamp}.bak`;
+		copyFileSync(outPath, backupPath);
+		console.log("Backed up previous config to", backupPath);
+	}
+	writeFileSync(outPath, rendered, "utf8");
 	console.log("Wrote", outPath);
 }
 

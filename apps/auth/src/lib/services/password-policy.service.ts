@@ -9,6 +9,7 @@ import {
 	validatePasswordAgainstPolicy,
 	type PasswordIdentifiers,
 	type PasswordPolicyCheckResult,
+	type PasswordPolicyViolation,
 } from "@/lib/auth/password-policy-validation";
 import type { AdminAuditLogService } from "./admin-audit-log.service";
 import { AUDIT_ACTION, AUDIT_RESOURCE } from "./audit-actions";
@@ -260,5 +261,64 @@ export class PasswordPolicyService {
 		if (maxAgeDays == null) return false;
 		const ageDays = (Date.now() - Date.parse(passwordUpdatedAt)) / 86_400_000;
 		return ageDays > maxAgeDays;
+	}
+
+	/**
+	 * The complexity policy that applies to a sign-in, or null when none applies (no policy
+	 * assigned, or the assigned policy is disabled). Resolution is by audience:
+	 *  - admins → the global admin sign-in policy;
+	 *  - a specific OAuth client → the policy of that client's environment (caller resolves
+	 *    `environmentId` from the client);
+	 *  - otherwise (no client) → the first enabled policy across the user's granted
+	 *    environments (see {@link checkSignInPasswordComplexity} for the multi-policy gate).
+	 */
+	async getApplicablePolicyForSignIn(args: {
+		userId: string;
+		isAdmin: boolean;
+		environmentId?: string | null;
+	}): Promise<PasswordPolicy | null> {
+		const policy = args.isAdmin
+			? await this.policyRepo.getAdminPolicy()
+			: args.environmentId
+				? await this.policyRepo.getPolicyForEnvironment(args.environmentId)
+				: (await this.policyRepo.getEnabledPoliciesForUser(args.userId))[0] ?? null;
+		// A disabled policy imposes no rules — treat it as "none applies" so callers
+		// don't need to special-case it.
+		return policy && policy.enabled ? policy : null;
+	}
+
+	/**
+	 * Validates a candidate password against the policy applicable to this sign-in. When no
+	 * policy applies, returns `ok: true` with a null policy. For a non-admin with no client
+	 * in context, the password is gated against *every* enabled policy of the user's
+	 * environments (fail if any rejects), and the returned `policy` is the first that failed
+	 * (for the recovery checklist).
+	 */
+	async checkSignInPasswordComplexity(args: {
+		userId: string;
+		isAdmin: boolean;
+		environmentId?: string | null;
+		password: string;
+		identifiers?: PasswordIdentifiers;
+	}): Promise<{ ok: boolean; violations: PasswordPolicyViolation[]; policy: PasswordPolicy | null }> {
+		const identifiers = args.identifiers ?? {};
+
+		// Admin or client-scoped: a single applicable policy.
+		if (args.isAdmin || args.environmentId) {
+			const policy = await this.getApplicablePolicyForSignIn(args);
+			if (!policy) return { ok: true, violations: [], policy: null };
+			const result = validatePasswordAgainstPolicy(policy, args.password, identifiers);
+			return { ok: result.ok, violations: result.violations, policy };
+		}
+
+		// Non-admin, no client: gate against every enabled policy of the user's environments.
+		const policies = await this.policyRepo.getEnabledPoliciesForUser(args.userId);
+		for (const policy of policies) {
+			const result = validatePasswordAgainstPolicy(policy, args.password, identifiers);
+			if (!result.ok) {
+				return { ok: false, violations: result.violations, policy };
+			}
+		}
+		return { ok: true, violations: [], policy: null };
 	}
 }

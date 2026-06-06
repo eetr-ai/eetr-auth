@@ -3,11 +3,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("next/headers", () => ({ cookies: vi.fn() }));
 vi.mock("@/lib/context/on-public-server-action", () => ({ onPublicServerAction: vi.fn() }));
 vi.mock("@/auth", () => ({ auth: vi.fn(), signOut: vi.fn() }));
+vi.mock("@/lib/auth/oauth-pending-cookie", () => ({
+	decodePendingAuthorizationCookie: vi.fn().mockResolvedValue(null),
+	getPendingCookieName: vi.fn().mockReturnValue("oauth_pending"),
+}));
 
 import { cookies } from "next/headers";
+import { decodePendingAuthorizationCookie } from "@/lib/auth/oauth-pending-cookie";
 import { onPublicServerAction } from "@/lib/context/on-public-server-action";
-import { beginSignInChallenge, requestEmailMfaCode } from "@/app/actions/mfa-actions";
+import {
+	beginSignInChallenge,
+	changePasswordAtSignIn,
+	requestEmailMfaCode,
+} from "@/app/actions/mfa-actions";
 import { MFA_CHALLENGE_COOKIE } from "@/lib/auth/mfa-cookie";
+
+type ComplexityResult = { ok: boolean; violations: { code: string }[]; policy: unknown };
 
 const cookiesMock = vi.mocked(cookies);
 const onPublicServerActionMock = vi.mocked(onPublicServerAction);
@@ -26,12 +37,32 @@ function setup(opts: {
 	totpEnrolled: boolean;
 	passwordExpired?: boolean;
 	expiredEmailSent?: boolean;
+	complexity?: ComplexityResult;
+	/** Second verifyUsernamePassword answer (the "new password" check in changePasswordAtSignIn). */
+	newPasswordMatchesExisting?: boolean;
+	/** When set, simulates an OAuth client context resolving to this environment. */
+	clientEnvironmentId?: string;
+	/** Environments the user is granted (for the env-access check). */
+	userEnvironments?: string[];
 }) {
 	const jar = { set: vi.fn(), delete: vi.fn(), get: vi.fn() };
 	cookiesMock.mockResolvedValue(jar as never);
 
+	// Simulate the OAuth pending cookie + client→environment resolution when requested.
+	vi.mocked(decodePendingAuthorizationCookie).mockResolvedValue(
+		opts.clientEnvironmentId ? { client_id: "client-abc" } : null
+	);
+
+	const verifyUsernamePassword = vi.fn().mockResolvedValue(opts.user);
+	if (opts.newPasswordMatchesExisting !== undefined) {
+		// First call (current password) returns the user; second call (new password) reflects
+		// whether the new password equals the current one.
+		verifyUsernamePassword
+			.mockResolvedValueOnce(opts.user)
+			.mockResolvedValueOnce(opts.newPasswordMatchesExisting ? opts.user : null);
+	}
 	const userChallengeService = {
-		verifyUsernamePassword: vi.fn().mockResolvedValue(opts.user),
+		verifyUsernamePassword,
 		createMfaOtpAndSendEmail: vi.fn().mockResolvedValue("mfa-challenge-id"),
 		createEmailVerificationOtpAndSendEmail: vi.fn().mockResolvedValue("ev-challenge-id"),
 		sendExpiredPasswordReset: vi.fn().mockResolvedValue(opts.expiredEmailSent ?? false),
@@ -40,13 +71,32 @@ function setup(opts: {
 	const totpService = { getStatus: vi.fn().mockResolvedValue({ enrolled: opts.totpEnrolled }) };
 	const passwordPolicyService = {
 		isPasswordExpiredForUser: vi.fn().mockResolvedValue(opts.passwordExpired ?? false),
+		checkSignInPasswordComplexity: vi
+			.fn()
+			.mockResolvedValue(opts.complexity ?? { ok: true, violations: [], policy: null }),
+	};
+	const clientService = {
+		getByClientIdentifier: vi
+			.fn()
+			.mockResolvedValue(opts.clientEnvironmentId ? { environmentId: opts.clientEnvironmentId } : null),
+	};
+	const userService = {
+		updateUser: vi.fn().mockResolvedValue(undefined),
+		getUserEnvironments: vi.fn().mockResolvedValue(opts.userEnvironments ?? []),
 	};
 
-	const services = { userChallengeService, siteSettingsService, totpService, passwordPolicyService };
+	const services = {
+		userChallengeService,
+		siteSettingsService,
+		totpService,
+		passwordPolicyService,
+		clientService,
+		userService,
+	};
 	onPublicServerActionMock.mockImplementation((fn) =>
 		(fn as (ctx: unknown, get: () => unknown) => unknown)({}, () => services) as never
 	);
-	return { jar, userChallengeService, totpService, passwordPolicyService };
+	return { jar, userChallengeService, totpService, passwordPolicyService, userService };
 }
 
 const baseUser: User = {
@@ -109,15 +159,39 @@ describe("beginSignInChallenge — method availability", () => {
 		expect(r).toEqual({ ok: true, challenge: "none" });
 	});
 
-	it("falls back to email verification for an unverified non-admin with no MFA methods", async () => {
+	it("requires email verification for an unverified non-admin when email MFA is enabled globally", async () => {
+		const { userChallengeService } = setup({
+			user: { ...baseUser, emailVerifiedAt: null },
+			site: { mfaEnabled: true, mfaCanEnable: true },
+			totpEnrolled: false,
+		});
+		const r = await beginSignInChallenge("alice", "pw");
+		// Email MFA is the user's sole method, so they go through the MFA challenge,
+		// which also verifies email ownership on completion.
+		expect(r).toEqual({ ok: true, challenge: "mfa", methods: ["email"] });
+		expect(userChallengeService.createMfaOtpAndSendEmail).toHaveBeenCalledOnce();
+	});
+
+	it("signs in an unverified non-admin without email verification when email MFA is off globally", async () => {
 		const { userChallengeService } = setup({
 			user: { ...baseUser, emailVerifiedAt: null },
 			site: { mfaEnabled: false, mfaCanEnable: false },
 			totpEnrolled: false,
 		});
 		const r = await beginSignInChallenge("alice", "pw");
-		expect(r).toEqual({ ok: true, challenge: "email_verification" });
-		expect(userChallengeService.createEmailVerificationOtpAndSendEmail).toHaveBeenCalledOnce();
+		expect(r).toEqual({ ok: true, challenge: "none" });
+		expect(userChallengeService.createEmailVerificationOtpAndSendEmail).not.toHaveBeenCalled();
+	});
+
+	it("signs in a non-admin with no email address when email MFA is off globally", async () => {
+		const { userChallengeService } = setup({
+			user: { ...baseUser, email: null, emailVerifiedAt: null },
+			site: { mfaEnabled: false, mfaCanEnable: false },
+			totpEnrolled: false,
+		});
+		const r = await beginSignInChallenge("alice", "pw");
+		expect(r).toEqual({ ok: true, challenge: "none" });
+		expect(userChallengeService.createEmailVerificationOtpAndSendEmail).not.toHaveBeenCalled();
 	});
 
 	it("rejects an invalid password", async () => {
@@ -165,6 +239,135 @@ describe("beginSignInChallenge — method availability", () => {
 			ok: false,
 			error: "Configure Site URL and RESEND_API_KEY before using MFA.",
 		});
+	});
+});
+
+describe("beginSignInChallenge — password complexity gate", () => {
+	const policy = { id: "policy-1", name: "Strict" };
+
+	it("returns a password_complexity challenge before MFA when the password fails the policy", async () => {
+		const { totpService, userChallengeService } = setup({
+			user: baseUser,
+			site: { mfaEnabled: true, mfaCanEnable: true },
+			totpEnrolled: true,
+			complexity: { ok: false, violations: [{ code: "too_short" }], policy },
+		});
+		const r = await beginSignInChallenge("alice", "pw");
+		expect(r).toEqual({
+			ok: true,
+			challenge: "password_complexity",
+			policy,
+			username: "alice",
+			email: baseUser.email,
+		});
+		// Gate runs before MFA: no method evaluation, no MFA email.
+		expect(totpService.getStatus).not.toHaveBeenCalled();
+		expect(userChallengeService.createMfaOtpAndSendEmail).not.toHaveBeenCalled();
+	});
+
+	it("does not gate when the complexity check passes (proceeds to the normal flow)", async () => {
+		const { passwordPolicyService } = setup({
+			user: baseUser,
+			site: { mfaEnabled: false, mfaCanEnable: false },
+			totpEnrolled: true,
+			complexity: { ok: true, violations: [], policy: null },
+		});
+		const r = await beginSignInChallenge("alice", "pw");
+		expect(r).toEqual({ ok: true, challenge: "mfa", methods: ["totp"] });
+		expect(passwordPolicyService.checkSignInPasswordComplexity).toHaveBeenCalledOnce();
+	});
+
+	it("lets the expired gate win over the complexity gate", async () => {
+		const { passwordPolicyService } = setup({
+			user: baseUser,
+			site: { mfaEnabled: true, mfaCanEnable: true },
+			totpEnrolled: false,
+			passwordExpired: true,
+			expiredEmailSent: true,
+			complexity: { ok: false, violations: [{ code: "too_short" }], policy },
+		});
+		const r = await beginSignInChallenge("alice", "pw");
+		expect(r).toMatchObject({ challenge: "password_expired" });
+		expect(passwordPolicyService.checkSignInPasswordComplexity).not.toHaveBeenCalled();
+	});
+});
+
+describe("beginSignInChallenge — environment access", () => {
+	it("denies sign-in when the user lacks access to the client's environment", async () => {
+		const { passwordPolicyService } = setup({
+			user: baseUser,
+			site: { mfaEnabled: false, mfaCanEnable: false },
+			totpEnrolled: true,
+			clientEnvironmentId: "env-prod",
+			userEnvironments: ["env-dev"],
+		});
+		const r = await beginSignInChallenge("alice", "pw");
+		expect(r).toEqual({ ok: false, error: "You don't have access to this application." });
+		// Denied before any gate runs.
+		expect(passwordPolicyService.isPasswordExpiredForUser).not.toHaveBeenCalled();
+	});
+
+	it("allows sign-in when the user is granted the client's environment", async () => {
+		setup({
+			user: baseUser,
+			site: { mfaEnabled: false, mfaCanEnable: false },
+			totpEnrolled: true,
+			clientEnvironmentId: "env-prod",
+			userEnvironments: ["env-dev", "env-prod"],
+		});
+		const r = await beginSignInChallenge("alice", "pw");
+		expect(r).toEqual({ ok: true, challenge: "mfa", methods: ["totp"] });
+	});
+});
+
+describe("changePasswordAtSignIn", () => {
+	it("updates the password when the new one is compliant and different", async () => {
+		const { userService } = setup({
+			user: baseUser,
+			site: { mfaEnabled: false, mfaCanEnable: false },
+			totpEnrolled: false,
+			newPasswordMatchesExisting: false,
+			complexity: { ok: true, violations: [], policy: null },
+		});
+		const r = await changePasswordAtSignIn("alice", "old-pw", "Str0ng-New-Pw!");
+		expect(r).toEqual({ ok: true });
+		expect(userService.updateUser).toHaveBeenCalledWith("u1", { password: "Str0ng-New-Pw!" }, "u1");
+	});
+
+	it("rejects an invalid current password without updating", async () => {
+		const { userService } = setup({
+			user: null,
+			site: { mfaEnabled: false, mfaCanEnable: false },
+			totpEnrolled: false,
+		});
+		const r = await changePasswordAtSignIn("alice", "wrong", "Str0ng-New-Pw!");
+		expect(r).toEqual({ ok: false, error: "Invalid username or password." });
+		expect(userService.updateUser).not.toHaveBeenCalled();
+	});
+
+	it("rejects reusing the current password", async () => {
+		const { userService } = setup({
+			user: baseUser,
+			site: { mfaEnabled: false, mfaCanEnable: false },
+			totpEnrolled: false,
+			newPasswordMatchesExisting: true,
+		});
+		const r = await changePasswordAtSignIn("alice", "old-pw", "old-pw");
+		expect(r).toEqual({ ok: false, error: "Choose a password different from your current one." });
+		expect(userService.updateUser).not.toHaveBeenCalled();
+	});
+
+	it("rejects a new password that fails the policy", async () => {
+		const { userService } = setup({
+			user: baseUser,
+			site: { mfaEnabled: false, mfaCanEnable: false },
+			totpEnrolled: false,
+			newPasswordMatchesExisting: false,
+			complexity: { ok: false, violations: [{ code: "too_short" }], policy: { id: "p1" } },
+		});
+		const r = await changePasswordAtSignIn("alice", "old-pw", "short");
+		expect(r.ok).toBe(false);
+		expect(userService.updateUser).not.toHaveBeenCalled();
 	});
 });
 

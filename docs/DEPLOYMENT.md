@@ -23,6 +23,7 @@ Before running Terraform, complete the Cloudflare setup for the target account:
 
 ```bash
 export CLOUDFLARE_API_TOKEN=your_token_here
+export CLOUDFLARE_ACCOUNT_ID=your_account_id   # same value as account_id in terraform.tfvars
 ```
 
 Required permissions for the install flow in this repo:
@@ -33,6 +34,8 @@ Required permissions for the install flow in this repo:
 - `Account -> Workers Scripts -> Edit`
 
 Best practice for this repo: use one properly scoped API token for the entire install and deploy flow. Keep `CLOUDFLARE_API_TOKEN` exported for Terraform, `infra:provision`, and Wrangler deploy commands.
+
+**Export `CLOUDFLARE_ACCOUNT_ID` too** if your token can access more than one Cloudflare account. Wrangler does not read `terraform.tfvars`, so without it Wrangler picks a default account and may deploy to the wrong one — surfacing as an `Authentication error [code: 10000]` whose URL contains an account id that is *not* your `terraform.tfvars` `account_id`. The rendered `wrangler.generated.jsonc` pins `account_id` for the auth Worker automatically, but the `argon-hasher` Worker is deployed straight from its `wrangler.toml`, so it relies on this variable. If you hit a `10000`, first check the account id in the error URL matches your target account before adjusting token scopes.
 
 ---
 
@@ -73,10 +76,10 @@ npm install                                  # installs all workspace dependenci
 ### 3. Configure Terraform variables
 
 ```bash
-cp apps/auth/infra/terraform/terraform.tfvars.example apps/auth/infra/terraform/terraform.tfvars
+cp infra/terraform/terraform.tfvars.example infra/terraform/terraform.tfvars
 ```
 
-Edit `apps/auth/infra/terraform/terraform.tfvars`:
+Edit `infra/terraform/terraform.tfvars`:
 
 ```hcl
 account_id        = "YOUR_CLOUDFLARE_ACCOUNT_ID"      # from `npx wrangler whoami` or the dashboard
@@ -100,7 +103,7 @@ Notes:
 ### 4. Provision D1 + R2 via Terraform
 
 ```bash
-cd apps/auth/infra/terraform
+cd infra/terraform
 terraform init
 terraform apply
 cd -            # return to the repository root for the remaining steps
@@ -187,7 +190,7 @@ Expected response:
 Then sign in at your auth hostname and exercise the OAuth/token flows you depend on.
 
 > Schema details (fresh snapshot vs. versioned patches) are documented in
-> [../apps/auth/db/README.md](../apps/auth/db/README.md). `setup:remote` applies the fresh snapshot for you.
+> [../db/README.md](../db/README.md). `setup:remote` applies the fresh snapshot for you.
 
 ## Recommended Cloudflare WAF & Rate Limiting
 
@@ -267,6 +270,41 @@ npm run upgrade:remote -- --force-rotate-secrets
 ```
 
 Use `--force-rotate-secrets` only when intentionally rotating credentials.
+
+---
+
+## Teardown / Cleanup
+
+To remove the provisioned infrastructure, run `terraform destroy` from `infra/terraform`. One snag: **Terraform cannot delete a non-empty R2 bucket** — it fails with `failed to delete R2 bucket ... is not empty (10008)`. Empty the bucket first.
+
+The auth server stores a few objects in the bucket: the JWKS (`jwks.json` by default), and any uploaded avatars / site logo. Make sure your shell targets the right account before deleting (`export CLOUDFLARE_ACCOUNT_ID=<account_id from terraform.tfvars>`).
+
+**1. Empty the R2 bucket.**
+
+If it only holds the JWKS (typical for a fresh or partial install), delete that one object — `wrangler` can only delete objects individually (no bulk/empty command):
+
+```bash
+cd apps/auth
+npx wrangler r2 object delete <r2_bucket_name>/jwks.json --remote
+```
+
+If the bucket has more objects (avatars, logo, …), use R2's S3-compatible API. Create an **R2 API token** (Cloudflare dashboard → R2 → Manage R2 API Tokens — this gives an Access Key ID + Secret, separate from `CLOUDFLARE_API_TOKEN`), then bulk-delete:
+
+```bash
+AWS_ACCESS_KEY_ID=<r2_access_key> AWS_SECRET_ACCESS_KEY=<r2_secret_key> \
+  aws s3 rm s3://<r2_bucket_name> --recursive \
+  --endpoint-url https://<account_id>.r2.cloudflarestorage.com
+```
+
+(`rclone purge` against the same endpoint works too.) The no-CLI option: empty and delete the bucket from the R2 dashboard.
+
+**2. Destroy the infrastructure.**
+
+```bash
+cd infra/terraform && terraform destroy
+```
+
+This removes the D1 database and R2 bucket. **`terraform destroy` deletes the D1 database and all its data** — export anything you need first. The Worker scripts themselves (auth, argon-hasher) are deployed by Wrangler, not Terraform; delete them from the dashboard (Workers & Pages) or with `npx wrangler delete --name <worker_name>` if you also want those gone.
 
 ---
 

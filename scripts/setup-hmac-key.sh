@@ -8,8 +8,10 @@
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_LOCAL="${ROOT}/.env.local"
+# Resolve from the script's own location (cwd-independent): repo root is the
+# parent of scripts/, and the auth worker's local env file lives under apps/auth.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_LOCAL="${REPO_ROOT}/apps/auth/.env.local"
 
 LOCAL_KEY="$(openssl rand -hex 32)"
 CLOUD_KEY="$(openssl rand -hex 32)"

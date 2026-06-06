@@ -77,6 +77,8 @@ src/
 | `WORKER_SELF_REFERENCE` | Service Binding | Internal self-calls for routing/caching |
 | `ARGON_HASHER` | Service Binding | Password hash/verify operations |
 
+**OpenNext worker entry — do not "clean up":** [apps/auth/worker.ts](../apps/auth/worker.ts) opens with a `//DO NOT REMOVE THE FOLLOWING COMMENT` line and a `@ts-ignore` on the `import openNextWorker from "./.open-next/worker.js"` line. OpenNext only generates `.open-next/worker.js` during `opennextjs-cloudflare build`, so the module is absent before the first build. `@ts-ignore` (not `@ts-expect-error`) is deliberate: once the file exists post-build, `@ts-expect-error` would become an unused directive and fail `tsc` with TS2578. Do not delete these lines or swap in a plain import to satisfy an unused-directive warning unless explicitly asked.
+
 ---
 
 ### `apps/argon-hasher`
@@ -115,6 +117,48 @@ A published TypeScript library (`@eetr/eetr-auth-client`) for consuming the auth
 - `jose` is the only runtime dependency (JWT operations)
 - All functions accept explicit configuration rather than global singletons
 - `TokenManager` uses in-memory storage by default; consumers can override for persistence
+
+---
+
+## Layer conventions
+
+The `apps/auth` codebase keeps a strict separation between entry points, business
+logic, and persistence. Follow these rules when adding code:
+
+- **Server actions** (`src/app/actions/`, `*-actions.ts`): start the file with
+  `"use server"`. Each exported action calls `onServerAction(async (ctx, getServices) => { … })`
+  and only invokes service methods inside the callback. No business logic, and no
+  direct `getCloudflareContext()`, `env`, or DB access. For the current session,
+  call Auth.js `auth()` directly — there is no service for session.
+
+  ```ts
+  "use server";
+  import { onServerAction } from "@/lib/context/on-server-action";
+
+  export async function getCurrentUser() {
+    return onServerAction(async (ctx, getServices) => {
+      const { userService } = getServices();
+      return userService.getCurrentUser(ctx);
+    });
+  }
+  ```
+
+- **API route handlers** (`src/app/api/`): no business logic. Use `withApiContext`
+  and delegate to services.
+- **Services** (`src/lib/services/`): all business logic lives here. They receive
+  `RequestContext` and depend on repositories; they do not call
+  `getCloudflareContext()` or touch raw D1. The DI registry (`getServices`) wires them.
+- **Repositories** (`src/lib/repositories/`): persistence only (D1). They receive
+  the DB (from context) in the constructor; no Cloudflare `env` in repository methods,
+  and no business rules.
+- **Where new code goes**: a new feature adds a service (+ repository if it persists
+  data); entry points only wire context and call services. A new client-state domain
+  adds a reducer module under `src/context/` (see [State management in UX_GUIDELINES](UX_GUIDELINES.md#state-management)).
+
+Frontend state, icons, buttons/cards, and theming conventions live in
+[UX_GUIDELINES.md](UX_GUIDELINES.md). Password hashing (`HASH_METHOD`/`ARGON_HASHER`),
+MFA, and secrets-at-rest (`HMAC_KEY`) are covered in [FEATURES.md](FEATURES.md) and
+[DEPLOYMENT.md](DEPLOYMENT.md).
 
 ---
 
@@ -308,7 +352,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    TF["Terraform\napps/auth/infra/terraform/"]
+    TF["Terraform\ninfra/terraform/"]
     TF -->|provisions| D1[("Cloudflare D1")]
     TF -->|provisions| R2[("Cloudflare R2")]
     TF -->|outputs| JSON["infra/out/terraform.tf.json"]
@@ -316,7 +360,7 @@ flowchart LR
     WGEN -->|wrangler deploy| AUTH["eetr-auth Worker"]
 ```
 
-Terraform (`apps/auth/infra/terraform/`) provisions:
+Terraform (`infra/terraform/`) provisions:
 - Cloudflare D1 database
 - Cloudflare R2 bucket
 

@@ -22,6 +22,7 @@ function createPolicyRepoMock(): PasswordPolicyRepository {
 		getPolicyForEnvironment: vi.fn().mockResolvedValue(null),
 		getAdminPolicy: vi.fn().mockResolvedValue(null),
 		getStrictestEnabledMaxAgeDaysForUser: vi.fn(),
+		getEnabledPoliciesForUser: vi.fn().mockResolvedValue([]),
 	};
 }
 
@@ -367,6 +368,98 @@ describe("PasswordPolicyService", () => {
 			const service = createService(mockRepo);
 			const result = await service.validateAdminPassword("xxadminxx", { username: "admin" });
 			expect(result.violations.map((v) => v.code)).toContain("contains_identifier");
+		});
+	});
+
+	describe("getApplicablePolicyForSignIn", () => {
+		it("uses the admin policy for admins (ignoring environment)", async () => {
+			vi.mocked(mockRepo.getAdminPolicy).mockResolvedValue(makePolicy({ id: "admin-pol" }));
+			const service = createService(mockRepo);
+			const policy = await service.getApplicablePolicyForSignIn({
+				userId: "admin-1",
+				isAdmin: true,
+				environmentId: "env-1",
+			});
+			expect(policy?.id).toBe("admin-pol");
+			expect(mockRepo.getPolicyForEnvironment).not.toHaveBeenCalled();
+		});
+
+		it("uses the client's environment policy when an environmentId is given", async () => {
+			vi.mocked(mockRepo.getPolicyForEnvironment).mockResolvedValue(makePolicy({ id: "env-pol" }));
+			const service = createService(mockRepo);
+			const policy = await service.getApplicablePolicyForSignIn({
+				userId: "u1",
+				isAdmin: false,
+				environmentId: "env-1",
+			});
+			expect(policy?.id).toBe("env-pol");
+			expect(mockRepo.getPolicyForEnvironment).toHaveBeenCalledWith("env-1");
+		});
+
+		it("falls back to the user's first enabled environment policy when no client is in context", async () => {
+			vi.mocked(mockRepo.getEnabledPoliciesForUser).mockResolvedValue([makePolicy({ id: "fallback-pol" })]);
+			const service = createService(mockRepo);
+			const policy = await service.getApplicablePolicyForSignIn({ userId: "u1", isAdmin: false });
+			expect(policy?.id).toBe("fallback-pol");
+			expect(mockRepo.getEnabledPoliciesForUser).toHaveBeenCalledWith("u1");
+		});
+
+		it("treats a disabled policy as no policy", async () => {
+			vi.mocked(mockRepo.getPolicyForEnvironment).mockResolvedValue(makePolicy({ enabled: false }));
+			const service = createService(mockRepo);
+			const policy = await service.getApplicablePolicyForSignIn({
+				userId: "u1",
+				isAdmin: false,
+				environmentId: "env-1",
+			});
+			expect(policy).toBeNull();
+		});
+	});
+
+	describe("checkSignInPasswordComplexity", () => {
+		it("passes with a null policy when none applies", async () => {
+			const service = createService(mockRepo);
+			const result = await service.checkSignInPasswordComplexity({
+				userId: "u1",
+				isAdmin: false,
+				environmentId: "env-1",
+				password: "anything",
+			});
+			expect(result).toEqual({ ok: true, violations: [], policy: null });
+		});
+
+		it("reports violations against the client's environment policy", async () => {
+			vi.mocked(mockRepo.getPolicyForEnvironment).mockResolvedValue(
+				makePolicy({ enabled: true, minLength: 8, minUppercase: 1 })
+			);
+			const service = createService(mockRepo);
+			const result = await service.checkSignInPasswordComplexity({
+				userId: "u1",
+				isAdmin: false,
+				environmentId: "env-1",
+				password: "abc",
+				identifiers: { username: "u1", email: null },
+			});
+			expect(result.ok).toBe(false);
+			expect(result.policy?.id).toBe("policy-1");
+			expect(result.violations.map((v) => v.code)).toEqual(
+				expect.arrayContaining(["too_short", "too_few_uppercase"])
+			);
+		});
+
+		it("gates a no-client non-admin against every enabled environment policy, returning the first that fails", async () => {
+			vi.mocked(mockRepo.getEnabledPoliciesForUser).mockResolvedValue([
+				makePolicy({ id: "lax", minLength: 1 }),
+				makePolicy({ id: "strict", minLength: 20 }),
+			]);
+			const service = createService(mockRepo);
+			const result = await service.checkSignInPasswordComplexity({
+				userId: "u1",
+				isAdmin: false,
+				password: "abcdefgh",
+			});
+			expect(result.ok).toBe(false);
+			expect(result.policy?.id).toBe("strict");
 		});
 	});
 });

@@ -187,7 +187,17 @@ Rules when adding UI:
 
 ## State management
 
-Complex pages use a reducer via `@eetr/react-reducer-utils` with a typed action enum and a flat state shape. When you add a new interaction:
+Complex pages use a reducer via `@eetr/react-reducer-utils` with a typed action enum and a flat state shape. The pattern (see [apps/auth/src/context/admin-state.ts](../apps/auth/src/context/admin-state.ts)):
+
+- Define an action enum, a state interface, the `initialState`, and a reducer
+  `(state, action) => newState` typed with `ReducerAction<ActionType>`.
+- Build the context with `bootstrapProvider(reducer, initialState)` and export the
+  `Provider` plus a `useContextAccessors` hook (e.g. `useAdminState`).
+- Components read `const { state, dispatch } = useXState()`, and the subtree must be
+  wrapped in the `Provider`.
+
+New client-state domains add a reducer module under `src/context/` (or `src/store/`);
+no ad-hoc global state outside this pattern. When you add a new interaction:
 
 1. Add an action to the enum.
 2. Add the field to the state interface and `initialState`.

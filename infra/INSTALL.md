@@ -1,6 +1,6 @@
 # Remote setup
 
-The full, step-by-step deployment guide lives in **[../../../docs/DEPLOYMENT.md](../../../docs/DEPLOYMENT.md)**.
+The full, step-by-step deployment guide lives in **[../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md)**.
 It is the single source of truth for both fresh installs and upgrades — use it for the detailed commands,
 Terraform variables, environment-variable reference, and troubleshooting.
 
@@ -26,10 +26,16 @@ credentials.
 ## Local-only setup
 
 For local development without Terraform or a remote deploy, see the **Local Development** section of
-[../../../docs/DEPLOYMENT.md](../../../docs/DEPLOYMENT.md) and the local quickstart in
-[../README.md](../README.md). The one-shot bootstrap is `npm run setup:local`.
+[../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md) and the local quickstart in
+[../apps/auth/README.md](../apps/auth/README.md). The one-shot bootstrap is `npm run setup:local`.
 
 ## Ongoing
 
 `npm run infra:prepare-config` is safe to rerun when Terraform outputs change. `npm run infra:provision`
 preserves existing secrets by default; force-rotation must be requested explicitly.
+
+## Teardown
+
+`terraform destroy` removes the D1 + R2. Empty the R2 bucket first (Terraform can't delete a non-empty
+bucket — error `10008`). See the **Teardown / Cleanup** section of
+[../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md).

@@ -88,6 +88,11 @@ export class UserService {
 		return user ? this.withAvatarUrl(user) : null;
 	}
 
+	/** Environment IDs the user is granted access to (via users_environments). */
+	async getUserEnvironments(userId: string): Promise<string[]> {
+		return this.userRepository.getUserEnvironments(userId);
+	}
+
 	async createUser(
 		username: string,
 		password: string,

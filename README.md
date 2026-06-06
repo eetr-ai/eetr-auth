@@ -65,9 +65,17 @@ eetr-auth/
 ├── apps/
 │   ├── auth/               # @eetr/auth - Next.js 16 OAuth/OIDC server
 │   └── argon-hasher/       # Rust/Wasm password hashing worker
-└── packages/
-    └── eetr-auth-client/   # @eetr/eetr-auth-client (TypeScript, publishable)
+├── packages/
+│   └── eetr-auth-client/   # @eetr/eetr-auth-client (TypeScript, publishable)
+├── infra/                  # Terraform (D1 + R2) and the Wrangler config template
+├── scripts/                # Setup/deploy/db tooling (run via root npm scripts)
+├── db/                     # D1 schema snapshot + versioned migration patches
+└── docs/                   # Architecture, features, deployment, UX guidelines
 ```
+
+Infrastructure (`infra/`), tooling (`scripts/`), and database files (`db/`) live at
+the repo root and operate on the auth Worker; the ops `npm run` commands
+(`setup:*`, `db:*`, `infra:*`, `jwt:*`) are defined in the root `package.json`.
 
 ---
 
@@ -89,15 +97,26 @@ cd eetr-auth
 npm install
 ```
 
-### 2. Provision infrastructure with Terraform
+### 2. Authenticate to Cloudflare
 
-Fill in `apps/auth/infra/terraform/terraform.tfvars` (see DEPLOYMENT.md for each variable), then:
+Terraform and Wrangler both read a Cloudflare **API token** from the environment — there is no provider block, so without this `terraform apply` fails with _"must provide exactly one of api_key, api_token…"_. Create a **Custom token** (Cloudflare dashboard → My Profile → API Tokens), scoped to your account, with: **D1** → Edit, **Workers R2 Storage** → Edit, **Workers Scripts** → Edit, and (optional) **Account Settings** → Read. Then export it in the shell you run the install from:
 
 ```bash
-cd apps/auth/infra/terraform && terraform init && terraform apply && cd -
+export CLOUDFLARE_API_TOKEN=your_token_here
+export CLOUDFLARE_ACCOUNT_ID=your_account_id   # same as account_id in terraform.tfvars
 ```
 
-### 3. Deploy the hasher, then run automated setup
+Keep both exported for the rest of the flow — Terraform, `setup:remote`, and Wrangler all reuse them. Set `CLOUDFLARE_ACCOUNT_ID` if your token can access more than one account, or Wrangler may deploy to the wrong one (a `code: 10000` error whose URL shows an unexpected account id). See [infra/terraform/README.md](infra/terraform/README.md#L10) for the full permission rationale.
+
+### 3. Provision infrastructure with Terraform
+
+Fill in `infra/terraform/terraform.tfvars` (see DEPLOYMENT.md for each variable), then:
+
+```bash
+cd infra/terraform && terraform init && terraform apply && cd -
+```
+
+### 4. Deploy the hasher, then run automated setup
 
 Run these from the repository root. `argon-hasher` must be deployed before the auth Worker:
 

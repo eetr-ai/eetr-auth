@@ -17,15 +17,13 @@ coverage/
 # Logs
 *.log
 
-# Generated / instance-specific (apps/auth)
-apps/auth/wrangler.generated.jsonc
-apps/auth/infra/out/
-apps/auth/infra/terraform/terraform.tfvars
-apps/auth/infra/terraform/.terraform/
-apps/auth/infra/terraform/*.tfstate
-apps/auth/infra/terraform/*.tfstate.backup
-apps/auth/.env.local
-apps/auth/.dev.vars
+# Generated / instance-specific (infra) — apps own their build/env ignores in
+# their local .gitignore (e.g. apps/auth/.gitignore).
+infra/out/
+infra/terraform/terraform.tfvars
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.backup
 
 # Client package build output
 packages/eetr-auth-client/dist/

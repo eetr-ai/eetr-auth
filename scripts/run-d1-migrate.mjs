@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
  * Run wrangler d1 execute with D1_DATABASE_NAME or the remote Wrangler config database name.
- * When no --file is provided, this applies versioned SQL patches from ./db/patches.
+ * When no --file is provided, this applies versioned SQL patches from the repo-root db/patches.
  * Databases without schema metadata are treated as schema version 0.0.0.
- * Usage: node scripts/run-d1-migrate.mjs --local|--remote [--file=./db/schema.sql]
+ * Runs from apps/auth (npm workspace), so db/ resolves two levels up.
+ * Usage: node ../../scripts/run-d1-migrate.mjs --local|--remote [--file=../../db/schema.sql]
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -11,7 +12,7 @@ import { resolve } from "node:path";
 import stripJsonComments from "strip-json-comments";
 
 const INITIAL_SCHEMA_VERSION = "0.0.0";
-const DEFAULT_LOCAL_WRANGLER_CONFIGS = ["wrangler.generated.jsonc", "infra/wrangler.template.jsonc"];
+const DEFAULT_LOCAL_WRANGLER_CONFIGS = ["wrangler.generated.jsonc", "../../infra/wrangler.template.jsonc"];
 
 const args = process.argv.slice(2);
 const local = args.includes("--local");
@@ -50,7 +51,7 @@ if (remote && !configPath) {
 }
 
 if (!local && !remote) {
-	console.error("Usage: node scripts/run-d1-migrate.mjs --local|--remote [--file=./db/schema.sql]");
+	console.error("Usage: node ../../scripts/run-d1-migrate.mjs --local|--remote [--file=../../db/schema.sql]");
 	process.exit(1);
 }
 
@@ -87,7 +88,7 @@ if (!dbTarget) {
 }
 const flag = local ? "--local" : "--remote";
 const workspaceCwd = process.cwd();
-const schemaSnapshotPath = resolve(workspaceCwd, "./db/schema.sql");
+const schemaSnapshotPath = resolve(workspaceCwd, "../../db/schema.sql");
 
 function compareVersions(left, right) {
 	const leftParts = left.split(".").map(Number);
@@ -205,7 +206,7 @@ function getCurrentSchemaVersion() {
 }
 
 function getPatchPlan(currentVersion) {
-	const patchesDir = resolve(workspaceCwd, "./db/patches");
+	const patchesDir = resolve(workspaceCwd, "../../db/patches");
 	const patchFiles = readdirSync(patchesDir)
 		.filter((entry) => /^\d+\.\d+\.\d+\.sql$/u.test(entry))
 		.map((entry) => ({

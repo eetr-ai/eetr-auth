@@ -62,4 +62,10 @@ export interface PasswordPolicyRepository {
 	 * login age gate so the policy follows the user's environment access.
 	 */
 	getStrictestEnabledMaxAgeDaysForUser(userId: string): Promise<number | null>;
+	/**
+	 * Distinct enabled policies assigned to any environment the given user is granted
+	 * (via users_environments). Used by the sign-in complexity gate when no specific
+	 * client/environment is in context, so the policy follows the user's access.
+	 */
+	getEnabledPoliciesForUser(userId: string): Promise<PasswordPolicy[]>;
 }

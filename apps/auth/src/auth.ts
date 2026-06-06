@@ -13,7 +13,12 @@ import type { RequestContext } from "@/lib/context/types";
 import { PasskeyService } from "@/lib/services/passkey.service";
 import { getServices } from "@/lib/services/registry";
 import { EMAIL_VERIFICATION_CHALLENGE_COOKIE } from "@/lib/auth/email-verification-cookie";
+import { isEmailMfaGloballyEnabled } from "@/lib/auth/email-mfa-enablement";
 import { MFA_CHALLENGE_COOKIE } from "@/lib/auth/mfa-cookie";
+import {
+	decodePendingAuthorizationCookie,
+	getPendingCookieName,
+} from "@/lib/auth/oauth-pending-cookie";
 
 /** Structured sign-in logs (grep `sign_in_authorize`). Never includes password or OTP. */
 function signInAuthorizeLog(payload: Record<string, unknown>) {
@@ -101,13 +106,52 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 				}
 
 				const siteRow = await siteRepo.get();
-				const mfaEnabled = siteRow?.mfaEnabled ?? false;
-				const siteUrl = siteRow?.siteUrl?.trim();
-				const emailMfaActive = mfaEnabled && !!siteUrl && !!user.email?.trim();
-				const requiresEmailVerification = !user.isAdmin && !user.emailVerifiedAt;
+				// Email MFA and email verification both depend on the global email toggle
+				// being on with a Site URL and Resend key configured.
+				const emailMfaGloballyEnabled = isEmailMfaGloballyEnabled(siteRow, env.RESEND_API_KEY);
+				const emailMfaActive = emailMfaGloballyEnabled && !!user.email?.trim();
+				// Email verification is only enforced when email MFA is enabled globally;
+				// otherwise there's no way to send a code, so don't block sign-in (including
+				// accounts with no email address).
+				const requiresEmailVerification =
+					emailMfaGloballyEnabled && !user.isAdmin && !user.emailVerifiedAt;
 
 				const requestCtx: RequestContext = { env, cf, ctx };
-				const { userChallengeService: challengeSvc, totpService } = getServices(requestCtx);
+				const {
+						userChallengeService: challengeSvc,
+						totpService,
+						passwordPolicyService,
+						clientService,
+					} = getServices(requestCtx);
+
+					// Defense-in-depth: authorize() is the real session issuer and is reachable
+					// directly, bypassing beginSignInChallenge. A password that fails the applicable
+					// complexity policy must never mint a session. The interactive flow changes the
+					// password first, so it never trips this.
+					const pendingForPolicy = await decodePendingAuthorizationCookie(
+						(await cookies()).get(getPendingCookieName())?.value,
+						env as unknown as Record<string, unknown>
+					);
+					const policyClientId = pendingForPolicy?.client_id?.trim();
+					const policyEnvironmentId = policyClientId
+						? (await clientService.getByClientIdentifier(policyClientId))?.environmentId ?? null
+						: null;
+					const complexity = await passwordPolicyService.checkSignInPasswordComplexity({
+						userId: user.id,
+						isAdmin: user.isAdmin,
+						environmentId: policyEnvironmentId,
+						password,
+						identifiers: { username: user.username, email: user.email },
+					});
+					if (!complexity.ok && complexity.policy) {
+						signInAuthorizeLog({
+							outcome: "failure",
+							reason: "password_complexity_unmet",
+							userId: user.id,
+							username: user.username,
+						});
+						return null;
+					}
 				// TOTP is per-user opt-in: an enrolled authenticator requires MFA even when
 				// the site-wide email toggle is off.
 				const totpEnrolled = await totpService.isEnrolled(user.id);
@@ -276,10 +320,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 				const { env } = await getCloudflareContext({ async: true });
 				const db = getDb(env);
 				const repo = new UserRepositoryD1(db);
+				const siteRepo = new SiteSettingsRepositoryD1(db);
 				const passkeySvc = new PasskeyService({
 					repo: new PasskeyRepositoryD1(db),
 					userRepo: repo,
-					siteRepo: new SiteSettingsRepositoryD1(db),
+					siteRepo,
 					env,
 				});
 
@@ -311,7 +356,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 					);
 					return null;
 				}
-				if (!user.isAdmin && !user.emailVerifiedAt) {
+				// Email verification is only enforced when email MFA is enabled globally —
+				// otherwise there's no way to verify, so don't block sign-in (mirrors the
+				// password provider and beginSignInChallenge).
+				const siteRow = await siteRepo.get();
+				if (isEmailMfaGloballyEnabled(siteRow, env.RESEND_API_KEY) && !user.isAdmin && !user.emailVerifiedAt) {
 					console.info(
 						JSON.stringify({
 							event: "sign_in_authorize",
