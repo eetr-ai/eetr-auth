@@ -44,6 +44,7 @@ function createTokenRepoMock() {
 		getAccessTokenByTokenId: vi.fn(),
 		listAccessTokenActivity: vi.fn(),
 		revokeAccessTokenByTokenId: vi.fn(),
+		expireAccessTokensByIds: vi.fn().mockResolvedValue(0),
 		deleteAccessTokenByTokenId: vi.fn(),
 		deleteExpiredAccessTokens: vi.fn(),
 	} satisfies TokenRepository;
@@ -56,6 +57,7 @@ function createRefreshTokenRepoMock() {
 		// Default: the token is successfully revoked (won the rotation race).
 		revoke: vi.fn().mockResolvedValue(true),
 		revokeFamily: vi.fn().mockResolvedValue(0),
+		listFamilyAccessTokenIds: vi.fn().mockResolvedValue([]),
 		listRefreshTokenActivity: vi.fn(),
 		deleteByTokenId: vi.fn(),
 		deleteExpired: vi.fn(),
@@ -574,6 +576,8 @@ describe("OauthTokenService", () => {
 			]);
 			// The in-memory revokedAt check passes, but the atomic revoke loses the race.
 			refreshTokenRepo.revoke.mockResolvedValue(false);
+			// The family owns two outstanding access tokens.
+			refreshTokenRepo.listFamilyAccessTokenIds.mockResolvedValue(["access-row-1", "access-row-2"]);
 			const service = createService({ clientRepo, tokenRepo, refreshTokenRepo });
 
 			await expect(
@@ -589,8 +593,40 @@ describe("OauthTokenService", () => {
 				status: 400,
 			});
 			expect(refreshTokenRepo.revokeFamily).toHaveBeenCalledWith("refresh-row-1", "2026-04-06T13:10:00.000Z");
+			// The family's outstanding access tokens are force-expired, not left live.
+			expect(tokenRepo.expireAccessTokensByIds).toHaveBeenCalledWith(
+				["access-row-1", "access-row-2"],
+				"2026-04-06T13:10:00.000Z"
+			);
 			expect(refreshTokenRepo.createRefreshToken).not.toHaveBeenCalled();
 			expect(tokenRepo.createAccessToken).not.toHaveBeenCalled();
+		});
+
+		it("expires the family's access tokens when a revoked refresh token is replayed", async () => {
+			const clientRepo = createClientRepoMock();
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient());
+			// Presented token is already revoked → reuse of a stolen token.
+			refreshTokenRepo.getByTokenId.mockResolvedValue(
+				makeRefreshToken({ revokedAt: "2026-04-06T13:09:00.000Z" })
+			);
+			refreshTokenRepo.listFamilyAccessTokenIds.mockResolvedValue(["access-row-1"]);
+			const service = createService({ clientRepo, tokenRepo, refreshTokenRepo });
+
+			await expect(
+				service.exchange({
+					grantType: "refresh_token",
+					clientId: "client-app-id",
+					clientSecret: "plain-secret",
+					refreshToken: "rt_existing",
+				})
+			).rejects.toMatchObject({ code: "invalid_grant", message: "Refresh token has been revoked." });
+			expect(refreshTokenRepo.revokeFamily).toHaveBeenCalledWith("refresh-row-1", "2026-04-06T13:10:00.000Z");
+			expect(tokenRepo.expireAccessTokensByIds).toHaveBeenCalledWith(
+				["access-row-1"],
+				"2026-04-06T13:10:00.000Z"
+			);
 		});
 	});
 

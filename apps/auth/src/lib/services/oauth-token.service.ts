@@ -613,6 +613,20 @@ export class OauthTokenService {
 		return result;
 	}
 
+	/**
+	 * On detected refresh-token reuse, OAuth 2.1 §4.3.1 says to revoke the whole rotation
+	 * family. revokeFamily only touches refresh_tokens, so the access tokens already issued
+	 * across the family would survive (up to their 1h TTL). Force-expire those too so a
+	 * stolen-then-rotated token's outstanding access tokens die with the family.
+	 */
+	private async revokeFamilyAndAccessTokens(rootId: string, nowIso: string): Promise<void> {
+		await this.refreshTokenRepo.revokeFamily(rootId, nowIso);
+		const accessTokenIds = await this.refreshTokenRepo.listFamilyAccessTokenIds(rootId);
+		if (accessTokenIds.length > 0) {
+			await this.tokenRepo.expireAccessTokensByIds(accessTokenIds, nowIso);
+		}
+	}
+
 	private async exchangeRefreshToken(params: TokenRequestParams): Promise<OAuthTokenResponse> {
 		const t0 = Date.now();
 		logTokenStep("refresh_token_start", t0);
@@ -633,8 +647,9 @@ export class OauthTokenService {
 		}
 		if (token.revokedAt) {
 			// A revoked refresh token was presented → reuse (OAuth 2.1 §4.3.1). Cascade-revoke
-			// the whole rotation family so any sibling that is still live is killed too.
-			await this.refreshTokenRepo.revokeFamily(token.id, nowIso);
+			// the whole rotation family — and its access tokens — so any sibling still live is
+			// killed too.
+			await this.revokeFamilyAndAccessTokens(token.id, nowIso);
 			throw new OAuthServiceError("invalid_grant", "Refresh token has been revoked.", 400);
 		}
 		if (token.expiresAt <= nowIso) {
@@ -681,8 +696,9 @@ export class OauthTokenService {
 		logTokenStep("refresh_token_revoke_old", step);
 		if (!revoked) {
 			// It was already revoked between our check and now → reuse of a rotated token.
-			// Cascade-revoke the whole rotation family (OAuth 2.1 §4.3.1 stolen-token response).
-			await this.refreshTokenRepo.revokeFamily(token.id, nowIso);
+			// Cascade-revoke the whole rotation family and its access tokens (OAuth 2.1 §4.3.1
+			// stolen-token response).
+			await this.revokeFamilyAndAccessTokens(token.id, nowIso);
 			throw new OAuthServiceError("invalid_grant", "Refresh token has been revoked.", 400);
 		}
 		step = Date.now();

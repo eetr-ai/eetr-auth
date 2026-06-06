@@ -30,6 +30,7 @@ function createTokenRepoMock() {
 		getAccessTokenByTokenId: vi.fn(),
 		listAccessTokenActivity: vi.fn(),
 		revokeAccessTokenByTokenId: vi.fn(),
+		expireAccessTokensByIds: vi.fn(),
 		deleteAccessTokenByTokenId: vi.fn(),
 		deleteExpiredAccessTokens: vi.fn(),
 	} satisfies TokenRepository;

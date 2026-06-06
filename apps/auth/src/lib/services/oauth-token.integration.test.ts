@@ -192,6 +192,18 @@ class InMemoryTokenRepo implements TokenRepository {
 		return true;
 	}
 
+	async expireAccessTokensByIds(ids: string[], expiresAt: string): Promise<number> {
+		const idSet = new Set(ids);
+		let count = 0;
+		for (const stored of this.accessTokensByTokenId.values()) {
+			if (idSet.has(stored.row.id) && stored.row.expires_at > expiresAt) {
+				stored.row.expires_at = expiresAt;
+				count += 1;
+			}
+		}
+		return count;
+	}
+
 	async deleteAccessTokenByTokenId(tokenId: string): Promise<boolean> {
 		return this.accessTokensByTokenId.delete(tokenId);
 	}
@@ -244,7 +256,7 @@ class InMemoryRefreshTokenRepo implements RefreshTokenRepository {
 		return false;
 	}
 
-	async revokeFamily(rootId: string, revokedAt: string): Promise<number> {
+	private collectFamilyIds(rootId: string): { byId: Map<string, StoredRefreshToken>; familyIds: Set<string> } {
 		const byId = new Map([...this.refreshTokensByTokenId.values()].map((s) => [s.row.id, s]));
 		const familyIds = new Set<string>();
 		const queue: string[] = [rootId];
@@ -258,6 +270,11 @@ class InMemoryRefreshTokenRepo implements RefreshTokenRepository {
 				if (candidate.row.rotated_from_id === current) queue.push(candidate.row.id);
 			}
 		}
+		return { byId, familyIds };
+	}
+
+	async revokeFamily(rootId: string, revokedAt: string): Promise<number> {
+		const { byId, familyIds } = this.collectFamilyIds(rootId);
 		let count = 0;
 		for (const id of familyIds) {
 			const stored = byId.get(id);
@@ -267,6 +284,16 @@ class InMemoryRefreshTokenRepo implements RefreshTokenRepository {
 			}
 		}
 		return count;
+	}
+
+	async listFamilyAccessTokenIds(rootId: string): Promise<string[]> {
+		const { byId, familyIds } = this.collectFamilyIds(rootId);
+		const accessTokenIds = new Set<string>();
+		for (const id of familyIds) {
+			const accessTokenId = byId.get(id)?.row.access_token_id;
+			if (accessTokenId) accessTokenIds.add(accessTokenId);
+		}
+		return [...accessTokenIds];
 	}
 
 	async listRefreshTokenActivity(): Promise<RefreshTokenActivity[]> {
@@ -561,6 +588,11 @@ describe("OAuth stateful flows", () => {
 			refreshToken: firstPair.refresh_token,
 		});
 
+		// After a clean rotation the new access token is valid. Validate it BEFORE the reuse
+		// attack below — reusing the rotated firstPair cascade-revokes the whole family
+		// (including secondPair), so this must be checked while the rotation is still legitimate.
+		const validation = await tokenService.validateAccessToken(secondPair.access_token, ["read:users"], "production");
+
 		await expect(
 			tokenService.exchange({
 				grantType: "refresh_token",
@@ -569,8 +601,6 @@ describe("OAuth stateful flows", () => {
 				refreshToken: firstPair.refresh_token,
 			})
 		).rejects.toEqual(new OAuthServiceError("invalid_grant", "Refresh token has been revoked.", 400));
-
-		const validation = await tokenService.validateAccessToken(secondPair.access_token, ["read:users"], "production");
 
 		expect(firstPair.refresh_token).toMatch(/^rt_[0-9a-f]{64}$/);
 		expect(secondPair.refresh_token).toMatch(/^rt_[0-9a-f]{64}$/);
@@ -654,6 +684,14 @@ describe("OAuth stateful flows", () => {
 			refreshToken: firstPair.refresh_token,
 		});
 
+		// Both access tokens are live (active) before reuse is detected.
+		await expect(
+			tokenService.validateAccessToken(firstPair.access_token, ["read:users"], "production")
+		).resolves.toMatchObject({ active: true });
+		await expect(
+			tokenService.validateAccessToken(secondPair.access_token, ["read:users"], "production")
+		).resolves.toMatchObject({ active: true });
+
 		// Reuse the already-rotated firstPair token → reuse detected, cascade-revoke the family.
 		await expect(
 			tokenService.exchange({
@@ -673,6 +711,15 @@ describe("OAuth stateful flows", () => {
 				refreshToken: secondPair.refresh_token,
 			})
 		).rejects.toEqual(new OAuthServiceError("invalid_grant", "Refresh token has been revoked.", 400));
+
+		// And the access tokens issued across the family are force-expired, not left live
+		// for their full 1h TTL — closing the stolen-token window (OAuth 2.1 §4.3.1).
+		await expect(
+			tokenService.validateAccessToken(firstPair.access_token, ["read:users"], "production")
+		).resolves.toMatchObject({ active: false });
+		await expect(
+			tokenService.validateAccessToken(secondPair.access_token, ["read:users"], "production")
+		).resolves.toMatchObject({ active: false });
 	});
 
 	it("issues an id_token bound to the nonce whose sub matches the user id (full OIDC flow)", async () => {
