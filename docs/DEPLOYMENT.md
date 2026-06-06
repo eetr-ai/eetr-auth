@@ -216,11 +216,24 @@ your real traffic.
 | `POST /api/authorize`, `/api/authorize/complete` | Authorization-code abuse | ~30 requests / 1 min |
 | `POST /api/users/email-verification/request` | Email-send abuse (cost + spam) | ~5 requests / 5 min |
 | `POST /api/users/email-verification/verify` | Email OTP brute force | ~10 requests / 5 min |
-| `/forgot-password`, `/reset-password` and the password-reset action under `/api/auth/*` | Reset-email abuse + token guessing | ~5 requests / 5 min |
+| `POST /forgot-password`, `POST /reset-password` | Reset-email abuse + token guessing | ~5 requests / 5 min |
 | `POST /api/auth/passkey/verify`, `/api/users/passkey/verify` | WebAuthn assertion brute force | ~20 requests / 1 min |
 
 Recommended action when a limit is exceeded: **Managed Challenge** (or **Block** for the email-send
 endpoints). Match on the path and `http.request.method eq "POST"` so cached `GET`s are unaffected.
+
+> **Note — password-reset and other server actions.** The forgot/reset flows are Next.js
+> **server actions**, which POST to the page route that renders them (`/forgot-password`,
+> `/reset-password`), not to a dedicated `/api/...` endpoint. Rate-limit those page paths on
+> `POST`. `requestPasswordReset` intentionally returns the same response whether or not the
+> address exists; rate limiting is what blunts both reset-email bombing and timing-based
+> account enumeration, since there is no per-account app-level throttle on the request itself.
+
+These WAF rules are **defense-in-depth on top of** the app's own controls, not a substitute:
+email/MFA OTP codes are attempt-capped (`MFA_OTP_MAX_ATTEMPTS`, default 5) and expire in 10
+minutes; password-reset links are single-use and invalidated on any password change; refresh
+tokens re-check environment access on every rotation. The WAF adds the per-IP request ceiling
+the app deliberately does not implement itself.
 
 ### Restrict the admin surface
 
