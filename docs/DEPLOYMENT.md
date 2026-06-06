@@ -273,6 +273,41 @@ Use `--force-rotate-secrets` only when intentionally rotating credentials.
 
 ---
 
+## Teardown / Cleanup
+
+To remove the provisioned infrastructure, run `terraform destroy` from `infra/terraform`. One snag: **Terraform cannot delete a non-empty R2 bucket** — it fails with `failed to delete R2 bucket ... is not empty (10008)`. Empty the bucket first.
+
+The auth server stores a few objects in the bucket: the JWKS (`jwks.json` by default), and any uploaded avatars / site logo. Make sure your shell targets the right account before deleting (`export CLOUDFLARE_ACCOUNT_ID=<account_id from terraform.tfvars>`).
+
+**1. Empty the R2 bucket.**
+
+If it only holds the JWKS (typical for a fresh or partial install), delete that one object — `wrangler` can only delete objects individually (no bulk/empty command):
+
+```bash
+cd apps/auth
+npx wrangler r2 object delete <r2_bucket_name>/jwks.json --remote
+```
+
+If the bucket has more objects (avatars, logo, …), use R2's S3-compatible API. Create an **R2 API token** (Cloudflare dashboard → R2 → Manage R2 API Tokens — this gives an Access Key ID + Secret, separate from `CLOUDFLARE_API_TOKEN`), then bulk-delete:
+
+```bash
+AWS_ACCESS_KEY_ID=<r2_access_key> AWS_SECRET_ACCESS_KEY=<r2_secret_key> \
+  aws s3 rm s3://<r2_bucket_name> --recursive \
+  --endpoint-url https://<account_id>.r2.cloudflarestorage.com
+```
+
+(`rclone purge` against the same endpoint works too.) The no-CLI option: empty and delete the bucket from the R2 dashboard.
+
+**2. Destroy the infrastructure.**
+
+```bash
+cd infra/terraform && terraform destroy
+```
+
+This removes the D1 database and R2 bucket. **`terraform destroy` deletes the D1 database and all its data** — export anything you need first. The Worker scripts themselves (auth, argon-hasher) are deployed by Wrangler, not Terraform; delete them from the dashboard (Workers & Pages) or with `npx wrangler delete --name <worker_name>` if you also want those gone.
+
+---
+
 ## Local Development
 
 ### 1. Set up local environment variables

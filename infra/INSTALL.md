@@ -33,3 +33,9 @@ For local development without Terraform or a remote deploy, see the **Local Deve
 
 `npm run infra:prepare-config` is safe to rerun when Terraform outputs change. `npm run infra:provision`
 preserves existing secrets by default; force-rotation must be requested explicitly.
+
+## Teardown
+
+`terraform destroy` removes the D1 + R2. Empty the R2 bucket first (Terraform can't delete a non-empty
+bucket — error `10008`). See the **Teardown / Cleanup** section of
+[../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md).
