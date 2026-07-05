@@ -16,6 +16,9 @@
 
 - `/.well-known/openid-configuration` — full OIDC discovery metadata
 - `/.well-known/oauth-authorization-server` — RFC 8414 OAuth server metadata
+- Both advertise `registration_endpoint` (RFC 7591 DCR), `token_endpoint_auth_methods_supported`
+  including `none` (public clients), `refresh_token` in `grant_types_supported`, and
+  `resource_parameter_supported` (RFC 8707)
 - `/userinfo` — OpenID Connect userinfo endpoint (requires an access token with the `openid`
   scope; claims are gated by scope — `profile` → name/preferred_username/picture, `email` →
   email/email_verified, mirroring the id_token)
@@ -89,8 +92,15 @@ is only sent once email is actually chosen.
 ### Access Tokens
 - Short-lived JWTs (RS256)
 - Scoped per OAuth client grant
-- Introspection endpoint (`POST /token/validate`) — optional `clientId` audience binding so a
-  resource server only accepts tokens issued to itself (not a sibling client in the same environment)
+- **Resource-indicator audience binding (RFC 8707):** a `resource` parameter at `/authorize` (and
+  optionally repeated at `/token`) binds the access token's `aud` to that protected-resource URL
+  instead of the client's own `client_id`. The value is carried on the authorization code and
+  through refresh rotation, so refreshed tokens keep the same `aud`. Accepts any `https` URL
+  (`http://localhost` for local dev); a malformed or mismatched `resource` returns `invalid_target`.
+- Introspection endpoint (`POST /token/validate`) — optional audience binding: a resource server
+  passes its own URL (or `client_id`) and a token only validates when its bound audience
+  (`resource`, falling back to `client_id`) matches, so a token minted for another resource/client
+  is rejected
 - Activity logging on every use
 
 ### Refresh Tokens
@@ -116,8 +126,24 @@ is only sent once email is actually chosen.
 - Multi-tenant: each client belongs to an environment
 - Per-client scope grants
 - Multiple redirect URIs per client
-- Client credentials support (hashed secret)
+- **Confidential and public clients:** `token_endpoint_auth_method` is `client_secret_basic`
+  (default, a hashed secret is generated) or `none` for **public (PKCE-only) clients** — no
+  secret, PKCE is the proof of possession at `/token`. `client_credentials` is rejected for
+  public clients.
 - Configurable client ID prefix (`CLIENT_KEY_PREFIX`)
+
+### Dynamic Client Registration (RFC 7591)
+- `POST /api/register` lets clients self-register without an admin (public endpoint, CORS-enabled
+  for browser-based MCP clients). Used by MCP clients (Claude, ChatGPT) to connect.
+- Accepts `redirect_uris` (required, exact-match `https` — `http://localhost` allowed for local
+  clients — capped in count), `token_endpoint_auth_method` (default `none`), `grant_types`
+  (`authorization_code`/`refresh_token`), `response_types` (`code`), `client_name`, and `scope`
+  (must be known scopes). Returns `client_id` (+ `client_secret` only for confidential clients).
+- Registered clients land in the `DCR_ENVIRONMENT_ID` environment and are flagged `is_dynamic`;
+  the admin **Clients** list shows a **Dynamic** badge and a registration-type filter.
+- **Abuse controls:** per-IP daily rate limit (`DCR_RATE_LIMIT_PER_DAY`, default 10; counts every
+  attempt), exact redirect-URI match (no wildcards), and DB-backed counters pruned by the daily
+  cron. Disable entirely by leaving `DCR_ENVIRONMENT_ID` unset or setting `DCR_ENABLED=false`.
 
 ### Scopes
 - **Default OIDC scopes seeded on install:** `openid`, `profile`, and `email` are created by
