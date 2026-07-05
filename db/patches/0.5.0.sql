@@ -1,5 +1,5 @@
--- eetr-auth schema patch 0.4.3
--- Upgrade path: 0.4.2 -> 0.4.3
+-- eetr-auth schema patch 0.5.0
+-- Upgrade path: 0.4.2 -> 0.5.0
 --   * Support public (PKCE-only) OAuth clients and Dynamic Client Registration (RFC 7591):
 --       - clients.token_endpoint_auth_method: 'client_secret_basic' (default, confidential)
 --         or 'none' (public, PKCE-only, no secret). Public clients store client_secret = ''.
@@ -35,4 +35,4 @@ CREATE TABLE IF NOT EXISTS dcr_rate_limit (
 
 CREATE INDEX IF NOT EXISTS idx_dcr_rate_limit_day ON dcr_rate_limit(day);
 
-UPDATE schema_metadata SET value = '0.4.3' WHERE key = 'schema_version';
+UPDATE schema_metadata SET value = '0.5.0' WHERE key = 'schema_version';
