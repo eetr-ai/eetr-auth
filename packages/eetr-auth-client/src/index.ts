@@ -27,6 +27,7 @@ export {
   introspectToken,
   getUserInfo,
   buildAuthorizationUrl,
+  registerClient,
 } from "./api.js";
 export type {
   GrantType,
@@ -35,6 +36,9 @@ export type {
   IntrospectTokenParams,
   IntrospectTokenConfig,
   AuthorizationUrlParams,
+  RegisterClientParams,
+  RegisterClientConfig,
+  RegisterClientResponse,
 } from "./api.js";
 
 export { TokenManager } from "./tokens.js";

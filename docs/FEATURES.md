@@ -224,7 +224,9 @@ is only sent once email is actually chosen.
 
 | Feature | Detail |
 |---|---|
-| OIDC discovery | Fetch and parse server metadata from `/.well-known/openid-configuration` |
+| OIDC discovery | Fetch and parse server metadata from `/.well-known/openid-configuration` (includes `registration_endpoint`) |
+| Dynamic Client Registration | `registerClient()` against the `registration_endpoint` (RFC 7591); public or confidential clients |
+| Resource indicators | Optional `resource` on `buildAuthorizationUrl()`/`exchangeToken()` (RFC 8707 audience binding) |
 | Token exchange | Typed `exchangeToken()` for all grant types |
 | Token introspection | `introspectToken()` against `/token/validate` (optional `clientId` audience binding) |
 | Token revocation | `revokeToken()` |

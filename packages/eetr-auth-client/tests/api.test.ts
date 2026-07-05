@@ -5,6 +5,7 @@ import {
   exchangeToken,
   getUserInfo,
   introspectToken,
+  registerClient,
   OAuthError,
 } from "../src/api.js";
 import { OIDCScope } from "../src/scopes.js";
@@ -61,6 +62,27 @@ describe("exchangeToken", () => {
     expect((init?.body as URLSearchParams).toString()).toBe(
       "grant_type=authorization_code&client_id=client-123&client_secret=secret-456&scope=openid+profile&code=code-789&redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback&code_verifier=verifier-101112"
     );
+  });
+
+  it("includes the RFC 8707 resource parameter when provided", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({ access_token: "at", token_type: "Bearer" })
+    );
+
+    await exchangeToken(
+      {
+        grantType: "authorization_code",
+        clientId: "client-123",
+        code: "code-789",
+        codeVerifier: "verifier",
+        redirectUri: "https://app.example.com/cb",
+        resource: "https://mcp.example.com/mcp",
+      },
+      { tokenEndpoint: "https://auth.example.com/oauth/token" }
+    );
+
+    const [, init] = fetchMock.mock.calls[0] ?? [];
+    expect((init?.body as URLSearchParams).get("resource")).toBe("https://mcp.example.com/mcp");
   });
 
   it("merges a scopes array into the scope param", async () => {
@@ -296,5 +318,86 @@ describe("buildAuthorizationUrl", () => {
     expect(url.searchParams.has("scope")).toBe(false);
     expect(url.searchParams.has("state")).toBe(false);
     expect(url.searchParams.has("nonce")).toBe(false);
+    expect(url.searchParams.has("resource")).toBe(false);
+  });
+
+  it("includes the RFC 8707 resource parameter when provided", () => {
+    const url = new URL(
+      buildAuthorizationUrl("https://auth.example.com/api/authorize", {
+        clientId: "client-app",
+        redirectUri: "https://app.example.com/callback",
+        codeChallenge: "s256-challenge",
+        resource: "https://mcp.example.com/mcp",
+      })
+    );
+
+    expect(url.searchParams.get("resource")).toBe("https://mcp.example.com/mcp");
+  });
+});
+
+describe("registerClient", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("posts an RFC 7591 registration and returns the created client", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(
+        {
+          client_id: "mcp_abc123",
+          client_id_issued_at: 1_700_000_000,
+          redirect_uris: ["https://claude.ai/cb"],
+          grant_types: ["authorization_code", "refresh_token"],
+          response_types: ["code"],
+          token_endpoint_auth_method: "none",
+          scope: "openid profile",
+        },
+        { status: 201 }
+      )
+    );
+
+    const result = await registerClient(
+      {
+        clientName: "Test MCP",
+        redirectUris: ["https://claude.ai/cb"],
+        tokenEndpointAuthMethod: "none",
+        scopes: [OIDCScope.OpenId, OIDCScope.Profile],
+      },
+      { registrationEndpoint: "https://auth.example.com/api/register" }
+    );
+
+    expect(result.client_id).toBe("mcp_abc123");
+    expect(result.client_secret).toBeUndefined();
+
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe("https://auth.example.com/api/register");
+    expect(init).toMatchObject({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(JSON.parse(init?.body as string)).toEqual({
+      redirect_uris: ["https://claude.ai/cb"],
+      client_name: "Test MCP",
+      token_endpoint_auth_method: "none",
+      scope: "openid profile",
+    });
+  });
+
+  it("throws an OAuthError with status when registration is rejected", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(
+        { error: "invalid_redirect_uri", error_description: "Invalid redirect_uri." },
+        { status: 400, statusText: "Bad Request" }
+      )
+    );
+
+    const err = (await registerClient(
+      { redirectUris: ["http://evil.example.com/cb"] },
+      { registrationEndpoint: "https://auth.example.com/api/register" }
+    ).catch((e) => e)) as OAuthError;
+
+    expect(err).toBeInstanceOf(OAuthError);
+    expect(err.code).toBe("invalid_redirect_uri");
+    expect(err.status).toBe(400);
   });
 });
