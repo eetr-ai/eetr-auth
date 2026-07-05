@@ -3,6 +3,7 @@ import type { TokenRepository } from "@/lib/repositories/token.repository";
 import type { AuthorizationCodeRepository } from "@/lib/repositories/authorization-code.repository";
 import type { UserRepository } from "@/lib/repositories/admin.repository";
 import { OAuthServiceError } from "./oauth.types";
+import { normalizeResourceParam } from "./resource-indicator";
 
 const AUTHORIZATION_CODE_TTL_SECONDS = 300;
 
@@ -28,6 +29,8 @@ export interface AuthorizeRequestParams {
 	codeChallengeMethod: string | null;
 	subject: string;
 	nonce?: string | null;
+	// RFC 8707 resource indicator: the protected-resource URL the token is requested for.
+	resource?: string | null;
 }
 
 export interface OauthAuthorizationServiceDeps {
@@ -79,6 +82,10 @@ export class OauthAuthorizationService {
 				400
 			);
 		}
+
+		// RFC 8707: validate the requested resource (if any) and bind it to the code so the
+		// token endpoint can mint an access token whose `aud` is this resource.
+		const resource = normalizeResourceParam(params.resource);
 
 		const client = await this.clientRepo.getByClientIdentifier(params.clientId);
 		if (!client) {
@@ -145,6 +152,7 @@ export class OauthAuthorizationService {
 				expires_at: expiresAt.toISOString(),
 				used_at: null,
 				created_at: now.toISOString(),
+				resource,
 			},
 			grants.map((grant) => grant.clientScopeId)
 		);

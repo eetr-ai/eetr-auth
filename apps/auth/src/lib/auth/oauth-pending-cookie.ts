@@ -10,6 +10,8 @@ export const AUTHORIZE_PARAM_KEYS = [
 	"code_challenge",
 	"code_challenge_method",
 	"nonce",
+	// RFC 8707 resource indicator — carried through the login/confirm round-trip.
+	"resource",
 ] as const;
 
 type AuthorizeParamKey = (typeof AUTHORIZE_PARAM_KEYS)[number];

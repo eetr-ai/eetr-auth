@@ -67,7 +67,12 @@
 		"JWT_KID": "REPLACE_WITH_YOUR_JWT_KID",
 		"CLIENT_KEY_PREFIX": "eetr",
 		"HASH_METHOD": "argon",
-		"MFA_OTP_MAX_ATTEMPTS": "5"
+		"MFA_OTP_MAX_ATTEMPTS": "5",
+		// Dynamic Client Registration (RFC 7591). Set DCR_ENVIRONMENT_ID to an existing
+		// environment id to enable POST /api/register; empty keeps DCR disabled. Optional
+		// overrides: DCR_ENABLED="false" to hard-disable, DCR_RATE_LIMIT_PER_DAY (default 10).
+		// See docs/DEPLOYMENT.md.
+		"DCR_ENVIRONMENT_ID": ""
 	},
 	"triggers": {
 		"crons": ["0 0 * * *"]

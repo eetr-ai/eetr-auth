@@ -11,6 +11,7 @@ import { RefreshTokenRepositoryD1 } from "./src/lib/repositories/refresh-token.r
 import { EnvironmentRepositoryD1 } from "./src/lib/repositories/environment.repository.d1";
 import { UserRepositoryD1 } from "./src/lib/repositories/admin.repository.d1";
 import { TokenActivityLogRepositoryD1 } from "./src/lib/repositories/token-activity-log.repository.d1";
+import { DcrRateLimitRepositoryD1 } from "./src/lib/repositories/dcr-rate-limit.repository.d1";
 
 type CronMetadata = {
 	cron: string | null;
@@ -77,6 +78,11 @@ const worker = {
 			const activityLogRepo = new TokenActivityLogRepositoryD1(db);
 			const tokenActivityLogDeleted = await activityLogRepo.deleteOlderThan(cutoff);
 
+			// Prune DCR per-IP rate-limit counters for days before today (UTC); the current
+			// day's counters are still enforcing the limit.
+			const today = new Date().toISOString().slice(0, 10);
+			const dcrRateLimitDeleted = await new DcrRateLimitRepositoryD1(db).deleteOlderThan(today);
+
 			const endedAtMs = Date.now();
 			const durationMs = endedAtMs - startedAtMs;
 
@@ -106,6 +112,7 @@ const worker = {
 					authorizationCodesDeleted: result.authorizationCodesDeleted,
 					totalDeleted: result.totalDeleted,
 					tokenActivityLogDeleted,
+					dcrRateLimitDeleted,
 				})
 			);
 		} catch (error) {

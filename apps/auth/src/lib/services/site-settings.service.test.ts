@@ -421,6 +421,8 @@ describe("SiteSettingsService", () => {
 				createdBy: "u1",
 				expiresAt: null,
 				name: null,
+				tokenEndpointAuthMethod: "client_secret_basic",
+				isDynamic: false,
 			});
 			const service = createService(createSiteRepoMock(), adminRepo, clientRepo);
 
@@ -438,6 +440,8 @@ describe("SiteSettingsService", () => {
 				createdBy: "u1",
 				expiresAt: null,
 				name: null,
+				tokenEndpointAuthMethod: "client_secret_basic",
+				isDynamic: false,
 			});
 			const insert = vi.fn();
 			const service = createService(createSiteRepoMock(), createAdminClientsRepoMock(), clientRepo, {

@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { auth, signOut } from "@/auth";
+import { buildRequestContext } from "@/lib/context/build-context";
+import { getServices } from "@/lib/services/registry";
 import {
 	decodePendingAuthorizationCookie,
 	getPendingCookieName,
@@ -11,10 +12,10 @@ import PasskeyPrompt from "./passkey-prompt";
 export default async function OAuthConfirmPage() {
 	const session = await auth();
 	const cookieStore = await cookies();
-	const { env } = await getCloudflareContext({ async: true });
+	const ctx = await buildRequestContext();
 	const pendingParams = await decodePendingAuthorizationCookie(
 		cookieStore.get(getPendingCookieName())?.value,
-		env as unknown as Record<string, unknown>
+		ctx.env as unknown as Record<string, unknown>
 	);
 	const hasPkce =
 		typeof pendingParams?.code_challenge === "string" &&
@@ -30,16 +31,57 @@ export default async function OAuthConfirmPage() {
 		redirect(`/?callbackUrl=${encodeURIComponent("/oauth/confirm")}`);
 	}
 
+	// Resolve the client's registered name for the consent prompt — important for
+	// dynamically registered clients (e.g. "Claude", "ChatGPT") the user hasn't seen before.
+	// The requested scopes and resource come straight from the pending request.
+	const client = pendingParams.client_id
+		? await getServices(ctx).clientService.getByClientIdentifier(pendingParams.client_id)
+		: null;
+	const clientName = client?.name?.trim() || pendingParams.client_id || "An application";
+	const requestedScopes = (pendingParams.scope ?? "")
+		.split(/\s+/)
+		.map((s) => s.trim())
+		.filter(Boolean);
+	const requestedResource = pendingParams.resource ?? null;
+
 	const displayName = session.user.name ?? session.user.email ?? session.user.id;
 
 	return (
 		<main className="min-h-screen bg-background p-6 text-foreground">
 			<div className="mx-auto mt-16 w-full max-w-xl rounded-xl border border-brand-muted bg-background p-8">
-				<h1 className="text-2xl font-semibold">Confirm OAuth account</h1>
+				<h1 className="text-2xl font-semibold">Authorize {clientName}</h1>
 				<p className="mt-2 text-sm text-muted-foreground">
-					Choose which account should authorize this application.
+					<span className="font-medium text-foreground">{clientName}</span> wants to access your
+					account. Choose which account should authorize it.
 				</p>
-				<div className="mt-6 flex items-center gap-4 rounded-xl border border-brand-muted p-4">
+
+				<div className="mt-6 rounded-xl border border-brand-muted p-4">
+					<p className="text-sm font-medium">This will grant access to:</p>
+					{requestedScopes.length > 0 ? (
+						<div className="mt-2 flex flex-wrap gap-1.5">
+							{requestedScopes.map((scope) => (
+								<span
+									key={scope}
+									className="inline-flex items-center rounded-full bg-brand-muted/40 px-2 py-0.5 font-mono text-xs text-foreground"
+								>
+									{scope}
+								</span>
+							))}
+						</div>
+					) : (
+						<p className="mt-1 text-sm text-muted-foreground">
+							All scopes granted to this application.
+						</p>
+					)}
+					{requestedResource && (
+						<p className="mt-3 text-sm text-muted-foreground">
+							Resource:{" "}
+							<span className="font-mono text-xs text-foreground">{requestedResource}</span>
+						</p>
+					)}
+				</div>
+
+				<div className="mt-4 flex items-center gap-4 rounded-xl border border-brand-muted p-4">
 					{session.user.image ? (
 						<div
 							aria-label={displayName}

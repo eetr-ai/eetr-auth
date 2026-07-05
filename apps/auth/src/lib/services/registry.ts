@@ -15,6 +15,7 @@ import { PasswordPolicyRepositoryD1 } from "@/lib/repositories/password-policy.r
 import { TokenActivityLogRepositoryD1 } from "@/lib/repositories/token-activity-log.repository.d1";
 import { AdminAuditLogRepositoryD1 } from "@/lib/repositories/admin-audit-log.repository.d1";
 import { SiteAdminApiClientsRepositoryD1 } from "@/lib/repositories/site-admin-api-clients.repository.d1";
+import { DcrRateLimitRepositoryD1 } from "@/lib/repositories/dcr-rate-limit.repository.d1";
 import { resolveHashMethod } from "@/lib/config/hash-method";
 import { getAvatarCdnBaseUrl } from "@/lib/users/profile";
 import { UserService } from "./user.service";
@@ -31,6 +32,8 @@ import { UserChallengeService } from "./user-challenge.service";
 import { TotpService } from "./totp.service";
 import { PasskeyService } from "./passkey.service";
 import { TransactionalEmailService } from "./transactional-email.service";
+import { DcrService } from "./dcr.service";
+import { DcrRateLimitService } from "./dcr-rate-limit.service";
 
 export interface Services {
 	userService: UserService;
@@ -46,6 +49,8 @@ export interface Services {
 	userChallengeService: UserChallengeService;
 	totpService: TotpService;
 	passkeyService: PasskeyService;
+	dcrService: DcrService;
+	dcrRateLimitService: DcrRateLimitService;
 }
 
 function resolveOptionalEnvString(env: Record<string, unknown>, key: string): string | null {
@@ -55,6 +60,15 @@ function resolveOptionalEnvString(env: Record<string, unknown>, key: string): st
 	}
 	const trimmed = value.trim();
 	return trimmed.length > 0 ? trimmed : null;
+}
+
+const DEFAULT_DCR_RATE_LIMIT_PER_DAY = 10;
+
+function resolveDcrRateLimitPerDay(env: Record<string, unknown>): number {
+	const raw = resolveOptionalEnvString(env, "DCR_RATE_LIMIT_PER_DAY");
+	if (raw == null) return DEFAULT_DCR_RATE_LIMIT_PER_DAY;
+	const parsed = Number.parseInt(raw, 10);
+	return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_DCR_RATE_LIMIT_PER_DAY;
 }
 
 /**
@@ -78,6 +92,7 @@ export function getServices(ctx: RequestContext): Services {
 	const tokenActivityLogRepo = new TokenActivityLogRepositoryD1(db);
 	const adminAuditLogRepo = new AdminAuditLogRepositoryD1(db);
 	const adminClientsRepo = new SiteAdminApiClientsRepositoryD1(db);
+	const dcrRateLimitRepo = new DcrRateLimitRepositoryD1(db);
 	const avatarCdnBaseUrl = getAvatarCdnBaseUrl(resolvedEnv);
 	const hashMethod = resolveHashMethod(resolvedEnv);
 	const adminAuditLogService = new AdminAuditLogService({ logRepo: adminAuditLogRepo });
@@ -92,6 +107,11 @@ export function getServices(ctx: RequestContext): Services {
 		authUrl: resolveOptionalEnvString(resolvedEnv, "AUTH_URL") ?? "",
 	});
 	const transactionalEmailService = new TransactionalEmailService(ctx);
+	const clientService = new ClientService({
+		clientRepo,
+		adminAuditLogService,
+		env: ctx.env,
+	});
 
 	return {
 		userService: new UserService({
@@ -108,11 +128,7 @@ export function getServices(ctx: RequestContext): Services {
 			policyRepo: passwordPolicyRepo,
 			adminAuditLogService,
 		}),
-		clientService: new ClientService({
-			clientRepo,
-			adminAuditLogService,
-			env: ctx.env,
-		}),
+		clientService,
 		siteSettingsService,
 		oauthAuthorizationService: new OauthAuthorizationService({
 			clientRepo,
@@ -153,6 +169,19 @@ export function getServices(ctx: RequestContext): Services {
 			userRepo,
 			siteRepo,
 			env: ctx.env,
+		}),
+		dcrService: new DcrService({
+			clientService,
+			envRepo,
+			scopeRepo,
+			config: {
+				enabled: resolveOptionalEnvString(resolvedEnv, "DCR_ENABLED") !== "false",
+				environmentId: resolveOptionalEnvString(resolvedEnv, "DCR_ENVIRONMENT_ID"),
+			},
+		}),
+		dcrRateLimitService: new DcrRateLimitService({
+			repo: dcrRateLimitRepo,
+			limitPerDay: resolveDcrRateLimitPerDay(resolvedEnv),
 		}),
 	};
 }

@@ -18,6 +18,7 @@ function rowToAuthorizationCode(row: {
 	expires_at: string;
 	used_at: string | null;
 	created_at: string;
+	resource: string | null;
 }): AuthorizationCode {
 	return {
 		id: row.id,
@@ -32,6 +33,7 @@ function rowToAuthorizationCode(row: {
 		expiresAt: row.expires_at,
 		usedAt: row.used_at,
 		createdAt: row.created_at,
+		resource: row.resource,
 	};
 }
 
@@ -43,8 +45,8 @@ export class AuthorizationCodeRepositoryD1 implements AuthorizationCodeRepositor
 			.prepare(
 				[
 					"INSERT INTO authorization_codes (",
-					"id, code_id, client_id, redirect_uri, code_challenge, code_challenge_method, subject, nonce, auth_time, expires_at, used_at, created_at",
-					") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+					"id, code_id, client_id, redirect_uri, code_challenge, code_challenge_method, subject, nonce, auth_time, expires_at, used_at, created_at, resource",
+					") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 				].join(" ")
 			)
 			.bind(
@@ -59,7 +61,8 @@ export class AuthorizationCodeRepositoryD1 implements AuthorizationCodeRepositor
 				row.auth_time,
 				row.expires_at,
 				row.used_at,
-				row.created_at
+				row.created_at,
+				row.resource ?? null
 			)
 			.run();
 
@@ -77,7 +80,7 @@ export class AuthorizationCodeRepositoryD1 implements AuthorizationCodeRepositor
 		const row = await this.db
 			.prepare(
 				[
-					"SELECT id, code_id, client_id, redirect_uri, code_challenge, code_challenge_method, subject, nonce, auth_time, expires_at, used_at, created_at",
+					"SELECT id, code_id, client_id, redirect_uri, code_challenge, code_challenge_method, subject, nonce, auth_time, expires_at, used_at, created_at, resource",
 					"FROM authorization_codes",
 					"WHERE code_id = ?",
 				].join(" ")
@@ -96,6 +99,7 @@ export class AuthorizationCodeRepositoryD1 implements AuthorizationCodeRepositor
 				expires_at: string;
 				used_at: string | null;
 				created_at: string;
+				resource: string | null;
 			}>();
 		if (!row) return null;
 

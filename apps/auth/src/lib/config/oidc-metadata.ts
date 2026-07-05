@@ -24,10 +24,14 @@ export const OIDC_CLAIMS_SUPPORTED = [
 	"email_verified",
 ] as const;
 
-/** Client authentication methods accepted at the token endpoint. */
+/**
+ * Client authentication methods accepted at the token endpoint. `none` is for public
+ * (PKCE-only) clients, which authenticate with PKCE instead of a secret.
+ */
 export const TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED = [
 	"client_secret_basic",
 	"client_secret_post",
+	"none",
 ] as const;
 
 /** Response modes the authorization endpoint supports (query params on redirect). */

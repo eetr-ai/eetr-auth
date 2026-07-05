@@ -8,6 +8,8 @@ export interface RefreshTokenRow {
 	revoked_at: string | null;
 	rotated_from_id: string | null;
 	created_at: string;
+	// RFC 8707 resource carried through refresh so rotated access tokens keep the same aud.
+	resource: string | null;
 }
 
 export interface RefreshTokenRecord {
@@ -21,6 +23,8 @@ export interface RefreshTokenRecord {
 	rotatedFromId: string | null;
 	createdAt: string;
 	clientScopeIds: string[];
+	// RFC 8707 audience bound at authorize time; carried forward on refresh.
+	resource: string | null;
 }
 
 export interface RefreshTokenActivity {

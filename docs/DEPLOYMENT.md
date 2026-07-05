@@ -238,6 +238,7 @@ your real traffic.
 | `POST /api/auth/*` (Auth.js sign-in/session) | Password credential stuffing | ~10 requests / 1 min |
 | `POST /api/token` | OAuth token issuance / client-secret brute force | ~30 requests / 1 min |
 | `POST /api/authorize`, `/api/authorize/complete` | Authorization-code abuse | ~30 requests / 1 min |
+| `POST /api/register` | Dynamic Client Registration abuse (client sprawl) | ~10 requests / 1 min |
 | `POST /api/users/email-verification/request` | Email-send abuse (cost + spam) | ~5 requests / 5 min |
 | `POST /api/users/email-verification/verify` | Email OTP brute force | ~10 requests / 5 min |
 | `POST /forgot-password`, `POST /reset-password` | Reset-email abuse + token guessing | ~5 requests / 5 min |
@@ -423,6 +424,9 @@ a fresh `npm run setup:local` should pass.
 | `CLIENT_KEY_PREFIX` | Prefix for generated OAuth client IDs (e.g. `eetr`) |
 | `HASH_METHOD` | Password hashing method: `argon` (default) or legacy fallback |
 | `MFA_OTP_MAX_ATTEMPTS` | Max failed OTP attempts before challenge is invalidated (default: `5`) |
+| `DCR_ENVIRONMENT_ID` | Environment id that Dynamic Client Registration (RFC 7591) places new clients in. **Required for `/api/register` to work** — leave unset to keep DCR effectively disabled (the endpoint returns `access_denied`). Point it at an existing environment whose intended users are already granted access (via `users_environments`), since `/authorize` gates on that. |
+| `DCR_ENABLED` | Set to `false` to hard-disable the DCR endpoint even when `DCR_ENVIRONMENT_ID` is set. Any other value (or unset) leaves it enabled. |
+| `DCR_RATE_LIMIT_PER_DAY` | Max DCR registration attempts per client IP per UTC day (default: `10`). Counted per attempt, including rejected ones. |
 
 ### Wrangler secrets (set via `wrangler secret put` or `infra:provision`)
 

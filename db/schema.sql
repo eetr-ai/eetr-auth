@@ -1,5 +1,5 @@
 -- eetr-auth D1 schema (SQLite)
--- Current schema version: 0.4.2
+-- Current schema version: 0.5.0
 -- Apply with: npm run db:schema (fresh local), npm run db:schema:remote (fresh remote),
 -- or the db:migrate variants when upgrading an existing environment
 
@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS schema_metadata (
 );
 
 INSERT INTO schema_metadata (key, value)
-VALUES ('schema_version', '0.4.2')
+VALUES ('schema_version', '0.5.0')
 ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 
 -- Environments (e.g. development, staging, production)
@@ -54,7 +54,15 @@ CREATE INDEX IF NOT EXISTS idx_users_environments_environment_id ON users_enviro
 
 -- Clients (OAuth clients per environment, created by a user/admin)
 -- created_by is nullable + SET NULL on user delete so removing an admin does not
--- cascade into their OAuth clients.
+-- cascade into their OAuth clients. Dynamically registered (RFC 7591) clients have
+-- created_by = NULL and is_dynamic = 1.
+--
+-- token_endpoint_auth_method mirrors RFC 7591: 'client_secret_basic'/'client_secret_post'
+-- for confidential clients (client_secret is a real HMAC-stored secret) or 'none' for
+-- public (PKCE-only) clients, which authenticate with PKCE and no secret. Public clients
+-- store client_secret = '' (empty sentinel) so the column can stay NOT NULL without a
+-- table rebuild; authenticateClient branches on token_endpoint_auth_method and never
+-- verifies the sentinel.
 CREATE TABLE IF NOT EXISTS clients (
   id TEXT PRIMARY KEY,
   client_id TEXT NOT NULL UNIQUE,
@@ -63,6 +71,8 @@ CREATE TABLE IF NOT EXISTS clients (
   created_by TEXT,
   expires_at TEXT,
   name TEXT,
+  token_endpoint_auth_method TEXT NOT NULL DEFAULT 'client_secret_basic',
+  is_dynamic INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (environment_id) REFERENCES environments(id),
   FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 );
@@ -142,12 +152,15 @@ CREATE TABLE IF NOT EXISTS password_policy_environments (
 CREATE INDEX IF NOT EXISTS idx_password_policy_environments_policy_id
   ON password_policy_environments(policy_id);
 
--- Tokens (issued for a client)
+-- Tokens (issued for a client). `resource` (RFC 8707) is the audience the token was
+-- minted for; NULL means the legacy default (the client's own client_id). Stored so the
+-- opaque-token introspection path can report the correct audience.
 CREATE TABLE IF NOT EXISTS tokens (
   id TEXT PRIMARY KEY,
   token_id TEXT NOT NULL UNIQUE,
   client_id TEXT NOT NULL,
   expires_at TEXT NOT NULL,
+  resource TEXT,
   FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
 );
 
@@ -167,7 +180,9 @@ CREATE TABLE IF NOT EXISTS token_scopes (
 CREATE INDEX IF NOT EXISTS idx_token_scopes_token_id ON token_scopes(token_id);
 CREATE INDEX IF NOT EXISTS idx_token_scopes_client_scope_id ON token_scopes(client_scope_id);
 
--- Authorization codes (for authorization_code + PKCE flow)
+-- Authorization codes (for authorization_code + PKCE flow). `resource` (RFC 8707) is the
+-- audience requested at /authorize; it is bound to the code and must be consistent at
+-- /token. NULL = no resource requested.
 CREATE TABLE IF NOT EXISTS authorization_codes (
   id TEXT PRIMARY KEY,
   code_id TEXT NOT NULL UNIQUE,
@@ -181,6 +196,7 @@ CREATE TABLE IF NOT EXISTS authorization_codes (
   expires_at TEXT NOT NULL,
   used_at TEXT,
   created_at TEXT NOT NULL,
+  resource TEXT,
   FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
 );
 
@@ -200,7 +216,9 @@ CREATE TABLE IF NOT EXISTS authorization_code_scopes (
 CREATE INDEX IF NOT EXISTS idx_authorization_code_scopes_authorization_code_id ON authorization_code_scopes(authorization_code_id);
 CREATE INDEX IF NOT EXISTS idx_authorization_code_scopes_client_scope_id ON authorization_code_scopes(client_scope_id);
 
--- Refresh tokens (issued for authorization_code and client_credentials grants)
+-- Refresh tokens (issued for authorization_code and client_credentials grants).
+-- `resource` (RFC 8707) carries the bound audience through refresh so rotated access
+-- tokens keep the same `aud`. NULL = legacy default.
 CREATE TABLE IF NOT EXISTS refresh_tokens (
   id TEXT PRIMARY KEY,
   refresh_token_id TEXT NOT NULL UNIQUE,
@@ -211,6 +229,7 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   revoked_at TEXT,
   rotated_from_id TEXT,
   created_at TEXT NOT NULL,
+  resource TEXT,
   FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
   FOREIGN KEY (access_token_id) REFERENCES tokens(id) ON DELETE SET NULL,
   FOREIGN KEY (rotated_from_id) REFERENCES refresh_tokens(id) ON DELETE SET NULL
@@ -246,6 +265,18 @@ CREATE TABLE IF NOT EXISTS token_activity_log (
 
 CREATE INDEX IF NOT EXISTS idx_token_activity_log_created_at ON token_activity_log(created_at);
 CREATE INDEX IF NOT EXISTS idx_token_activity_log_request_type_env ON token_activity_log(request_type, environment_name, created_at);
+
+-- Dynamic Client Registration (RFC 7591) per-IP daily rate limit. One row per (ip, day);
+-- `count` is the number of registration attempts that IP made on that UTC day. `day` is a
+-- 'YYYY-MM-DD' string. Old rows are pruned by the daily cleanup cron.
+CREATE TABLE IF NOT EXISTS dcr_rate_limit (
+  ip TEXT NOT NULL,
+  day TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (ip, day)
+);
+
+CREATE INDEX IF NOT EXISTS idx_dcr_rate_limit_day ON dcr_rate_limit(day);
 
 -- Site identity (singleton row id = 'default')
 CREATE TABLE IF NOT EXISTS site_settings (

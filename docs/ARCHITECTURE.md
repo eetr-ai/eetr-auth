@@ -144,7 +144,16 @@ logic, and persistence. Follow these rules when adding code:
   ```
 
 - **API route handlers** (`src/app/api/`): no business logic. Use `withApiContext`
-  and delegate to services.
+  and delegate to services. Routes own **transport concerns**: decode and
+  shape/format-validate the raw request into a typed command before calling a service
+  (never hand a service a raw, unparsed request body), and apply request-level abuse
+  guards such as rate limiting at the edge. A service receives already-validated,
+  typed inputs and focuses on domain logic. When a guard needs persistence (e.g. a
+  rate-limit counter in D1), keep the storage in a small service/repository the route
+  calls, but the decision to allow/deny and the HTTP response stay in the route. The
+  DCR endpoint is the reference: `api/register/route.ts` parses via
+  `parse-request.ts`, calls `DcrRateLimitService` for the counter, and only then
+  invokes `DcrService`.
 - **Services** (`src/lib/services/`): all business logic lives here. They receive
   `RequestContext` and depend on repositories; they do not call
   `getCloudflareContext()` or touch raw D1. The DI registry (`getServices`) wires them.

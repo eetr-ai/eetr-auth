@@ -11,7 +11,7 @@ import type { Scope } from "@/lib/repositories/scope.repository";
 import type { Client } from "@/lib/repositories/client.repository";
 import { CreatedSecretPanel } from "./_components/created-secret-panel";
 import { CreateClientForm } from "./_components/create-client-form";
-import { ClientsTable } from "./_components/clients-table";
+import { ClientsTable, type ClientTypeFilter } from "./_components/clients-table";
 
 export default function ClientsPage() {
 	const [clients, setClients] = useState<Client[]>([]);
@@ -19,6 +19,7 @@ export default function ClientsPage() {
 	const [scopes, setScopes] = useState<Scope[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [envFilter, setEnvFilter] = useState<string>("");
+	const [typeFilter, setTypeFilter] = useState<ClientTypeFilter>("");
 	const [showCreate, setShowCreate] = useState(false);
 	const [createName, setCreateName] = useState("");
 	const [createEnvId, setCreateEnvId] = useState("");
@@ -165,6 +166,8 @@ export default function ClientsPage() {
 				environments={environments}
 				envFilter={envFilter}
 				onEnvFilterChange={setEnvFilter}
+				typeFilter={typeFilter}
+				onTypeFilterChange={setTypeFilter}
 				onClientDeleted={load}
 			/>
 		</main>

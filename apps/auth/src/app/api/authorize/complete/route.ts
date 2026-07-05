@@ -77,6 +77,7 @@ export const GET = withApiContext(async (req, ctx, getServices) => {
 			codeChallengeMethod: pendingParams.code_challenge_method ?? null,
 			subject: session.user.id,
 			nonce: pendingParams.nonce ?? null,
+			resource: pendingParams.resource ?? null,
 		});
 
 		const redirectResponse = NextResponse.redirect(result.redirectTo, 303);

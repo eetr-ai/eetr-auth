@@ -43,25 +43,35 @@ export interface OIDCDiscovery {
   authorization_endpoint: string;
   token_endpoint: string;
   userinfo_endpoint: string;
+  /** RFC 7591 Dynamic Client Registration endpoint, when the server supports it. */
+  registration_endpoint?: string;
   jwks_uri: string;
   response_types_supported: string[];
   scopes_supported: string[];
   grant_types_supported: string[];
   subject_types_supported: string[];
   id_token_signing_alg_values_supported: string[];
+  token_endpoint_auth_methods_supported?: string[];
   code_challenge_methods_supported: string[];
+  /** RFC 8707: whether the `resource` parameter is honored. */
+  resource_parameter_supported?: boolean;
 }
 
 export interface OAuthServerMetadata {
   issuer: string;
   authorization_endpoint: string;
   token_endpoint: string;
+  /** RFC 7591 Dynamic Client Registration endpoint, when the server supports it. */
+  registration_endpoint?: string;
   jwks_uri: string;
   token_introspection_endpoint?: string;
   response_types_supported: string[];
   scopes_supported: string[];
   grant_types_supported: string[];
+  token_endpoint_auth_methods_supported?: string[];
   code_challenge_methods_supported: string[];
+  /** RFC 8707: whether the `resource` parameter is honored. */
+  resource_parameter_supported?: boolean;
 }
 
 export interface AuthClientConfig {

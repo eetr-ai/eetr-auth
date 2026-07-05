@@ -71,6 +71,7 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 			redirectUri: asString(body.get("redirect_uri")),
 			codeVerifier: asString(body.get("code_verifier")),
 			refreshToken: asString(body.get("refresh_token")),
+			resource: asString(body.get("resource")),
 		});
 		logStep("exchange", stepStart, { grant_type: asString(body.get("grant_type")) ?? null });
 		const durationMs = Date.now() - routeStartMs;

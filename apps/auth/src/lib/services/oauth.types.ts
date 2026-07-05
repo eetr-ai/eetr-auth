@@ -7,6 +7,7 @@ export type OAuthErrorCode =
 	| "unsupported_grant_type"
 	| "unsupported_response_type"
 	| "access_denied"
+	| "invalid_target"
 	| "server_error";
 
 export class OAuthServiceError extends Error {

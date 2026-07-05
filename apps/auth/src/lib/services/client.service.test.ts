@@ -48,6 +48,8 @@ function makeClient(overrides?: Partial<Client>): Client {
 		createdBy: "user-1",
 		expiresAt: null,
 		name: "Primary Client",
+		tokenEndpointAuthMethod: "client_secret_basic",
+		isDynamic: false,
 		...overrides,
 	};
 }
@@ -118,6 +120,34 @@ describe("ClientService", () => {
 		expect(result.clientSecret).toBe("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
 		expect(storedSecret).toMatch(/^h1:[0-9a-f]{64}$/);
 		expect(storedSecret).not.toContain(result.clientSecret);
+	});
+
+	it("creates a public (PKCE-only) client with no secret and marks it dynamic", async () => {
+		const repo = createClientRepoMock();
+		repo.getById.mockResolvedValue(
+			makeClient({ tokenEndpointAuthMethod: "none", clientSecret: "", isDynamic: true })
+		);
+		repo.getRedirectUris.mockResolvedValue([]);
+		repo.getClientScopes.mockResolvedValue([]);
+		// No HMAC_KEY configured: a public client must still be creatable (no secret to hash).
+		const service = createService(repo, { CLIENT_KEY_PREFIX: "progression" } as unknown as CloudflareEnv);
+
+		const result = await service.create({
+			environmentId: "env-1",
+			createdBy: null,
+			tokenEndpointAuthMethod: "none",
+			isDynamic: true,
+		});
+
+		expect(repo.create).toHaveBeenCalledWith(
+			expect.objectContaining({
+				client_secret: "",
+				created_by: null,
+				token_endpoint_auth_method: "none",
+				is_dynamic: 1,
+			})
+		);
+		expect(result.clientSecret).toBe("");
 	});
 
 	it("persists redirect URIs and scope ids when provided", async () => {
@@ -359,6 +389,8 @@ describe("ClientService", () => {
 				environmentId: "env-1",
 				redirectUris: ["https://client.example.com/callback"],
 				scopeIds: ["scope-read"],
+				tokenEndpointAuthMethod: "client_secret_basic",
+				isDynamic: false,
 			});
 		});
 

@@ -58,6 +58,7 @@ function makeRow(overrides?: Partial<AuthorizationCodeRow>): AuthorizationCodeRo
 		expires_at: "2026-04-06T13:15:00.000Z",
 		used_at: null,
 		created_at: "2026-04-06T13:10:00.000Z",
+		resource: null,
 		...overrides,
 	};
 }
@@ -85,6 +86,7 @@ describe("AuthorizationCodeRepositoryD1", () => {
 			"2026-04-06T13:15:00.000Z",
 			null,
 			"2026-04-06T13:10:00.000Z",
+			null,
 		]);
 	});
 
