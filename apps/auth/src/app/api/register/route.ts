@@ -1,22 +1,14 @@
 import { NextResponse } from "next/server";
 import { withApiContext } from "@/lib/context/with-api-context";
+import { corsPreflight, noStoreCorsHeaders } from "@/lib/http/cors";
 import { isDcrServiceError } from "@/lib/services/dcr.service";
 import { parseDcrRegistrationRequest } from "./parse-request";
 
 // Dynamic Client Registration is called by browser-based MCP clients, so allow CORS.
-const CORS_HEADERS = {
-	"Access-Control-Allow-Origin": "*",
-	"Access-Control-Allow-Methods": "POST, OPTIONS",
-	"Access-Control-Allow-Headers": "Content-Type, Authorization",
-} as const;
-
-const JSON_HEADERS = {
-	"Cache-Control": "no-store",
-	...CORS_HEADERS,
-} as const;
+const JSON_HEADERS = noStoreCorsHeaders("POST, OPTIONS");
 
 /** Respond to CORS preflight for /api/register. */
-export const OPTIONS = () => new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+export const OPTIONS = corsPreflight("POST, OPTIONS");
 
 /**
  * Dynamic Client Registration endpoint (RFC 7591). Public: no client authentication.

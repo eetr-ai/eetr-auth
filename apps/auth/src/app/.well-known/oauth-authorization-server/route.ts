@@ -3,16 +3,13 @@ import { getCachedScopeNames } from "@/lib/cache/scope-discovery-cache";
 import { withApiContext } from "@/lib/context/with-api-context";
 import { resolveIssuerBaseUrl } from "@/lib/config/issuer-base-url";
 import { resolveJwksCdnBaseUrl } from "@/lib/config/jwks-cdn-base-url";
+import { corsHeaders, corsPreflight } from "@/lib/http/cors";
 import { TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED } from "@/lib/config/oidc-metadata";
 
-const CORS_HEADERS = {
-	"Access-Control-Allow-Origin": "*",
-	"Access-Control-Allow-Methods": "GET, OPTIONS",
-} as const;
+const CORS_HEADERS = corsHeaders("GET, OPTIONS");
 
 /** Respond to CORS preflight for /.well-known/oauth-authorization-server */
-export const OPTIONS = () =>
-	new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+export const OPTIONS = corsPreflight("GET, OPTIONS");
 
 /**
  * RFC 8414 OAuth 2.0 Authorization Server Metadata.

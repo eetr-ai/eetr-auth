@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { withApiContext } from "@/lib/context/with-api-context";
+import { corsPreflight, noStoreCorsHeaders } from "@/lib/http/cors";
 import { isOAuthServiceError } from "@/lib/services/oauth.types";
+
+// The token endpoint is called from browser-based (SPA/PKCE) OAuth clients, so allow CORS.
+const NO_STORE_HEADERS = noStoreCorsHeaders("POST, OPTIONS");
+
+/** Respond to CORS preflight for /api/token. */
+export const OPTIONS = corsPreflight("POST, OPTIONS");
 
 function asString(value: FormDataEntryValue | string | null): string | null {
 	return typeof value === "string" ? value : null;
@@ -85,10 +92,7 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 		}));
 		return NextResponse.json(token, {
 			status: 200,
-			headers: {
-				"Cache-Control": "no-store",
-				Pragma: "no-cache",
-			},
+			headers: NO_STORE_HEADERS,
 		});
 	} catch (error) {
 		logStep("exchange_error", stepStart, { grant_type: asString(body.get("grant_type")) ?? null });
@@ -110,8 +114,7 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 				{
 					status: error.status,
 					headers: {
-						"Cache-Control": "no-store",
-						Pragma: "no-cache",
+						...NO_STORE_HEADERS,
 						...(error.code === "invalid_client"
 							? { "WWW-Authenticate": 'Basic realm="oauth_token"' }
 							: {}),
@@ -126,10 +129,7 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 			},
 			{
 				status: 500,
-				headers: {
-					"Cache-Control": "no-store",
-					Pragma: "no-cache",
-				},
+				headers: NO_STORE_HEADERS,
 			}
 		);
 	}
