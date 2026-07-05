@@ -180,6 +180,7 @@ class InMemoryTokenRepo implements TokenRepository {
 			environmentName: environment?.name ?? "unknown",
 			expiresAt: stored.row.expires_at,
 			scopeNames,
+			resource: stored.row.resource,
 		};
 	}
 
@@ -243,6 +244,7 @@ class InMemoryRefreshTokenRepo implements RefreshTokenRepository {
 			rotatedFromId: stored.row.rotated_from_id,
 			createdAt: stored.row.created_at,
 			clientScopeIds: [...stored.clientScopeIds],
+			resource: stored.row.resource,
 		};
 	}
 
@@ -353,6 +355,7 @@ class InMemoryAuthorizationCodeRepo implements AuthorizationCodeRepository {
 			usedAt: stored.row.used_at,
 			createdAt: stored.row.created_at,
 			clientScopeIds: [...stored.clientScopeIds],
+			resource: stored.row.resource,
 		};
 	}
 
@@ -698,6 +701,111 @@ describe("OAuth stateful flows", () => {
 			refreshToken: issued.refresh_token,
 		});
 		expect(refreshed.access_token).toMatch(/^at_[0-9a-f]{64}$/);
+	});
+
+	it("binds the access-token audience to the requested resource (RFC 8707) and preserves it on refresh", async () => {
+		const { authorizationService, tokenService } = buildHarness();
+		const codeVerifier = "verifier-123";
+		const resource = "https://mcp.example.com/mcp";
+
+		const authorization = await authorizationService.authorize({
+			responseType: "code",
+			clientId: "client-app-id",
+			redirectUri: "https://client.example.com/callback",
+			scope: "read:users",
+			state: "state-123",
+			codeChallenge: await toS256Challenge(codeVerifier),
+			codeChallengeMethod: "S256",
+			subject: "user-123",
+			resource,
+		});
+		const authorizationCode = new URL(authorization.redirectTo).searchParams.get("code");
+		if (!authorizationCode) {
+			throw new Error("Expected authorization code in redirect URL");
+		}
+
+		const issued = await tokenService.exchange({
+			grantType: "authorization_code",
+			clientId: "client-app-id",
+			clientSecret: "plain-secret",
+			code: authorizationCode,
+			redirectUri: "https://client.example.com/callback",
+			codeVerifier,
+			resource,
+		});
+
+		// The token validates against the resource audience, and NOT against the client_id.
+		const asResource = await tokenService.validateAccessToken(issued.access_token, ["read:users"], "production", resource);
+		const asClient = await tokenService.validateAccessToken(issued.access_token, ["read:users"], "production", "client-app-id");
+		expect(asResource).toMatchObject({ valid: true, active: true });
+		expect(asClient).toMatchObject({ valid: false, active: true });
+
+		// Refresh preserves the bound audience.
+		const refreshed = await tokenService.exchange({
+			grantType: "refresh_token",
+			clientId: "client-app-id",
+			clientSecret: "plain-secret",
+			refreshToken: issued.refresh_token,
+		});
+		const refreshedAsResource = await tokenService.validateAccessToken(refreshed.access_token, ["read:users"], "production", resource);
+		expect(refreshedAsResource).toMatchObject({ valid: true, active: true });
+	});
+
+	it("rejects a token-time resource that does not match the authorization code", async () => {
+		const { authorizationService, tokenService } = buildHarness();
+		const codeVerifier = "verifier-123";
+
+		const authorization = await authorizationService.authorize({
+			responseType: "code",
+			clientId: "client-app-id",
+			redirectUri: "https://client.example.com/callback",
+			scope: "read:users",
+			state: "state-123",
+			codeChallenge: await toS256Challenge(codeVerifier),
+			codeChallengeMethod: "S256",
+			subject: "user-123",
+			resource: "https://mcp.example.com/mcp",
+		});
+		const authorizationCode = new URL(authorization.redirectTo).searchParams.get("code");
+		if (!authorizationCode) {
+			throw new Error("Expected authorization code in redirect URL");
+		}
+
+		await expect(
+			tokenService.exchange({
+				grantType: "authorization_code",
+				clientId: "client-app-id",
+				clientSecret: "plain-secret",
+				code: authorizationCode,
+				redirectUri: "https://client.example.com/callback",
+				codeVerifier,
+				resource: "https://other.example.com/mcp",
+			})
+		).rejects.toEqual(
+			new OAuthServiceError(
+				"invalid_target",
+				"resource does not match the value bound to the authorization code.",
+				400
+			)
+		);
+	});
+
+	it("rejects a malformed resource at /authorize (RFC 8707 invalid_target)", async () => {
+		const { authorizationService } = buildHarness();
+
+		await expect(
+			authorizationService.authorize({
+				responseType: "code",
+				clientId: "client-app-id",
+				redirectUri: "https://client.example.com/callback",
+				scope: "read:users",
+				state: "state-123",
+				codeChallenge: await toS256Challenge("verifier-123"),
+				codeChallengeMethod: "S256",
+				subject: "user-123",
+				resource: "not-a-url",
+			})
+		).rejects.toEqual(new OAuthServiceError("invalid_target", "resource must be an absolute URI.", 400));
 	});
 
 	it("public client cannot use the client_credentials grant", async () => {

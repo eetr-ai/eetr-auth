@@ -122,6 +122,7 @@ async function handleAuthorize(
 			// OIDC: `sub` must be a stable identifier and match /userinfo's `sub` (user.id).
 			subject: session.user.id,
 			nonce: asString(source.get("nonce")),
+			resource: asString(source.get("resource")),
 		});
 
 		const durationMs = Date.now() - logContext.startMs;

@@ -11,6 +11,7 @@ import type {
 } from "@/lib/repositories/refresh-token.repository";
 import type { AccessTokenActivity } from "@/lib/repositories/token.repository";
 import { OAuthServiceError } from "./oauth.types";
+import { normalizeResourceParam } from "./resource-indicator";
 import { resolveHmacKey, verifyClientSecretAgainstStored } from "@/lib/auth/secret-at-rest";
 import type { UserRepository } from "@/lib/repositories/admin.repository";
 import { getAvatarUrl } from "@/lib/users/profile";
@@ -103,6 +104,8 @@ export interface TokenRequestParams {
 	redirectUri?: string | null;
 	codeVerifier?: string | null;
 	refreshToken?: string | null;
+	// RFC 8707 resource indicator sent to the token endpoint.
+	resource?: string | null;
 }
 
 export interface ValidateTokenResult {
@@ -236,6 +239,8 @@ export class OauthTokenService {
 		issueIdToken?: boolean;
 		nonce?: string | null;
 		authTime?: string | null;
+		/** RFC 8707: audience to bind the access token to (falls back to the client_id). */
+		resource?: string | null;
 	}): Promise<OAuthTokenResponse> {
 		const env = this.env as unknown as Record<string, unknown>;
 		// Prefer ctx.env; in next dev, .env.local is in process.env but may not be merged into ctx.env
@@ -291,6 +296,7 @@ export class OauthTokenService {
 				token_id: accessToken,
 				client_id: params.clientId,
 				expires_at: accessExpiresAt.toISOString(),
+				resource: params.resource ?? null,
 			},
 			params.clientScopeIds
 		);
@@ -307,6 +313,7 @@ export class OauthTokenService {
 				revoked_at: null,
 				rotated_from_id: params.rotatedFromRefreshTokenId ?? null,
 				created_at: now.toISOString(),
+				resource: params.resource ?? null,
 			},
 			params.clientScopeIds
 		);
@@ -337,6 +344,7 @@ export class OauthTokenService {
 		issueIdToken?: boolean;
 		nonce?: string | null;
 		authTime?: string | null;
+		resource?: string | null;
 	}): Promise<OAuthTokenResponse> {
 		const t0 = Date.now();
 		const now = new Date();
@@ -389,11 +397,15 @@ export class OauthTokenService {
 		if (params.environmentName != null && params.environmentName !== "") {
 			payload.environment = params.environmentName;
 		}
+		// RFC 8707: bind the token audience to the requested resource when present, so a
+		// resource server can reject tokens minted for other resources. `client_id` stays a
+		// separate claim (above) for auditing. Falls back to the client_id (legacy behavior).
+		const audience = params.resource ?? params.clientIdentifier;
 		const accessTokenJwt = await new SignJWT(payload)
 			.setProtectedHeader({ alg: "RS256", kid })
 			.setIssuer(params.issuer)
 			.setSubject(params.subject ?? "")
-			.setAudience(params.clientIdentifier)
+			.setAudience(audience)
 			.setJti(jti)
 			.setIssuedAt(Math.floor(now.getTime() / 1000))
 			.setExpirationTime(Math.floor(accessExpiresAt.getTime() / 1000))
@@ -405,6 +417,7 @@ export class OauthTokenService {
 				token_id: jti,
 				client_id: params.clientId,
 				expires_at: accessExpiresAt.toISOString(),
+				resource: params.resource ?? null,
 			},
 			params.clientScopeIds
 		);
@@ -421,6 +434,7 @@ export class OauthTokenService {
 				revoked_at: null,
 				rotated_from_id: params.rotatedFromRefreshTokenId ?? null,
 				created_at: now.toISOString(),
+				resource: params.resource ?? null,
 			},
 			params.clientScopeIds
 		);
@@ -525,6 +539,7 @@ export class OauthTokenService {
 				400
 			);
 		}
+		const resource = normalizeResourceParam(params.resource);
 		const requestedScopes = parseScopeParam(params.scope);
 		let step = Date.now();
 		const allGrants = await this.tokenRepo.getClientScopeGrants(client.id);
@@ -541,6 +556,7 @@ export class OauthTokenService {
 			scopeNames: selected.map((grant) => grant.scopeName),
 			subject: null,
 			clientIdentifier: client.clientId,
+			resource,
 		});
 		logTokenStep("client_credentials_total", t0);
 		return result;
@@ -590,6 +606,19 @@ export class OauthTokenService {
 			throw new OAuthServiceError("invalid_grant", "code_verifier does not match code_challenge.", 400);
 		}
 
+		// RFC 8707: if the token request repeats `resource`, it must match the value bound to
+		// the code at /authorize time. The token's `aud` is always the code-bound resource.
+		if (params.resource != null) {
+			const requestedResource = normalizeResourceParam(params.resource);
+			if (requestedResource !== authorizationCode.resource) {
+				throw new OAuthServiceError(
+					"invalid_target",
+					"resource does not match the value bound to the authorization code.",
+					400
+				);
+			}
+		}
+
 		step = Date.now();
 		const allClientGrants = await this.tokenRepo.getClientScopeGrants(client.id);
 		logTokenStep("authorization_code_get_scope_grants", step);
@@ -625,6 +654,8 @@ export class OauthTokenService {
 			issueIdToken: true,
 			nonce: authorizationCode.nonce,
 			authTime: authorizationCode.authTime,
+			// RFC 8707: mint the access token for the resource bound at /authorize time.
+			resource: authorizationCode.resource,
 		});
 		logTokenStep("authorization_code_total", t0);
 		return result;
@@ -726,6 +757,8 @@ export class OauthTokenService {
 			subject: token.subject,
 			rotatedFromRefreshTokenId: token.id,
 			clientIdentifier: client.clientId,
+			// RFC 8707: preserve the bound audience across refresh rotation.
+			resource: token.resource,
 		});
 		logTokenStep("refresh_token_total", t0);
 		return result;
@@ -959,10 +992,11 @@ export class OauthTokenService {
 				? true
 				: tokenRecord.environmentName.toLocaleLowerCase() ===
 					expectedEnvironmentName.toLocaleLowerCase();
-		// Audience binding: a token is only valid for the client it was issued to. The
-		// owning client (tokenRecord.clientId) is the authoritative audience.
+		// Audience binding: a token is valid for the resource it was minted for (RFC 8707),
+		// falling back to the owning client_id when no resource was requested.
+		const tokenAudience = tokenRecord.resource ?? tokenRecord.clientId;
 		const audienceMatch =
-			normalizedAudience == null ? true : tokenRecord.clientId === normalizedAudience;
+			normalizedAudience == null ? true : tokenAudience === normalizedAudience;
 		const valid = active && missingScopes.length === 0 && environmentMatch && audienceMatch;
 
 		return {
@@ -1049,6 +1083,7 @@ export class OauthTokenService {
 			environmentName: string;
 			expiresAt: string;
 			scopeNames: string[];
+			resource: string | null;
 		}, subject: string | null): ValidateTokenResult => {
 			const nowIso = new Date().toISOString();
 			const active = tokenRecord.expiresAt > nowIso;
@@ -1059,11 +1094,12 @@ export class OauthTokenService {
 					? true
 					: tokenRecord.environmentName.toLocaleLowerCase() ===
 						expectedEnvironmentName.toLocaleLowerCase();
-			// Audience binding: the owning client (tokenRecord.clientId, which equals the
-			// JWT `aud`) is the authoritative audience. Prevents a token minted for client A
-			// from being accepted by a resource server that identifies as client B.
+			// Audience binding: the token's audience is its bound resource (RFC 8707), which
+			// equals the JWT `aud`, falling back to the owning client_id. Prevents a token
+			// minted for resource/client A from being accepted by resource server B.
+			const tokenAudience = tokenRecord.resource ?? tokenRecord.clientId;
 			const audienceMatch =
-				expectedAudience == null ? true : tokenRecord.clientId === expectedAudience;
+				expectedAudience == null ? true : tokenAudience === expectedAudience;
 			const valid = active && missingScopes.length === 0 && environmentMatch && audienceMatch;
 			if (!valid) {
 				console.warn("[oauth_token] JWT validation: token found but valid=false.", {

@@ -165,6 +165,7 @@ function makeAuthorizationCode(overrides?: Partial<AuthorizationCodeWithScopeIds
 		usedAt: null,
 		createdAt: "2026-04-06T13:10:00.000Z",
 		clientScopeIds: ["client-scope-read", "client-scope-write"],
+		resource: null,
 		...overrides,
 	};
 }
@@ -181,6 +182,7 @@ function makeRefreshToken(overrides?: Partial<RefreshTokenRecord>): RefreshToken
 		rotatedFromId: null,
 		createdAt: "2026-04-06T13:10:00.000Z",
 		clientScopeIds: ["client-scope-read", "client-scope-write"],
+		resource: null,
 		...overrides,
 	};
 }
@@ -194,6 +196,7 @@ function makeAccessTokenRecord(overrides?: Partial<AccessTokenRecord>): AccessTo
 		environmentName: "production",
 		expiresAt: "2026-04-06T14:10:00.000Z",
 		scopeNames: ["read:users", "write:users"],
+		resource: null,
 		...overrides,
 	};
 }

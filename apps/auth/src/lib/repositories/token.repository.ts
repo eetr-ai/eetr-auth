@@ -9,6 +9,9 @@ export interface AccessTokenRow {
 	token_id: string;
 	client_id: string;
 	expires_at: string;
+	// RFC 8707 resource indicator: the audience the token was minted for. NULL = the
+	// legacy default (the owning client's client_id).
+	resource: string | null;
 }
 
 export interface AccessTokenActivity {
@@ -31,6 +34,8 @@ export interface AccessTokenRecord {
 	environmentName: string;
 	expiresAt: string;
 	scopeNames: string[];
+	// RFC 8707 audience the token was minted for; NULL = default (client_id).
+	resource: string | null;
 }
 
 export interface TokenRepository {

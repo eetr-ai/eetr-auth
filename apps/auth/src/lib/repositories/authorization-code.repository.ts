@@ -11,6 +11,8 @@ export interface AuthorizationCode {
 	expiresAt: string;
 	usedAt: string | null;
 	createdAt: string;
+	// RFC 8707 resource requested at /authorize and bound to this code. NULL = none.
+	resource: string | null;
 }
 
 export interface AuthorizationCodeWithScopeIds extends AuthorizationCode {
@@ -30,6 +32,7 @@ export interface AuthorizationCodeRow {
 	expires_at: string;
 	used_at: string | null;
 	created_at: string;
+	resource: string | null;
 }
 
 export interface AuthorizationCodeRepository {

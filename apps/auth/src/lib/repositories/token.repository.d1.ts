@@ -11,8 +11,8 @@ export class TokenRepositoryD1 implements TokenRepository {
 
 	async createAccessToken(row: AccessTokenRow, clientScopeIds: string[]): Promise<void> {
 		await this.db
-			.prepare("INSERT INTO tokens (id, token_id, client_id, expires_at) VALUES (?, ?, ?, ?)")
-			.bind(row.id, row.token_id, row.client_id, row.expires_at)
+			.prepare("INSERT INTO tokens (id, token_id, client_id, expires_at, resource) VALUES (?, ?, ?, ?, ?)")
+			.bind(row.id, row.token_id, row.client_id, row.expires_at, row.resource ?? null)
 			.run();
 
 		for (const clientScopeId of clientScopeIds) {
@@ -71,6 +71,7 @@ export class TokenRepositoryD1 implements TokenRepository {
 					"c.environment_id AS environmentId,",
 					"e.name AS environmentName,",
 					"t.expires_at AS expiresAt,",
+					"t.resource AS resource,",
 					"GROUP_CONCAT(DISTINCT s.scope_name) AS scopeNamesCsv",
 					"FROM tokens t",
 					"INNER JOIN clients c ON c.id = t.client_id",
@@ -79,7 +80,7 @@ export class TokenRepositoryD1 implements TokenRepository {
 					"LEFT JOIN client_scopes cs ON cs.id = ts.client_scope_id",
 					"LEFT JOIN scopes s ON s.id = cs.scope_id",
 					"WHERE t.token_id = ?",
-					"GROUP BY t.id, t.token_id, c.client_id, c.environment_id, e.name, t.expires_at",
+					"GROUP BY t.id, t.token_id, c.client_id, c.environment_id, e.name, t.expires_at, t.resource",
 				].join(" ")
 			)
 			.bind(tokenId)
@@ -90,6 +91,7 @@ export class TokenRepositoryD1 implements TokenRepository {
 				environmentId: string;
 				environmentName: string;
 				expiresAt: string;
+				resource: string | null;
 				scopeNamesCsv: string | null;
 			}>();
 
@@ -101,6 +103,7 @@ export class TokenRepositoryD1 implements TokenRepository {
 			environmentId: row.environmentId,
 			environmentName: row.environmentName,
 			expiresAt: row.expiresAt,
+			resource: row.resource,
 			scopeNames: row.scopeNamesCsv ? row.scopeNamesCsv.split(",").filter(Boolean) : [],
 		};
 	}

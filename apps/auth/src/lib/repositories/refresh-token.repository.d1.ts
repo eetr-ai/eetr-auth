@@ -19,8 +19,8 @@ export class RefreshTokenRepositoryD1 implements RefreshTokenRepository {
 			.prepare(
 				[
 					"INSERT INTO refresh_tokens (",
-					"id, refresh_token_id, client_id, subject, access_token_id, expires_at, revoked_at, rotated_from_id, created_at",
-					") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+					"id, refresh_token_id, client_id, subject, access_token_id, expires_at, revoked_at, rotated_from_id, created_at, resource",
+					") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 				].join(" ")
 			)
 			.bind(
@@ -32,7 +32,8 @@ export class RefreshTokenRepositoryD1 implements RefreshTokenRepository {
 				row.expires_at,
 				row.revoked_at,
 				row.rotated_from_id,
-				row.created_at
+				row.created_at,
+				row.resource ?? null
 			)
 			.run();
 
@@ -50,7 +51,7 @@ export class RefreshTokenRepositoryD1 implements RefreshTokenRepository {
 		const row = await this.db
 			.prepare(
 				[
-					"SELECT id, refresh_token_id, client_id, subject, access_token_id, expires_at, revoked_at, rotated_from_id, created_at",
+					"SELECT id, refresh_token_id, client_id, subject, access_token_id, expires_at, revoked_at, rotated_from_id, created_at, resource",
 					"FROM refresh_tokens",
 					"WHERE refresh_token_id = ?",
 				].join(" ")
@@ -66,6 +67,7 @@ export class RefreshTokenRepositoryD1 implements RefreshTokenRepository {
 				revoked_at: string | null;
 				rotated_from_id: string | null;
 				created_at: string;
+				resource: string | null;
 			}>();
 		if (!row) return null;
 
@@ -92,6 +94,7 @@ export class RefreshTokenRepositoryD1 implements RefreshTokenRepository {
 			rotatedFromId: row.rotated_from_id,
 			createdAt: row.created_at,
 			clientScopeIds: (scopeRows.results ?? []).map((scopeRow) => scopeRow.client_scope_id),
+			resource: row.resource,
 		};
 	}
 
