@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { withApiContext } from "@/lib/context/with-api-context";
+import { corsPreflight, noStoreCorsHeaders } from "@/lib/http/cors";
 import { buildUserInfoClaims } from "@/lib/users/userinfo-claims";
+
+// UserInfo is called from browser-based OIDC clients with a bearer token, so allow CORS.
+const NO_STORE_HEADERS = noStoreCorsHeaders("GET, OPTIONS");
+
+/** Respond to CORS preflight for /api/userinfo. */
+export const OPTIONS = corsPreflight("GET, OPTIONS");
 
 function parseBearerToken(authorizationHeader: string | null): string | null {
 	if (!authorizationHeader) return null;
@@ -18,10 +25,7 @@ export const GET = withApiContext(async (req, ctx, getServices) => {
 			{ error: "invalid_token", error_description: "A valid access token is required." },
 			{
 				status: 401,
-				headers: {
-					"Cache-Control": "no-store",
-					Pragma: "no-cache",
-				},
+				headers: NO_STORE_HEADERS,
 			}
 		);
 	}
@@ -40,8 +44,7 @@ export const GET = withApiContext(async (req, ctx, getServices) => {
 			{
 				status: insufficientScope ? 403 : 401,
 				headers: {
-					"Cache-Control": "no-store",
-					Pragma: "no-cache",
+					...NO_STORE_HEADERS,
 					"WWW-Authenticate": insufficientScope
 						? 'Bearer error="insufficient_scope", scope="openid"'
 						: 'Bearer error="invalid_token"',
@@ -56,10 +59,7 @@ export const GET = withApiContext(async (req, ctx, getServices) => {
 			{ error: "invalid_token", error_description: "Token subject user not found." },
 			{
 				status: 401,
-				headers: {
-					"Cache-Control": "no-store",
-					Pragma: "no-cache",
-				},
+				headers: NO_STORE_HEADERS,
 			}
 		);
 	}

@@ -8,8 +8,22 @@ import {
 	getPendingCookieTtlSeconds,
 } from "@/lib/auth/oauth-pending-cookie";
 import { withApiContext } from "@/lib/context/with-api-context";
+import { corsHeaders, corsPreflight } from "@/lib/http/cors";
 import type { Services } from "@/lib/services/registry";
 import { isOAuthServiceError } from "@/lib/services/oauth.types";
+
+const AUTHORIZE_CORS = corsHeaders("GET, POST, OPTIONS");
+
+/** Respond to CORS preflight for /api/authorize. */
+export const OPTIONS = corsPreflight("GET, POST, OPTIONS");
+
+/** Apply CORS headers to a response in place, then return it. */
+function withCors(response: NextResponse): NextResponse {
+	for (const [key, value] of Object.entries(AUTHORIZE_CORS)) {
+		response.headers.set(key, value);
+	}
+	return response;
+}
 
 function asString(value: FormDataEntryValue | string | null): string | null {
 	return typeof value === "string" ? value : null;
@@ -175,11 +189,11 @@ async function handleAuthorize(
 export const GET = withApiContext(async (req, ctx, getServices) => {
 	const startMs = Date.now();
 	const ip = req.headers.get("CF-Connecting-IP") ?? null;
-	return handleAuthorize(req, getServices(), { ctx: ctx.ctx, env: ctx.env as unknown as Record<string, unknown>, startMs, ip });
+	return withCors(await handleAuthorize(req, getServices(), { ctx: ctx.ctx, env: ctx.env as unknown as Record<string, unknown>, startMs, ip }));
 });
 
 export const POST = withApiContext(async (req, ctx, getServices) => {
 	const startMs = Date.now();
 	const ip = req.headers.get("CF-Connecting-IP") ?? null;
-	return handleAuthorize(req, getServices(), { ctx: ctx.ctx, env: ctx.env as unknown as Record<string, unknown>, startMs, ip });
+	return withCors(await handleAuthorize(req, getServices(), { ctx: ctx.ctx, env: ctx.env as unknown as Record<string, unknown>, startMs, ip }));
 });
