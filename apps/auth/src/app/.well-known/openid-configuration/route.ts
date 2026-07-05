@@ -36,16 +36,19 @@ export const GET = withApiContext(async (_req, ctx, getServices) => {
 		authorization_endpoint: `${issuer}/api/authorize`,
 		token_endpoint: `${issuer}/api/token`,
 		userinfo_endpoint: `${issuer}/api/userinfo`,
+		registration_endpoint: `${issuer}/api/register`,
 		jwks_uri: `${jwksCdnBase}/jwks.json`,
 		response_types_supported: ["code"],
 		response_modes_supported: RESPONSE_MODES_SUPPORTED,
 		scopes_supported: scopesSupported,
-		grant_types_supported: ["authorization_code", "client_credentials"],
+		grant_types_supported: ["authorization_code", "client_credentials", "refresh_token"],
 		subject_types_supported: ["public"],
 		id_token_signing_alg_values_supported: ["RS256"],
 		token_endpoint_auth_methods_supported: TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED,
 		claims_supported: OIDC_CLAIMS_SUPPORTED,
 		code_challenge_methods_supported: ["S256"],
+		// RFC 8707: the authorization and token endpoints honor the `resource` parameter.
+		resource_parameter_supported: true,
 	};
 
 	return NextResponse.json(metadata, {

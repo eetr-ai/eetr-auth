@@ -23,6 +23,8 @@ describe("OIDC discovery metadata", () => {
 		expect(TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED).toEqual([
 			"client_secret_basic",
 			"client_secret_post",
+			// Public (PKCE-only) clients, e.g. dynamically registered MCP clients.
+			"none",
 		]);
 		expect(RESPONSE_MODES_SUPPORTED).toEqual(["query"]);
 	});
