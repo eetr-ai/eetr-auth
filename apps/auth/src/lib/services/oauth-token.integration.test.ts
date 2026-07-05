@@ -99,9 +99,11 @@ class InMemoryClientRepo implements ClientRepository {
 			clientId: row.client_id,
 			clientSecret: row.client_secret,
 			environmentId: row.environment_id,
-			createdBy: row.created_by,
+			createdBy: row.created_by ?? "",
 			expiresAt: row.expires_at,
 			name: row.name,
+			tokenEndpointAuthMethod: row.token_endpoint_auth_method,
+			isDynamic: row.is_dynamic === 1,
 		});
 	}
 
@@ -409,15 +411,22 @@ function buildHarness(options?: {
 	env?: CloudflareEnv;
 	user?: UserRecord;
 	extraGrants?: ClientScopeGrant[];
+	// Build a public (PKCE-only) client instead of the default confidential one.
+	tokenEndpointAuthMethod?: string;
 }) {
+	const authMethod = options?.tokenEndpointAuthMethod ?? "client_secret_basic";
+	const isPublic = authMethod === "none";
 	const client = {
 		id: "client-row-1",
 		clientId: "client-app-id",
-		clientSecret: "plain-secret",
+		// Public clients store the empty sentinel; confidential clients a real secret.
+		clientSecret: isPublic ? "" : "plain-secret",
 		environmentId: "env-1",
 		createdBy: "user-1",
 		expiresAt: null,
 		name: "Integration Client",
+		tokenEndpointAuthMethod: authMethod,
+		isDynamic: isPublic,
 	} satisfies Client;
 
 	const envRepo = new InMemoryEnvironmentRepo(new Map([["env-1", { id: "env-1", name: "production" }]]));
@@ -646,6 +655,67 @@ describe("OAuth stateful flows", () => {
 		await exchangeOnce();
 		await expect(exchangeOnce()).rejects.toEqual(
 			new OAuthServiceError("invalid_grant", "Authorization code has already been used.", 400)
+		);
+	});
+
+	it("public (PKCE-only) client completes auth-code + PKCE with no client_secret", async () => {
+		const { authorizationService, tokenService } = buildHarness({ tokenEndpointAuthMethod: "none" });
+		const codeVerifier = "verifier-123";
+
+		const authorization = await authorizationService.authorize({
+			responseType: "code",
+			clientId: "client-app-id",
+			redirectUri: "https://client.example.com/callback",
+			scope: "read:users",
+			state: "state-123",
+			codeChallenge: await toS256Challenge(codeVerifier),
+			codeChallengeMethod: "S256",
+			subject: "user-123",
+		});
+		const authorizationCode = new URL(authorization.redirectTo).searchParams.get("code");
+		if (!authorizationCode) {
+			throw new Error("Expected authorization code in redirect URL");
+		}
+
+		// No clientSecret is presented — PKCE is the proof of possession.
+		const issued = await tokenService.exchange({
+			grantType: "authorization_code",
+			clientId: "client-app-id",
+			clientSecret: null,
+			code: authorizationCode,
+			redirectUri: "https://client.example.com/callback",
+			codeVerifier,
+		});
+
+		expect(issued.access_token).toMatch(/^at_[0-9a-f]{64}$/);
+		expect(issued.refresh_token).toMatch(/^rt_[0-9a-f]{64}$/);
+
+		// The refreshed access token is issued with no secret too.
+		const refreshed = await tokenService.exchange({
+			grantType: "refresh_token",
+			clientId: "client-app-id",
+			clientSecret: null,
+			refreshToken: issued.refresh_token,
+		});
+		expect(refreshed.access_token).toMatch(/^at_[0-9a-f]{64}$/);
+	});
+
+	it("public client cannot use the client_credentials grant", async () => {
+		const { tokenService } = buildHarness({ tokenEndpointAuthMethod: "none" });
+
+		await expect(
+			tokenService.exchange({
+				grantType: "client_credentials",
+				clientId: "client-app-id",
+				clientSecret: null,
+				scope: "read:users",
+			})
+		).rejects.toEqual(
+			new OAuthServiceError(
+				"unauthorized_client",
+				"Public clients cannot use the client_credentials grant.",
+				400
+			)
 		);
 	});
 

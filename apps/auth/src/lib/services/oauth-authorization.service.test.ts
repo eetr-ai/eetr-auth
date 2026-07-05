@@ -75,6 +75,8 @@ function makeClient(overrides?: Partial<Client>): Client {
 		createdBy: "user-1",
 		expiresAt: null,
 		name: "Test Client",
+		tokenEndpointAuthMethod: "client_secret_basic",
+		isDynamic: false,
 		...overrides,
 	};
 }

@@ -171,7 +171,7 @@ export class OauthTokenService {
 
 	private async authenticateClient(clientId: string | null, clientSecret: string | null) {
 		const t0 = Date.now();
-		if (!clientId || !clientSecret) {
+		if (!clientId) {
 			throw new OAuthServiceError("invalid_client", "Missing client credentials.", 401);
 		}
 		const client = await this.clientRepo.getByClientIdentifier(clientId);
@@ -179,14 +179,23 @@ export class OauthTokenService {
 		if (!client) {
 			throw new OAuthServiceError("invalid_client", "Invalid client credentials.", 401);
 		}
-		const env = this.env as unknown as Record<string, unknown>;
-		const hmacKey = resolveHmacKey(env);
-		const v = await verifyClientSecretAgainstStored(clientSecret, client.clientSecret, hmacKey);
-		if (!v.ok) {
-			throw new OAuthServiceError("invalid_client", "Invalid client credentials.", 401);
-		}
-		if (v.upgradeToStored) {
-			await this.clientRepo.updateSecret(client.id, v.upgradeToStored);
+		// Public (PKCE-only) clients (RFC 7591 token_endpoint_auth_method="none") do not
+		// authenticate with a secret; the authorization_code grant's PKCE code_verifier is
+		// the proof of possession. Any secret presented is ignored. Confidential clients
+		// keep the mandatory secret check unchanged.
+		if (client.tokenEndpointAuthMethod !== "none") {
+			if (!clientSecret) {
+				throw new OAuthServiceError("invalid_client", "Missing client credentials.", 401);
+			}
+			const env = this.env as unknown as Record<string, unknown>;
+			const hmacKey = resolveHmacKey(env);
+			const v = await verifyClientSecretAgainstStored(clientSecret, client.clientSecret, hmacKey);
+			if (!v.ok) {
+				throw new OAuthServiceError("invalid_client", "Invalid client credentials.", 401);
+			}
+			if (v.upgradeToStored) {
+				await this.clientRepo.updateSecret(client.id, v.upgradeToStored);
+			}
 		}
 		const nowIso = new Date().toISOString();
 		if (client.expiresAt && client.expiresAt <= nowIso) {
@@ -508,6 +517,14 @@ export class OauthTokenService {
 		const t0 = Date.now();
 		logTokenStep("client_credentials_start", t0);
 		const client = await this.authenticateClient(params.clientId, params.clientSecret);
+		// Public clients have no credentials to present for a two-legged grant.
+		if (client.tokenEndpointAuthMethod === "none") {
+			throw new OAuthServiceError(
+				"unauthorized_client",
+				"Public clients cannot use the client_credentials grant.",
+				400
+			);
+		}
 		const requestedScopes = parseScopeParam(params.scope);
 		let step = Date.now();
 		const allGrants = await this.tokenRepo.getClientScopeGrants(client.id);

@@ -6,6 +6,12 @@ export interface Client {
 	createdBy: string;
 	expiresAt: string | null;
 	name: string | null;
+	// RFC 7591 token_endpoint_auth_method: 'client_secret_basic'/'client_secret_post'
+	// (confidential, clientSecret is a real stored secret) or 'none' (public/PKCE-only,
+	// clientSecret is the empty sentinel and is never verified).
+	tokenEndpointAuthMethod: string;
+	// True for clients created via Dynamic Client Registration (RFC 7591).
+	isDynamic: boolean;
 }
 
 export interface ClientRow {
@@ -13,9 +19,11 @@ export interface ClientRow {
 	client_id: string;
 	client_secret: string;
 	environment_id: string;
-	created_by: string;
+	created_by: string | null;
 	expires_at: string | null;
 	name: string | null;
+	token_endpoint_auth_method: string;
+	is_dynamic: number;
 }
 
 export interface ClientWithDetails extends Client {

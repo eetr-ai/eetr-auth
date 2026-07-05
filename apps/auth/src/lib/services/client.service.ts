@@ -25,15 +25,24 @@ function generateClientSecret(): string {
 
 export interface CreateClientParams {
 	environmentId: string;
-	createdBy: string;
+	// The creating admin's user id, or null for dynamically registered (RFC 7591) clients
+	// which have no admin actor.
+	createdBy: string | null;
 	redirectUris?: string[];
 	scopeIds?: string[];
 	expiresAt?: string | null;
 	name?: string | null;
+	// RFC 7591 token_endpoint_auth_method. Defaults to 'client_secret_basic' (confidential,
+	// a secret is generated). 'none' creates a public/PKCE-only client with no secret.
+	tokenEndpointAuthMethod?: string;
+	// Mark this client as dynamically registered (RFC 7591).
+	isDynamic?: boolean;
 }
 
 export interface CreateClientResult {
 	client: ClientWithDetails;
+	// The plaintext secret, returned once at creation for confidential clients. Empty
+	// string for public (token_endpoint_auth_method='none') clients, which have no secret.
 	clientSecret: string;
 }
 
@@ -81,14 +90,22 @@ export class ClientService {
 	}
 
 	async create(params: CreateClientParams): Promise<CreateClientResult> {
-		const hmacKey = resolveHmacKey(this.env);
-		if (!hmacKey) {
-			throw new Error("HMAC_KEY is required to create OAuth clients (set in Wrangler secrets or .dev.vars).");
-		}
+		const tokenEndpointAuthMethod = params.tokenEndpointAuthMethod ?? "client_secret_basic";
+		const isPublic = tokenEndpointAuthMethod === "none";
 		const id = crypto.randomUUID();
 		const clientId = generateClientId(resolveClientKeyPrefix(this.env));
-		const clientSecret = generateClientSecret();
-		const clientSecretStored = await hashClientSecretForStorage(clientSecret, hmacKey);
+		// Public (PKCE-only) clients have no secret: store the empty sentinel and return "".
+		// Confidential clients generate a secret hashed at rest with the HMAC key.
+		let clientSecret = "";
+		let clientSecretStored = "";
+		if (!isPublic) {
+			const hmacKey = resolveHmacKey(this.env);
+			if (!hmacKey) {
+				throw new Error("HMAC_KEY is required to create OAuth clients (set in Wrangler secrets or .dev.vars).");
+			}
+			clientSecret = generateClientSecret();
+			clientSecretStored = await hashClientSecretForStorage(clientSecret, hmacKey);
+		}
 		await this.clientRepo.create({
 			id,
 			client_id: clientId,
@@ -97,13 +114,15 @@ export class ClientService {
 			created_by: params.createdBy,
 			expires_at: params.expiresAt ?? null,
 			name: params.name ?? null,
+			token_endpoint_auth_method: tokenEndpointAuthMethod,
+			is_dynamic: params.isDynamic ? 1 : 0,
 		});
 		const uris = (params.redirectUris ?? []).filter((u) => u?.trim());
 		const scopeIds = (params.scopeIds ?? []).filter(Boolean);
 		if (uris.length > 0) await this.clientRepo.setRedirectUris(id, uris);
 		if (scopeIds.length > 0) await this.clientRepo.setClientScopes(id, scopeIds);
 		const details = await this.getClientWithDetails(id);
-		// Actor is the creating admin; never log the secret.
+		// Actor is the creating admin, or null for dynamic (RFC 7591) registration. Never log the secret.
 		await this.adminAuditLogService.logAction({
 			actorUserId: params.createdBy,
 			action: AUDIT_ACTION.clientCreate,
@@ -115,6 +134,8 @@ export class ClientService {
 				environmentId: params.environmentId,
 				redirectUris: uris,
 				scopeIds,
+				tokenEndpointAuthMethod,
+				isDynamic: params.isDynamic ?? false,
 			},
 		});
 		return {

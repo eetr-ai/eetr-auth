@@ -12,6 +12,8 @@ function rowToClient(row: {
 	created_by_display: string;
 	expires_at: string | null;
 	name: string | null;
+	token_endpoint_auth_method: string;
+	is_dynamic: number;
 }): Client {
 	return {
 		id: row.id,
@@ -21,6 +23,8 @@ function rowToClient(row: {
 		createdBy: row.created_by_display,
 		expiresAt: row.expires_at,
 		name: row.name,
+		tokenEndpointAuthMethod: row.token_endpoint_auth_method,
+		isDynamic: row.is_dynamic === 1,
 	};
 }
 
@@ -33,7 +37,7 @@ export class ClientRepositoryD1 implements ClientRepository {
 				? [
 					"SELECT c.id, c.client_id, c.client_secret, c.environment_id,",
 					"COALESCE(u.username, c.created_by, '(deleted user)') AS created_by_display,",
-					"c.expires_at, c.name",
+					"c.expires_at, c.name, c.token_endpoint_auth_method, c.is_dynamic",
 					"FROM clients c",
 					"LEFT JOIN users u ON u.id = c.created_by",
 					"WHERE c.environment_id = ?",
@@ -42,7 +46,7 @@ export class ClientRepositoryD1 implements ClientRepository {
 				: [
 					"SELECT c.id, c.client_id, c.client_secret, c.environment_id,",
 					"COALESCE(u.username, c.created_by, '(deleted user)') AS created_by_display,",
-					"c.expires_at, c.name",
+					"c.expires_at, c.name, c.token_endpoint_auth_method, c.is_dynamic",
 					"FROM clients c",
 					"LEFT JOIN users u ON u.id = c.created_by",
 					"ORDER BY c.client_id",
@@ -59,6 +63,8 @@ export class ClientRepositoryD1 implements ClientRepository {
 			created_by_display: string;
 			expires_at: string | null;
 			name: string | null;
+			token_endpoint_auth_method: string;
+			is_dynamic: number;
 		}>();
 		return (result.results ?? []).map(rowToClient);
 	}
@@ -69,7 +75,7 @@ export class ClientRepositoryD1 implements ClientRepository {
 				[
 					"SELECT c.id, c.client_id, c.client_secret, c.environment_id,",
 					"COALESCE(u.username, c.created_by, '(deleted user)') AS created_by_display,",
-					"c.expires_at, c.name",
+					"c.expires_at, c.name, c.token_endpoint_auth_method, c.is_dynamic",
 					"FROM clients c",
 					"LEFT JOIN users u ON u.id = c.created_by",
 					"WHERE c.id = ?",
@@ -84,6 +90,8 @@ export class ClientRepositoryD1 implements ClientRepository {
 				created_by_display: string;
 				expires_at: string | null;
 				name: string | null;
+				token_endpoint_auth_method: string;
+				is_dynamic: number;
 			}>();
 		return row ? rowToClient(row) : null;
 	}
@@ -94,7 +102,7 @@ export class ClientRepositoryD1 implements ClientRepository {
 				[
 					"SELECT c.id, c.client_id, c.client_secret, c.environment_id,",
 					"COALESCE(u.username, c.created_by, '(deleted user)') AS created_by_display,",
-					"c.expires_at, c.name",
+					"c.expires_at, c.name, c.token_endpoint_auth_method, c.is_dynamic",
 					"FROM clients c",
 					"LEFT JOIN users u ON u.id = c.created_by",
 					"WHERE c.client_id = ?",
@@ -109,6 +117,8 @@ export class ClientRepositoryD1 implements ClientRepository {
 				created_by_display: string;
 				expires_at: string | null;
 				name: string | null;
+				token_endpoint_auth_method: string;
+				is_dynamic: number;
 			}>();
 		return row ? rowToClient(row) : null;
 	}
@@ -116,7 +126,7 @@ export class ClientRepositoryD1 implements ClientRepository {
 	async create(row: ClientRow): Promise<void> {
 		await this.db
 			.prepare(
-				"INSERT INTO clients (id, client_id, client_secret, environment_id, created_by, expires_at, name) VALUES (?, ?, ?, ?, ?, ?, ?)"
+				"INSERT INTO clients (id, client_id, client_secret, environment_id, created_by, expires_at, name, token_endpoint_auth_method, is_dynamic) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
 			)
 			.bind(
 				row.id,
@@ -125,7 +135,9 @@ export class ClientRepositoryD1 implements ClientRepository {
 				row.environment_id,
 				row.created_by,
 				row.expires_at ?? null,
-				row.name ?? null
+				row.name ?? null,
+				row.token_endpoint_auth_method,
+				row.is_dynamic
 			)
 			.run();
 	}
