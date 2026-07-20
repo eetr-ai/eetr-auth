@@ -10,6 +10,7 @@
     "database",
     "client-library",
     "reference",
-    "contributing"
+    "contributing",
+    "license"
   ]
 }
