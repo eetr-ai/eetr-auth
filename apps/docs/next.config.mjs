@@ -15,6 +15,9 @@ const withMDX = createMDX();
 const config = {
   output: 'export',
   reactStrictMode: true,
+  // Emit directory-style pages (docs/index.html) so GitHub Pages serves both
+  // `/docs` and `/docs/` — a plain static export only produces `docs.html`.
+  trailingSlash: true,
   basePath,
   images: { unoptimized: true },
   // Exposed to the client so the static Orama search index is fetched from the
