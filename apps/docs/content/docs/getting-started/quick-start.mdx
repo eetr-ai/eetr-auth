@@ -1,0 +1,73 @@
+---
+title: Quick start
+description: The condensed happy path from clone to a running server and first login.
+icon: Rocket
+---
+
+This is the fast path. For the authoritative walkthrough with checkpoints and troubleshooting,
+see [Deployment](/docs/getting-started/deployment).
+
+## 1. Clone and install
+
+```bash
+git clone https://github.com/eetr-ai/eetr-auth.git
+cd eetr-auth
+npm install
+```
+
+## 2. Authenticate to Cloudflare
+
+Terraform and Wrangler both read a Cloudflare **API token** from the environment. Create a
+**Custom token** scoped to your account with **D1 → Edit**, **Workers R2 Storage → Edit**,
+**Workers Scripts → Edit**, and (optional) **Account Settings → Read**, then export it:
+
+```bash
+export CLOUDFLARE_API_TOKEN=your_token_here
+export CLOUDFLARE_ACCOUNT_ID=your_account_id   # same as account_id in terraform.tfvars
+```
+
+<Callout title="Keep both exported">
+  Terraform, `setup:remote`, and Wrangler all reuse these. Set `CLOUDFLARE_ACCOUNT_ID` if your
+  token can access more than one account, or Wrangler may deploy to the wrong one (a `code: 10000`
+  error whose URL shows an unexpected account id).
+</Callout>
+
+## 3. Provision infrastructure
+
+Fill in `infra/terraform/terraform.tfvars` (see [Deployment](/docs/getting-started/deployment#configure-terraform-variables)
+for each variable), then:
+
+```bash
+cd infra/terraform && terraform init && terraform apply && cd -
+```
+
+## 4. Deploy the hasher, then run automated setup
+
+`argon-hasher` must be deployed **before** the auth Worker:
+
+```bash
+npm run deploy:argon-hasher
+npm run setup:remote
+```
+
+`npm run setup:remote` renders the Wrangler config, provisions secrets and JWT/JWKS material,
+applies the fresh database schema, deploys the auth Worker, and seeds the bootstrap admin
+(`admin` / `admin`).
+
+## 5. Harden the bootstrap admin
+
+<Callout type="error" title="Security-critical — do this immediately">
+  The clean install seeds a well-known `admin` / `admin` account. After first login, either create
+  a real admin and delete the bootstrap account, or change its password and email. Never leave the
+  default credentials in place.
+</Callout>
+
+## 6. Smoke test
+
+```bash
+curl https://auth.yourdomain.com/api/health
+# { "status": "ok" }
+```
+
+Then sign in at your auth hostname and run `npm run verify:remote` to confirm the JWT signing key,
+published JWKS, seeded OIDC scopes, and secrets are all consistent.

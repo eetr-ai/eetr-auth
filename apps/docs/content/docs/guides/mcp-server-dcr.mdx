@@ -1,0 +1,165 @@
+---
+title: Set up an MCP server with DCR
+description: Let MCP clients like Claude and ChatGPT connect to your protected resource by self-registering as public, PKCE-only OAuth clients via RFC 7591 Dynamic Client Registration.
+icon: Plug
+---
+
+Model Context Protocol (MCP) clients — **Claude**, **ChatGPT**, and others — connect to a
+protected MCP server using OAuth. Rather than an operator hand-creating a client for every user,
+these clients **self-register** at runtime using **RFC 7591 Dynamic Client Registration (DCR)**.
+`eetr-auth` supports this out of the box: DCR-registered clients are **public** (PKCE-only), and
+tokens can be **audience-bound to your MCP server** via resource indicators.
+
+<Callout title="How the pieces fit">
+  Your MCP server is the **protected resource**. `eetr-auth` is the **authorization server**. The MCP
+  client discovers `eetr-auth`, registers itself with `POST /api/register`, runs Authorization Code +
+  PKCE, and receives an access token whose `aud` is your MCP server's URL.
+</Callout>
+
+## Prerequisites
+
+DCR must be enabled on the server. Two environment variables control it (see
+[Configuration](/docs/reference/configuration)):
+
+| Variable | Purpose |
+|---|---|
+| `DCR_ENVIRONMENT_ID` | **Required.** The environment new dynamic clients are placed in. Leave unset to disable DCR. |
+| `DCR_ENABLED` | Set to `false` to hard-disable even when `DCR_ENVIRONMENT_ID` is set. |
+| `DCR_RATE_LIMIT_PER_DAY` | Per-IP daily registration cap (default 10). |
+
+<Callout type="warn" title="Grant the environment to your users">
+  Point `DCR_ENVIRONMENT_ID` at an environment whose intended users are already granted access (via
+  `users_environments`). `/authorize` gates on that access — if the user isn't granted the DCR
+  environment, the authorization step rejects them even though registration succeeded.
+</Callout>
+
+## Step 1 — The MCP client discovers the server
+
+MCP clients read the standard discovery documents to find the endpoints:
+
+```bash
+curl https://auth.yourdomain.com/.well-known/oauth-authorization-server
+```
+
+The response advertises `registration_endpoint`, `authorization_endpoint`, `token_endpoint`, and
+`resource_parameter_supported: true` — everything the client needs.
+
+## Step 2 — The client self-registers (RFC 7591)
+
+The client POSTs its metadata to the `registration_endpoint`. A minimal public-client registration:
+
+```bash
+curl -X POST https://auth.yourdomain.com/api/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "client_name": "Claude (MCP)",
+    "redirect_uris": ["https://claude.ai/api/mcp/auth_callback"],
+    "token_endpoint_auth_method": "none",
+    "grant_types": ["authorization_code", "refresh_token"],
+    "response_types": ["code"],
+    "scope": "openid profile email"
+  }'
+```
+
+Response (public client — **no secret**):
+
+```json
+{
+  "client_id": "eetr_ab12cd...",
+  "client_id_issued_at": 1737331200,
+  "redirect_uris": ["https://claude.ai/api/mcp/auth_callback"],
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none",
+  "scope": "openid profile email"
+}
+```
+
+<Callout type="info" title="Registration rules">
+  `redirect_uris` is required and must be **exact-match** `https` (or `http://localhost` for local
+  clients) — no wildcards. `token_endpoint_auth_method` defaults to `none` (public/PKCE). Requesting
+  an unknown scope, a bad redirect URI, or exceeding the daily rate limit returns
+  `invalid_client_metadata`, `invalid_redirect_uri`, or `too_many_requests` respectively.
+</Callout>
+
+### Or register with the client library
+
+If you are building the client side in TypeScript, use
+[`registerClient`](/docs/client-library):
+
+```ts
+import { fetchOAuthMetadata, registerClient } from "@eetr/eetr-auth-client";
+
+const metadata = await fetchOAuthMetadata("https://auth.yourdomain.com");
+
+const client = await registerClient(
+  {
+    clientName: "My MCP client",
+    redirectUris: ["https://app.example.com/mcp/callback"],
+    // tokenEndpointAuthMethod defaults to "none" (public/PKCE)
+    scopes: ["openid", "profile", "email"],
+  },
+  { registrationEndpoint: metadata.registration_endpoint! }
+);
+// client.client_id — no secret for public clients
+```
+
+## Step 3 — Authorization Code + PKCE with resource binding
+
+The client runs the standard Authorization Code + PKCE flow, adding a **`resource`** parameter so the
+issued token is bound to your MCP server's audience (RFC 8707):
+
+```
+GET https://auth.yourdomain.com/api/authorize
+  ?response_type=code
+  &client_id=eetr_ab12cd...
+  &redirect_uri=https://claude.ai/api/mcp/auth_callback
+  &code_challenge=<S256 challenge>
+  &code_challenge_method=S256
+  &scope=openid profile email
+  &resource=https://mcp.yourdomain.com
+```
+
+At the token endpoint, the client sends the `code_verifier` (its proof of possession — there is no
+secret) and may repeat `resource`:
+
+```bash
+curl -X POST https://auth.yourdomain.com/api/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=authorization_code" \
+  -d "client_id=eetr_ab12cd..." \
+  -d "code=<authorization_code>" \
+  -d "code_verifier=<pkce_verifier>" \
+  -d "redirect_uri=https://claude.ai/api/mcp/auth_callback" \
+  -d "resource=https://mcp.yourdomain.com"
+```
+
+The returned access token's `aud` is `https://mcp.yourdomain.com`, and the binding survives refresh
+rotation.
+
+## Step 4 — Your MCP server validates the token
+
+Your MCP server verifies the bearer token against the JWKS and checks the audience is itself:
+
+```ts
+import { validateJwt } from "@eetr/eetr-auth-client";
+
+const payload = await validateJwt(accessToken, "https://cdn.yourdomain.com/jwks.json", {
+  issuer: "https://auth.yourdomain.com",
+  audience: "https://mcp.yourdomain.com", // reject tokens minted for another resource
+});
+```
+
+Alternatively, call the [introspection endpoint](/docs/features/tokens#introspection) with your
+resource URL so a token minted for another resource is rejected server-side.
+
+## Operating DCR safely
+
+- **Rate limits:** every registration attempt (including rejected ones) counts toward
+  `DCR_RATE_LIMIT_PER_DAY` per IP. Counters are DB-backed and pruned by the daily cron.
+- **WAF:** add a Cloudflare rate-limiting rule on `POST /api/register` as defense-in-depth — see the
+  [WAF guide](/docs/guides/waf-rate-limiting).
+- **Visibility:** dynamic clients show a **Dynamic** badge in the admin **Clients** list, with a
+  registration-type filter, so you can audit what has self-registered.
+- **Disable quickly:** set `DCR_ENABLED=false` (or unset `DCR_ENVIRONMENT_ID`) to turn registration
+  off without touching anything else.

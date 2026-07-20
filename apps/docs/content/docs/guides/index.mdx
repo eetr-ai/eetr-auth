@@ -1,0 +1,24 @@
+---
+title: Overview
+description: Practical, task-focused guides for operating and integrating with eetr-auth.
+icon: BookOpen
+---
+
+Task-focused walkthroughs for the things people actually set up.
+
+<Cards>
+  <Card icon={<Plug className="text-amber-500" />} title="MCP server with DCR" href="/docs/guides/mcp-server-dcr">
+    Let MCP clients (Claude, ChatGPT) self-register as public, PKCE-only clients via RFC 7591 Dynamic
+    Client Registration, with resource-indicator audience binding.
+  </Card>
+  <Card icon={<Gauge className="text-rose-500" />} title="WAF & rate limiting" href="/docs/guides/waf-rate-limiting">
+    Put the token, auth, and registration endpoints behind Cloudflare's WAF and rate-limiting rules as
+    defense-in-depth.
+  </Card>
+  <Card icon={<Smartphone className="text-emerald-500" />} title="MFA & TOTP" href="/docs/guides/mfa-totp">
+    Enable site-wide email OTP and let users enroll authenticator apps (RFC 6238 TOTP).
+  </Card>
+  <Card icon={<Globe className="text-sky-500" />} title="SPA / public client" href="/docs/guides/spa-public-client">
+    Integrate a browser single-page app using a public client and PKCE.
+  </Card>
+</Cards>

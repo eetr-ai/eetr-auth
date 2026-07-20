@@ -1,0 +1,101 @@
+---
+title: Authentication
+description: Password authentication with Argon2id, password policies, passkeys (WebAuthn), and multi-factor authentication.
+icon: ScanFace
+---
+
+The sign-in experience supports passwords and passkeys, with MFA layered on top.
+
+<AppShot
+  src="sign-in.png"
+  alt="eetr-auth sign-in page with username and password fields and a 'Sign in with passkey' button"
+  caption="The sign-in page — password or passkey, branded with your site title and logo."
+/>
+
+## Password authentication
+
+- Passwords are hashed with **Argon2id** via the [`argon-hasher`](/docs/architecture/argon-hasher)
+  Cloudflare Worker.
+- Configurable fallback hash method via the `HASH_METHOD` environment variable (`argon` by default;
+  `md5` for local development).
+- **Password reset** via a time-limited JWT token sent to email — single-use and DB-backed.
+  Requesting a new reset purges earlier pending links, and any password change (admin, self-service,
+  or another reset) invalidates outstanding reset links.
+
+## Password policies
+
+Per-environment password policies are managed from **Setup → Password policies**.
+
+- A policy is a named rule set: an **enabled** flag, complexity rules (min length, optional max
+  length, a **minimum count** of uppercase / lowercase / number / special characters — `0` = not
+  required, so a value of `2` demands at least two of that class — and "must not contain the username
+  or email local-part"), and a **max password age** (days; `0` = never expires).
+- A policy can be assigned to **one or more environments**, but each environment holds **at most one**
+  policy (a `UNIQUE` constraint enforces this).
+- **Admins** don't belong to an environment, so a single **admin sign-in policy** is selected
+  globally and stored on `site_settings` (`admin_password_policy_id`). `None` enforces no policy for
+  admins.
+
+<Callout title="Max-age enforcement at login">
+  When a user signs in, the applicable max age is applied — for admins, the admin sign-in policy; for
+  everyone else, the strictest enabled max age across the environments they are granted. If their
+  password is older, sign-in is halted **before MFA** and a reset is forced (a reset link is emailed
+  when delivery is configured, otherwise the user is directed to an administrator). Users whose
+  password change predates this feature are never expired until their next change.
+</Callout>
+
+<AppShot
+  src="password-policies.png"
+  alt="Setup → Password policies editor with min length, character-class minimums, max age, and per-environment assignment"
+  caption="Setup → Password policies — complexity rules, max age, and per-environment assignment (plus the global admin sign-in policy)."
+/>
+
+## Passkeys (WebAuthn)
+
+- Register and sign in with device passkeys — Touch ID, Face ID, hardware keys.
+- Multi-device credential support.
+- Domain-based authenticator assertion with parent-domain fallback.
+- Check whether a user has a registered passkey via API.
+
+<Mermaid chart={`sequenceDiagram
+    participant Browser as Browser
+    participant Auth as apps/auth
+    Browser->>Auth: POST /api/auth/passkey/challenge
+    Auth-->>Browser: { challenge }
+    Browser->>Browser: navigator.credentials.get() (assertion)
+    Browser->>Auth: POST /api/auth/passkey/verify (assertion, challenge)
+    Auth-->>Browser: Session cookie set → redirect
+`} />
+
+Passkeys are self-service: users enroll, rename, remove, and verify-on-this-device from account
+settings. The [client library](/docs/client-library#passkey-management) can list/rename/remove
+passkeys, but creating/authenticating a passkey is a browser WebAuthn ceremony.
+
+## Multi-factor authentication (MFA)
+
+Two MFA methods are supported, chosen per user at sign-in by availability:
+
+<Cards>
+  <Card icon={<Mail className="text-sky-500" />} title="Email OTP (site-wide)">
+    When an admin enables MFA, every user with an email receives a server-generated 6-digit code by
+    email. Attempt-capped via `MFA_OTP_MAX_ATTEMPTS` (default 5); challenge-response with short-lived
+    tokens.
+  </Card>
+  <Card icon={<Smartphone className="text-emerald-500" />} title="Authenticator app / TOTP (per-user)">
+    A user enrolls an RFC 6238 authenticator (e.g. Google Authenticator) from account settings. The
+    base32 secret is stored encrypted at rest (AES-GCM, key derived from `AUTH_SECRET`). Enrolling
+    turns on MFA for that user even when the site-wide email toggle is off.
+  </Card>
+</Cards>
+
+At sign-in, the available methods are computed for the user: with **one** method it is used
+directly; with **both** (site email MFA on *and* an authenticator enrolled) the user picks at a
+chooser and can fall back to an email code. The email code is only sent once email is actually
+chosen.
+
+See the [MFA & TOTP guide](/docs/guides/mfa-totp) for enabling and operating MFA.
+
+## Email verification
+
+- New-user email verification flow with resend support.
+- The verification challenge is stored in D1 with an expiry.

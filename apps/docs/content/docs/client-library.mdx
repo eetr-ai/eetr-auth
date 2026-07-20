@@ -1,0 +1,181 @@
+---
+title: Client library
+description: "@eetr/eetr-auth-client — a typed, fetch-based TypeScript client for discovery, tokens, introspection, UserInfo, admin, and passkey management."
+icon: Package
+---
+
+`@eetr/eetr-auth-client` wraps the server's token, introspection, UserInfo, admin, and
+passkey-management endpoints, plus helpers for OIDC discovery and JWT verification. Everything is
+`fetch`-based with full type definitions.
+
+```bash
+npm install @eetr/eetr-auth-client
+```
+
+<Callout type="info" title="Requirements">
+  Node.js 18+ (relies on global `fetch`; `decodeJwtPayload` uses `Buffer`). `jose` is the only runtime
+  dependency. The package is ESM-only and works in the browser, Node.js, and Cloudflare Workers.
+</Callout>
+
+## Quick start
+
+```ts
+import {
+  fetchOIDCDiscovery,
+  exchangeToken,
+  validateJwt,
+  getUserInfo,
+} from "@eetr/eetr-auth-client";
+
+const ISSUER = "https://auth.example.com";
+
+const discovery = await fetchOIDCDiscovery(ISSUER);
+
+const tokens = await exchangeToken(
+  {
+    grantType: "authorization_code",
+    clientId: "my-client",
+    code: authorizationCode,
+    redirectUri: "https://app.example.com/callback",
+    codeVerifier,
+  },
+  { tokenEndpoint: discovery.token_endpoint }
+);
+
+const payload = await validateJwt(tokens.access_token, discovery.jwks_uri, {
+  issuer: ISSUER,
+  audience: "my-client",
+});
+
+const user = await getUserInfo(tokens.access_token, discovery.userinfo_endpoint);
+```
+
+## Capabilities
+
+| Area | Functions |
+|---|---|
+| **Discovery** | `fetchOIDCDiscovery`, `fetchOAuthMetadata` |
+| **Authorization URL** | `buildAuthorizationUrl` (PKCE, `scopes[]`, `nonce`) |
+| **Token exchange** | `exchangeToken` (all grant types) |
+| **Token lifecycle** | `TokenManager` (auto-refresh with expiry skew) |
+| **Dynamic Client Registration** | `registerClient` (RFC 7591) |
+| **Introspection** | `introspectToken` (optional audience binding) |
+| **JWT** | `validateJwt`, `validateIdToken`, `decodeJwtPayload` |
+| **UserInfo** | `getUserInfo`, `toUserProfile` |
+| **Admin API** | `getAdminUser`, `createAdminUser`, `updateAdminUser`, `deleteAdminUser` |
+| **Passkeys** | `listPasskeys`, `renamePasskey`, `removePasskey` |
+| **Scopes** | `OIDCScope`, `STANDARD_OIDC_SCOPES`, `resolveScopeParam` |
+
+## Authorization URL & scopes
+
+`buildAuthorizationUrl` builds the Authorization Code + PKCE request URL. `codeChallenge` is required
+(S256 only). Prefer the `OIDCScope` constants and the `scopes` array so a typo can't silently drop
+`openid`:
+
+```ts
+import { buildAuthorizationUrl, OIDCScope } from "@eetr/eetr-auth-client";
+
+const url = buildAuthorizationUrl(discovery.authorization_endpoint, {
+  clientId: "my-client",
+  redirectUri: "https://app.example.com/callback",
+  codeChallenge,
+  scopes: [OIDCScope.OpenId, OIDCScope.Profile, OIDCScope.Email],
+  state,
+  nonce,
+});
+```
+
+<Callout type="warn" title="Scopes must be granted">
+  The client must be **granted** these scopes by an admin. Requesting a scope the client wasn't
+  granted fails with `invalid_scope`.
+</Callout>
+
+## TokenManager
+
+Caches an access token and transparently refreshes it (30-second expiry skew) when a refresh token is
+available:
+
+```ts
+import { TokenManager } from "@eetr/eetr-auth-client";
+
+const manager = new TokenManager({
+  issuerUrl: ISSUER,
+  clientId: "my-client",
+  clientSecret: process.env.CLIENT_SECRET, // optional for public clients
+  tokenEndpoint: discovery.token_endpoint,
+});
+
+manager.setTokens(tokens);
+const accessToken = await manager.getAccessToken(); // throws `no_token` if nothing to refresh
+```
+
+## JWT verification
+
+```ts
+validateJwt(token, jwksUri, options?)       // verify signature + issuer/audience/expiry
+validateIdToken(token, jwksUri, options?)   // same, plus nonce check → typed IDTokenClaims
+decodeJwtPayload(token)                      // decode WITHOUT verifying — inspect claims only
+```
+
+`validateJwt` verifies the signature against the server's JWKS (remote keys cached per `jwksUri`).
+`validateIdToken` additionally checks the `nonce` you passed to the authorization endpoint, throwing
+`id_token nonce mismatch` on a mismatch.
+
+## Dynamic Client Registration
+
+```ts
+import { registerClient } from "@eetr/eetr-auth-client";
+
+const client = await registerClient(
+  {
+    clientName: "My app",
+    redirectUris: ["https://app.example.com/callback"],
+    // tokenEndpointAuthMethod defaults to "none" (public/PKCE)
+    scopes: ["openid", "profile", "email"],
+  },
+  { registrationEndpoint: discovery.registration_endpoint! }
+);
+```
+
+See the [MCP + DCR guide](/docs/guides/mcp-server-dcr) for the end-to-end flow.
+
+## Introspection & UserInfo
+
+`introspectToken` asks the server whether a token is active within a given environment (endpoint is
+`token_introspection_endpoint`, default `${ISSUER}/api/token/validate`). `getUserInfo` returns the
+OIDC UserInfo claims — it **requires the `openid` scope**; a valid token that lacks it yields a `403`
+surfaced as `err.isInsufficientScope`:
+
+```ts
+try {
+  const info = await getUserInfo(accessToken, discovery.userinfo_endpoint);
+  const profile = toUserProfile(info, decodeJwtPayload(tokens.id_token!));
+} catch (err) {
+  if (err instanceof OAuthError && err.isInsufficientScope) {
+    // token valid but missing `openid` — re-authorize with it
+  }
+}
+```
+
+## Error handling
+
+API helpers throw `OAuthError` on non-2xx responses, exposing the server's machine-readable `code`,
+the HTTP `status`, the server's `description` (`error_description`), and an `isInsufficientScope`
+convenience for the `/userinfo` 403 case:
+
+```ts
+import { OAuthError } from "@eetr/eetr-auth-client";
+
+try {
+  await exchangeToken(params, config);
+} catch (err) {
+  if (err instanceof OAuthError) {
+    console.error(err.code, err.message); // e.g. "invalid_grant"
+  }
+}
+```
+
+<Callout type="info" title="Keep the client in sync with the API">
+  When the server's API changes, mirror it in `@eetr/eetr-auth-client` so consumers stay typed and
+  correct.
+</Callout>

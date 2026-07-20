@@ -41,7 +41,7 @@ testing may require HTTPS — expose the dev server through a tunnel with a vali
 ## Documentation
 
 - **API reference** — interactive docs at `GET /api/docs`; OpenAPI document at `GET /api/openapi`.
-- **Features** (grants, tokens, passkeys, admin API, site URL) — [../../docs/FEATURES.md](../../docs/FEATURES.md).
-- **Architecture** (services, bindings, flows) — [../../docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md).
-- **Deployment & fresh install** — [../../docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md).
+- **Features** (grants, tokens, passkeys, admin API, site URL) — [../docs/content/docs/features/](../docs/content/docs/features/).
+- **Architecture** (services, bindings, flows) — [../docs/content/docs/architecture/](../docs/content/docs/architecture/).
+- **Deployment & fresh install** — [../docs/content/docs/getting-started/deployment.mdx](../docs/content/docs/getting-started/deployment.mdx).
 - **Database schema & admin user commands** — [db/README.md](db/README.md).

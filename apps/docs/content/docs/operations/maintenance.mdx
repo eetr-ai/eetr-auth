@@ -1,0 +1,57 @@
+---
+title: Maintenance & monitoring
+description: The daily cleanup cron, the verify checks, and observability for a running deployment.
+icon: Timer
+---
+
+## Daily cleanup cron
+
+A Cloudflare Cron Trigger runs daily (`0 0 * * *`) and:
+
+- removes expired tokens, authorization codes, and challenges from D1, and
+- prunes the DB-backed DCR rate-limit counters.
+
+No action is required — it's declared in the Worker config and runs automatically. You can confirm it
+under **Workers → eetr-auth → Triggers** in the dashboard.
+
+## Consistency checks
+
+Run these after any key rotation or schema migration:
+
+```bash
+npm run verify          # local environment
+npm run verify:remote   # deployed environment
+```
+
+They re-check that the JWT signing key, the published JWKS, the seeded OIDC scopes, and the required
+secrets are all consistent. A non-zero exit means something is inconsistent — fix it before relying on
+the deployment.
+
+<Callout type="info" title="Missing openid scope?">
+  If `verify:remote` reports `scopes_supported` is missing `openid`, the OIDC scopes aren't seeded —
+  apply the schema/patches with `npm run db:migrate:remote` (see [Database](/docs/database)).
+</Callout>
+
+## Config drift
+
+`npm run infra:prepare-config` is safe to rerun whenever Terraform outputs change — it re-exports the
+outputs and re-renders `wrangler.generated.jsonc`.
+
+## Observability
+
+- **Workers observability** is enabled on both Workers (`observability.enabled = true`), so logs and
+  metrics flow to the Cloudflare dashboard (**Workers & Pages → the Worker → Observability**).
+- **Token activity** is recorded in the `token_activity_log` table on every token use; the admin
+  dashboard includes a token activity log viewer.
+- **Hasher timing:** the `argon-hasher` Worker logs only Argon2 wall time (e.g. `argon2 hash:
+  42.30ms`) — never passwords or hashes. Tail it with `npx wrangler tail` or view it in Observability.
+
+## Health check
+
+```bash
+curl https://auth.yourdomain.com/api/health
+# { "status": "ok" }
+```
+
+Point your uptime monitor at `/api/health` — it's intended to stay public and unthrottled (see the
+[WAF guide](/docs/guides/waf-rate-limiting#leave-these-open)).

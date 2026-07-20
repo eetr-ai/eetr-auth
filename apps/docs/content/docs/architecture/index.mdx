@@ -1,0 +1,143 @@
+---
+title: System overview
+description: Packages, layers, Cloudflare bindings, and the authentication flows that make up eetr-auth.
+icon: Building2
+---
+
+`eetr-auth` is a **Cloudflare-native OAuth 2.1 + OpenID Connect authorization server** packaged as
+an npm monorepo. It is designed to run entirely on Cloudflare's edge platform with no traditional
+server infrastructure.
+
+<Mermaid chart={`graph TB
+    subgraph CF["Cloudflare Edge"]
+        subgraph AUTH["apps/auth — Next.js 16 (OpenNext) Worker"]
+            API["API Routes<br/>/token · /authorize · /userinfo · /register"]
+            UI["Admin Dashboard"]
+            SVC["Service Layer<br/>OAuth · Tokens · Users · Passkeys · Email"]
+            REPO["Repository Layer (D1 / SQL)"]
+            API --> SVC
+            UI --> SVC
+            SVC --> REPO
+        end
+        HASHER["apps/argon-hasher<br/>Rust / Wasm Worker<br/>POST /hash · POST /verify"]
+        D1[("Cloudflare D1<br/>SQLite")]
+        R2[("Cloudflare R2<br/>JWKS · avatars · logo")]
+        REPO --> D1
+        SVC -->|ARGON_HASHER binding| HASHER
+        SVC --> R2
+    end
+    CLIENT["packages/eetr-auth-client<br/>@eetr/eetr-auth-client"]
+    APP["Your Application"] -->|uses| CLIENT
+    CLIENT -->|HTTP| API
+`} />
+
+## Monorepo packages
+
+<Cards>
+  <Card icon={<ShieldCheck className="text-orange-500" />} title="apps/auth">
+    The core OAuth 2.1 / OIDC server. Next.js 16 (App Router) + React 19, deployed via OpenNext to
+    Cloudflare Workers. D1 for persistence, R2 for object storage, NextAuth.js v5 for admin
+    sessions.
+  </Card>
+  <Card icon={<Cpu className="text-violet-500" />} title="apps/argon-hasher" href="/docs/architecture/argon-hasher">
+    An internal-only Rust/Wasm Worker implementing Argon2id hashing, reachable only via service
+    binding. Keeps expensive hashing off the auth isolate's CPU budget.
+  </Card>
+  <Card icon={<Package className="text-rose-500" />} title="packages/eetr-auth-client" href="/docs/client-library">
+    A published TypeScript library for consuming the server — discovery, token management,
+    introspection, and JWT validation. `jose` is its only runtime dependency.
+  </Card>
+</Cards>
+
+## Layered internal architecture
+
+`apps/auth` keeps a strict separation between entry points, business logic, and persistence:
+
+```
+src/
+├── app/                    # Next.js App Router
+│   ├── api/                # REST API routes (OAuth, users, admin)
+│   └── (auth|admin)/       # UI pages (login, dashboard)
+└── lib/
+    ├── services/           # Business logic
+    ├── repositories/       # Data access layer (D1 implementations)
+    ├── auth/               # Auth utilities (JWT, HMAC, cookies)
+    ├── config/             # Runtime config readers
+    ├── context/            # Dependency injection registry
+    ├── crypto/             # Cryptographic primitives
+    └── db/                 # D1 connection helper
+```
+
+Routes and server actions only wire context and call services; services hold all business logic and
+depend on repositories; repositories do persistence only. The full rules — including how to add new
+code — are in [Layer conventions](/docs/contributing/layer-conventions).
+
+## Cloudflare bindings
+
+| Binding | Type | Purpose |
+|---|---|---|
+| `DB` | D1 Database | All persistent data (users, tokens, clients, etc.) |
+| `AUTH_ASSETS` | R2 Bucket | User avatars, site logo, JWKS JSON |
+| `IMAGES` | Images API | Cloudflare image optimization |
+| `ASSETS` | Static Assets | OpenNext-compiled static files |
+| `WORKER_SELF_REFERENCE` | Service Binding | Internal self-calls for routing/caching |
+| `ARGON_HASHER` | Service Binding | Password hash/verify operations |
+
+## Authentication flows
+
+### Authorization Code + PKCE (S256)
+
+<Mermaid chart={`sequenceDiagram
+    participant App as Client App
+    participant Auth as apps/auth
+    participant Hasher as argon-hasher
+    participant D1 as Cloudflare D1
+    App->>Auth: GET /api/authorize (client_id, code_challenge, scope)
+    Auth->>App: Redirect to /login
+    App->>Auth: POST /login (username, password)
+    Auth->>Hasher: POST /verify (password, hash) [service binding]
+    Hasher-->>Auth: { valid: true }
+    Auth->>D1: Create authorization_code
+    Auth->>App: Redirect to callback?code=xxx
+    App->>Auth: POST /api/token (code, code_verifier)
+    Auth->>D1: Validate code + PKCE verifier, create tokens
+    Auth-->>App: { access_token, refresh_token, id_token }
+`} />
+
+### Token refresh (rotation)
+
+<Mermaid chart={`sequenceDiagram
+    participant App as Client App
+    participant Auth as apps/auth
+    participant D1 as Cloudflare D1
+    App->>Auth: POST /api/token (grant_type=refresh_token)
+    Auth->>D1: Validate refresh_token (not expired, not used)
+    Auth->>D1: Rotate — invalidate old, create new token pair
+    Auth-->>App: { access_token, refresh_token }
+`} />
+
+### Client credentials
+
+<Mermaid chart={`sequenceDiagram
+    participant Svc as Backend Service
+    participant Auth as apps/auth
+    participant D1 as Cloudflare D1
+    Svc->>Auth: POST /api/token (client_credentials, client_id, secret, scope)
+    Auth->>D1: Validate client + secret hash, check scope grants
+    Auth->>D1: Create access_token
+    Auth-->>Svc: { access_token }
+`} />
+
+## Infrastructure & deployment order
+
+Terraform provisions D1 + R2 and emits outputs that are rendered into the gitignored
+`wrangler.generated.jsonc`. Deployment always follows this order:
+
+<Mermaid chart={`flowchart TD
+    A["1 · terraform apply<br/>provision D1 + R2"] --> B
+    B["2 · deploy argon-hasher"] --> C
+    C["3 · npm run setup:remote<br/>render config · secrets + JWKS · schema · deploy auth · seed admin"]
+`} />
+
+`argon-hasher` must be deployed **before** `apps/auth`, because the auth Worker reaches it through
+the `ARGON_HASHER` service binding at startup.

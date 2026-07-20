@@ -1,0 +1,11 @@
+{
+  "title": "Operations",
+  "icon": "Wrench",
+  "pages": [
+    "index",
+    "secrets-and-keys",
+    "maintenance",
+    "upgrades",
+    "teardown"
+  ]
+}

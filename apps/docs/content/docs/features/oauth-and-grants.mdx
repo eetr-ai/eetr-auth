@@ -1,0 +1,79 @@
+---
+title: OAuth 2.1 & grants
+description: Supported grant types and how the Authorization Code, Client Credentials, and Refresh Token flows behave.
+icon: ShieldCheck
+---
+
+## Supported grant types
+
+| Grant type | Description |
+|---|---|
+| Authorization Code + PKCE (S256) | Primary flow for user-facing apps. PKCE is mandatory. |
+| Client Credentials | Machine-to-machine access. Scoped to registered clients. |
+| Refresh Token | Silent token renewal with rotation on each use. |
+
+<Callout type="info" title="OAuth 2.1 posture">
+  Authorization Code **without** PKCE is not supported — this is intentional per OAuth 2.1. Only
+  `S256` code challenges are accepted; `plain` is rejected.
+</Callout>
+
+## Authorization Code + PKCE
+
+The primary flow for user-facing apps. The client sends a `code_challenge` at `/api/authorize`; the
+user authenticates; the server issues a single-use authorization code bound to the challenge and the
+exact redirect URI. At `/api/token`, the client proves possession with the `code_verifier`.
+
+<Mermaid chart={`sequenceDiagram
+    participant App as Your App
+    participant Auth as @eetr/auth
+    App->>Auth: GET /api/authorize (code_challenge, scope)
+    Auth->>App: Redirect to /login
+    App->>Auth: POST /login (username, password)
+    Auth->>App: Redirect to callback?code=xxx
+    App->>Auth: POST /api/token (code, code_verifier)
+    Auth-->>App: { access_token, refresh_token, id_token }
+`} />
+
+- **Authorization codes** are single-use and short-lived, with PKCE verifier validation (S256 only)
+  and exact-match redirect URI validation.
+- When the `openid` scope is granted, the token response also includes a signed `id_token`.
+- Pass a `resource` parameter to bind the token's audience — see
+  [resource indicators](/docs/features/tokens#resource-indicators-rfc-8707).
+
+## Client Credentials
+
+Machine-to-machine access for backend services. The client authenticates with its `client_id` and
+`client_secret` and receives an access token scoped to its grants.
+
+<Mermaid chart={`sequenceDiagram
+    participant Svc as Backend Service
+    participant Auth as @eetr/auth
+    Svc->>Auth: POST /api/token (client_credentials, scope)
+    Auth-->>Svc: { access_token }
+`} />
+
+<Callout title="Public clients can't use client_credentials">
+  A public (PKCE-only) client with `token_endpoint_auth_method: none` has no secret, so
+  `client_credentials` is rejected for it. See [Clients](/docs/features/clients).
+</Callout>
+
+## Refresh Token (rotation)
+
+Refresh tokens are long-lived but **single-use with rotation** — each refresh invalidates the old
+token and issues a new pair.
+
+- Revocable (the full token plus its associated refresh chain).
+- Scope is preserved through rotation.
+- **User environment access is re-checked on every refresh:** revoking a user's access to a client's
+  environment stops new tokens immediately rather than at the refresh token's natural expiry.
+
+## Next
+
+<Cards>
+  <Card icon={<Boxes className="text-sky-500" />} title="Clients & registration" href="/docs/features/clients">
+    Confidential vs public clients, DCR, and scopes.
+  </Card>
+  <Card icon={<KeyRound className="text-violet-500" />} title="Tokens" href="/docs/features/tokens">
+    Token lifecycle, audience binding, and introspection.
+  </Card>
+</Cards>

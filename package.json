@@ -4,10 +4,13 @@
   "private": true,
   "workspaces": [
     "apps/auth",
+    "apps/docs",
     "packages/*"
   ],
   "scripts": {
     "dev": "npm run dev --workspace=apps/auth",
+    "docs:dev": "npm run dev --workspace=apps/docs",
+    "docs:build": "npm run build --workspace=apps/docs",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "test:coverage": "npm run test:coverage --workspaces --if-present",

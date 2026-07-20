@@ -1,0 +1,203 @@
+---
+title: Deployment
+description: The authoritative, step-by-step clean-install guide for a brand-new Cloudflare environment.
+icon: Server
+---
+
+Use this path for a brand-new Cloudflare environment. All commands run **from the repository
+root** unless a step says otherwise — the `npm run` scripts delegate into `apps/auth` via the
+workspace, so you do not need to `cd apps/auth`.
+
+## Cloudflare preflight
+
+Before running Terraform, complete the Cloudflare setup for the target account:
+
+1. **Get your `account_id`** — run `npx wrangler whoami`, or find it in the dashboard.
+2. **Activate R2** in the dashboard for that account. Terraform cannot create the bucket until R2
+   has been enabled once.
+3. **Create one Cloudflare API token** for both Terraform and Wrangler, then export it:
+
+```bash
+export CLOUDFLARE_API_TOKEN=your_token_here
+export CLOUDFLARE_ACCOUNT_ID=your_account_id   # same value as account_id in terraform.tfvars
+```
+
+Required permissions for the install flow:
+
+- `Account → D1 → Edit`
+- `Account → Workers R2 Storage → Edit`
+- `Account → Account Settings → Read`
+- `Account → Workers Scripts → Edit`
+
+<Callout title="Export the account id too">
+  Wrangler does not read `terraform.tfvars`. If your token can access more than one account and you
+  omit `CLOUDFLARE_ACCOUNT_ID`, Wrangler may deploy to the wrong one — an `Authentication error
+  [code: 10000]` whose URL contains an account id that is *not* your `terraform.tfvars`
+  `account_id`. The rendered auth config pins `account_id`, but `argon-hasher` deploys straight from
+  its `wrangler.toml` and relies on this variable.
+</Callout>
+
+## 1. Verify Cloudflare CLI access
+
+```bash
+npx wrangler whoami
+```
+
+This confirms the token is exported and valid, and prints your `account_id`. `wrangler login` is
+not required.
+
+## 2. Install build prerequisites
+
+```bash
+rustup target add wasm32-unknown-unknown    # WASM target for the Rust argon-hasher
+cargo install worker-build --version '^0.7' # builds the hasher Worker
+npm install                                 # installs all workspace dependencies
+```
+
+## 3. Configure Terraform variables
+
+```bash
+cp infra/terraform/terraform.tfvars.example infra/terraform/terraform.tfvars
+```
+
+Edit `infra/terraform/terraform.tfvars`:
+
+```hcl
+account_id        = "YOUR_CLOUDFLARE_ACCOUNT_ID"      # from `npx wrangler whoami`
+d1_database_name  = "eetr-auth"                        # name for the D1 database Terraform creates
+r2_bucket_name    = "eetr-auth-assets"                 # R2 bucket for avatars, logo, and jwks.json
+worker_name       = "eetr-auth"                        # auth Worker name (also its service-binding name)
+issuer_base_url   = "https://auth.yourdomain.com"      # OAuth/OIDC issuer; the public auth hostname
+auth_url          = "https://auth.yourdomain.com/api/auth/session"  # FULL Auth.js session endpoint
+jwks_cdn_base_url = "https://cdn.yourdomain.com"       # public base URL that serves jwks.json
+resend_api_key    = "re_XXXXXXXXXXXX"                  # optional — transactional email
+```
+
+<Callout title="Notes">
+  `auth_url` must be the **full** Auth.js session endpoint (ends in `/api/auth/session`), not just
+  the host. `resend_api_key` is optional. R2 must already be activated once on the account.
+</Callout>
+
+## 4. Provision D1 + R2 via Terraform
+
+```bash
+cd infra/terraform
+terraform init
+terraform apply
+cd -            # return to the repository root
+```
+
+**Checkpoint:** confirm the D1 database and R2 bucket now exist (`npx wrangler d1 list` or the
+dashboard).
+
+## 5. Deploy `argon-hasher`
+
+The auth Worker reaches the password hasher through a service binding, so the hasher must exist
+first.
+
+```bash
+npm run deploy:argon-hasher
+```
+
+**Checkpoint:** the `argon-hasher` Worker now appears under Workers &amp; Pages.
+
+## 6. Run automated remote setup
+
+```bash
+npm run setup:remote
+```
+
+This single command performs the entire post-Terraform setup, in order:
+
+- exports Terraform outputs (database id, bucket name, rendered URLs)
+- renders `apps/auth/wrangler.generated.jsonc` from the template
+- validates Cloudflare access and remote prerequisites
+- provisions missing Wrangler secrets and JWT/JWKS material (existing secrets preserved by default)
+- applies the fresh remote schema snapshot (`db/schema.sql`) to the new D1 database
+- builds and deploys the auth Worker
+- seeds the bootstrap remote admin user
+
+Optional flags:
+
+```bash
+npm run setup:remote -- --email admin@yourdomain.com   # set the bootstrap admin email up front
+npm run setup:remote -- --force-rotate-secrets          # regenerate AUTH_SECRET/HMAC_KEY/JWT material
+```
+
+## 7. First-login hardening
+
+<Callout type="error" title="Security-critical — do this immediately">
+  The clean-install flow seeds a well-known bootstrap admin (`admin` / `admin`, email
+  `admin@example.com` unless overridden with `--email`). After the first successful login, either
+  create a real admin and delete the bootstrap account, **or** change its password and replace the
+  placeholder email with a real one. Never leave the default credentials in place.
+</Callout>
+
+## 8. DNS and JWKS CDN
+
+- Route your auth hostname to the Worker; `ISSUER_BASE_URL` and `AUTH_URL` must match the hostname
+  users actually reach.
+- Expose `jwks.json` at `JWKS_CDN_BASE_URL` (e.g. an R2 custom domain or CDN) so `jwks_uri` in the
+  OIDC metadata resolves publicly.
+- Once the hostname is routed, configure the WAF — see
+  [WAF & rate limiting](/docs/guides/waf-rate-limiting).
+
+## 9. Smoke test
+
+```bash
+curl https://auth.yourdomain.com/api/health
+# { "status": "ok" }
+```
+
+Then sign in at your auth hostname and exercise the OAuth/token flows you depend on.
+
+## 10. Verify configuration
+
+```bash
+npm run verify:remote
+```
+
+Confirms the deployment has the right settings — most importantly that the **JWT signing key and
+the published JWKS are consistent** (so issued tokens verify at `/userinfo` and `/token/validate`).
+It checks the deployed discovery document, that the R2 source JWKS and the CDN JWKS serve the same
+`kid` (no stale cache), and that `JWT_PRIVATE_KEY` / `AUTH_SECRET` / `HMAC_KEY` are set. A non-zero
+exit means something is inconsistent — fix it before relying on the deployment.
+
+To also verify a freshly minted token's signature against the published JWKS, pass a
+client-credentials client:
+
+```bash
+VERIFY_CLIENT_ID=... VERIFY_CLIENT_SECRET=... npm run verify:remote
+```
+
+## Cloudflare dashboard verification
+
+After deployment, confirm in the [Cloudflare Dashboard](https://dash.cloudflare.com):
+
+1. **Workers &amp; Pages** — both `argon-hasher` and `eetr-auth` workers are listed
+2. **D1** — your database exists and tables are created
+3. **R2** — your bucket exists and `jwks.json` is present
+4. **Workers → eetr-auth → Service Bindings** — `ARGON_HASHER` points to `argon-hasher`
+
+## Troubleshooting
+
+<Accordions>
+  <Accordion title="argon-hasher deploy fails with a WASM error">
+    Ensure the WASM target is installed (`rustup target add wasm32-unknown-unknown`) and
+    `worker-build` is present (`cargo install worker-build --version '^0.7'`).
+  </Accordion>
+  <Accordion title="Auth worker fails with 'Service binding not found'">
+    Deploy `argon-hasher` first (`npm run deploy:argon-hasher`) and confirm the binding in
+    `wrangler.generated.jsonc` is named `ARGON_HASHER` pointing at service `argon-hasher`.
+  </Accordion>
+  <Accordion title="D1 migration fails">
+    Ensure `wrangler.generated.jsonc` has the correct `database_id`; regenerate with
+    `npm run infra:terraform-output && npm run infra:render-wrangler`.
+  </Accordion>
+  <Accordion title="JWT verification fails">
+    Confirm `jwks.json` is in R2 and `JWKS_CDN_BASE_URL` points to the correct public URL. Re-run
+    `npm run infra:provision -- --force-rotate` only when intentionally rotating keys.
+  </Accordion>
+</Accordions>
+
+For upgrades, teardown, and environment-variable reference, see [Operations](/docs/operations).

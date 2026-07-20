@@ -1,0 +1,11 @@
+{
+  "title": "Guides",
+  "icon": "BookOpen",
+  "pages": [
+    "index",
+    "mcp-server-dcr",
+    "waf-rate-limiting",
+    "mfa-totp",
+    "spa-public-client"
+  ]
+}

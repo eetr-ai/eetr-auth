@@ -12,9 +12,26 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
     steps:
       - uses: googleapis/release-please-action@v5
+        id: release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  # Deploy the docs to GitHub Pages whenever a release is actually cut. This runs
+  # in the same push-to-main workflow run (not a separate `on: release` trigger),
+  # because releases created by the default GITHUB_TOKEN do not trigger further
+  # workflow runs.
+  deploy-docs:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/docs.yml
+    secrets: inherit

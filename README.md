@@ -128,8 +128,8 @@ npm run setup:remote
 `npm run setup:remote` renders the Wrangler config, provisions secrets and JWT/JWKS material, applies the
 fresh database schema, deploys the auth Worker, and seeds the bootstrap admin.
 
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the complete step-by-step guide, including first-login
-hardening and DNS/JWKS setup.
+See the [Deployment guide](https://eetr-ai.github.io/eetr-auth/docs/getting-started/deployment) for the
+complete step-by-step guide, including first-login hardening and DNS/JWKS setup.
 
 ---
 
@@ -211,12 +211,16 @@ sequenceDiagram
 
 ## Documentation
 
-| Document | Description |
+📖 **Full documentation: [eetr-ai.github.io/eetr-auth](https://eetr-ai.github.io/eetr-auth/)** — a
+Fumadocs site (source in [apps/docs/](apps/docs/)) that publishes on each release.
+
+| Section | Description |
 |---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, package breakdown, bindings, flows, infrastructure |
-| [docs/FEATURES.md](docs/FEATURES.md) | Full feature listing across all packages |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Step-by-step deploy, local dev, env vars, troubleshooting |
-| [docs/CLOUDFLARE_TEMPLATE.md](docs/CLOUDFLARE_TEMPLATE.md) | Using this as a Cloudflare template for your project |
+| [Getting started](https://eetr-ai.github.io/eetr-auth/docs/getting-started) | Quick start, deployment, local dev, and the Cloudflare template guide |
+| [Architecture](https://eetr-ai.github.io/eetr-auth/docs/architecture) | System design, bindings, flows, and the argon2id hashing worker |
+| [Features](https://eetr-ai.github.io/eetr-auth/docs/features) | OAuth/OIDC grants, clients & DCR, auth, tokens, admin |
+| [Guides](https://eetr-ai.github.io/eetr-auth/docs/guides) | MCP + DCR, WAF rate limiting, MFA/TOTP, SPA integration |
+| [Reference](https://eetr-ai.github.io/eetr-auth/docs/reference) | Endpoint and configuration reference |
 | [CHANGELOG.md](CHANGELOG.md) | Monorepo release history |
 
 ---

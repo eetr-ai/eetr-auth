@@ -1,0 +1,72 @@
+---
+title: Local development
+description: Run the auth server on your machine against a local D1 database.
+icon: Terminal
+---
+
+You can run the full auth server locally against a local D1 database — no Cloudflare account
+required for day-to-day development.
+
+## 1. Set up local environment variables
+
+```bash
+cd apps/auth
+cp .env.example .env.local
+cp .dev.vars.example .dev.vars
+```
+
+Fill in `.env.local` and `.dev.vars` with your local values.
+
+## 2. Generate a local JWT certificate
+
+```bash
+npm run jwt:generate-local-cert
+```
+
+## 3. Run local D1 migrations
+
+```bash
+npm run db:migrate
+```
+
+## 4. Create a local admin user
+
+```bash
+npm run db:create-admin:local
+```
+
+## 5. Start the dev server
+
+```bash
+npm run dev --workspace=apps/auth
+# or, from the repo root: npm run dev
+```
+
+The auth server is available at `http://localhost:3000`.
+
+<Callout title="Passkeys need HTTPS">
+  For passkey testing you may need HTTPS. Use a tunneling tool (e.g. Cloudflare Tunnel) to expose
+  your local server with a valid TLS certificate.
+</Callout>
+
+## 6. Verify the local setup
+
+```bash
+npm run verify
+```
+
+Confirms the local JWT material, the local R2 `jwks.json` (the `kid` the server signs with), and
+the core secrets all line up — catching the case where the local R2 holds a stale key and
+locally-issued tokens fail verification.
+
+## One-shot bootstrap
+
+`npm run setup:local` is the fresh-environment bootstrap: it prepares `.env.local` and `.dev.vars`,
+writes `HASH_METHOD=md5` for local-only hashing, applies `db/schema.sql` to the local D1 database,
+and seeds a local `admin` / `admin` user with an MD5 password hash. Use `npm run setup:local:env`
+when you want the local env files without touching the database.
+
+<Callout type="info" title="Local hashing">
+  Local development uses `HASH_METHOD=md5` so you don't need the Rust `argon-hasher` Worker running
+  to sign in. Production always uses Argon2id via the hasher Worker.
+</Callout>

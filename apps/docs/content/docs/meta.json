@@ -1,0 +1,15 @@
+{
+  "pages": [
+    "index",
+    "getting-started",
+    "architecture",
+    "features",
+    "oidc-compliance",
+    "guides",
+    "operations",
+    "database",
+    "client-library",
+    "reference",
+    "contributing"
+  ]
+}

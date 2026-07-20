@@ -1,6 +1,8 @@
 # Remote setup
 
-The full, step-by-step deployment guide lives in **[../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md)**.
+The full, step-by-step deployment guide lives in
+**[../apps/docs/content/docs/getting-started/deployment.mdx](../apps/docs/content/docs/getting-started/deployment.mdx)**
+(published at [eetr-ai.github.io/eetr-auth/docs/getting-started/deployment](https://eetr-ai.github.io/eetr-auth/docs/getting-started/deployment)).
 It is the single source of truth for both fresh installs and upgrades — use it for the detailed commands,
 Terraform variables, environment-variable reference, and troubleshooting.
 
@@ -25,9 +27,10 @@ credentials.
 
 ## Local-only setup
 
-For local development without Terraform or a remote deploy, see the **Local Development** section of
-[../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md) and the local quickstart in
-[../apps/auth/README.md](../apps/auth/README.md). The one-shot bootstrap is `npm run setup:local`.
+For local development without Terraform or a remote deploy, see
+[../apps/docs/content/docs/getting-started/local-development.mdx](../apps/docs/content/docs/getting-started/local-development.mdx)
+and the local quickstart in [../apps/auth/README.md](../apps/auth/README.md). The one-shot bootstrap is
+`npm run setup:local`.
 
 ## Ongoing
 
@@ -37,5 +40,5 @@ preserves existing secrets by default; force-rotation must be requested explicit
 ## Teardown
 
 `terraform destroy` removes the D1 + R2. Empty the R2 bucket first (Terraform can't delete a non-empty
-bucket — error `10008`). See the **Teardown / Cleanup** section of
-[../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md).
+bucket — error `10008`). See
+[../apps/docs/content/docs/operations/teardown.mdx](../apps/docs/content/docs/operations/teardown.mdx).

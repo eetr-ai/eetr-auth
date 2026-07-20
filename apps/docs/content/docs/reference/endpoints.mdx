@@ -1,0 +1,70 @@
+---
+title: Endpoints
+description: The OAuth/OIDC, user, and admin HTTP endpoints exposed by the auth server.
+icon: Webhook
+---
+
+All paths are relative to your issuer base URL (e.g. `https://auth.yourdomain.com`).
+
+## Discovery & keys
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/.well-known/openid-configuration` | OpenID Connect Discovery 1.0 metadata |
+| GET | `/.well-known/oauth-authorization-server` | RFC 8414 OAuth server metadata |
+| GET | `<JWKS_CDN_BASE_URL>/jwks.json` | Public JWKS (served from R2/CDN, not the Worker) |
+
+## OAuth 2.1 / OIDC
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/authorize` | Authorization endpoint (Authorization Code + PKCE) |
+| POST | `/api/authorize/complete` | Completes the authorization step |
+| POST | `/api/token` | Token endpoint (all grant types) |
+| POST | `/api/token/validate` | Token introspection (optional audience binding) |
+| GET | `/api/userinfo` | OIDC UserInfo (requires `openid` scope) |
+| POST | `/api/register` | Dynamic Client Registration (RFC 7591) |
+
+## Authentication
+
+| Method | Path | Purpose |
+|---|---|---|
+| — | `/api/auth/[...nextauth]` | Auth.js (NextAuth) session/sign-in routes |
+| POST | `/api/auth/passkey/challenge` | Begin a passkey sign-in ceremony |
+| POST | `/api/auth/passkey/verify` | Complete a passkey sign-in ceremony |
+
+## Users (self-service)
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET/POST | `/api/users` | User self-service |
+| POST | `/api/users/avatar` | Avatar upload (R2 via Images API) |
+| POST | `/api/users/email-verification/request` | Request an email-verification code |
+| POST | `/api/users/email-verification/verify` | Verify an email-verification code |
+| GET/POST | `/api/users/passkey` | List / manage the user's passkeys |
+| GET | `/api/users/passkey/has` | Whether the user has a registered passkey |
+| POST | `/api/users/passkey/register` | Register a passkey |
+| POST | `/api/users/passkey/challenge` | Passkey challenge (self-service) |
+| POST | `/api/users/passkey/verify` | Verify a passkey (self-service) |
+| DELETE | `/api/users/passkey/[id]` | Remove a passkey (server-side record only) |
+
+## Admin (bearer-protected)
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET/POST | `/api/admin/users` | List / create users |
+| GET/PATCH/DELETE | `/api/admin/users/[id]` | Read / update / delete a user |
+| POST | `/api/admin/site-logo` | Upload the site logo |
+
+<Callout type="warn" title="Protect the admin endpoints">
+  `/api/admin/*` is bearer-token protected in-app, but should additionally sit behind an IP allowlist
+  or Cloudflare Access — see the [WAF guide](/docs/guides/waf-rate-limiting#restrict-the-admin-surface).
+</Callout>
+
+## Utility
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/health` | Health check → `{ "status": "ok" }` |
+| GET | `/api/docs` | Interactive API reference (Scalar) |
+| GET | `/api/openapi` | OpenAPI document |

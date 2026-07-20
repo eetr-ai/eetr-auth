@@ -1,0 +1,93 @@
+---
+title: MFA & TOTP
+description: Enable site-wide email OTP and let users enroll authenticator apps (RFC 6238 TOTP) as a second factor.
+icon: Smartphone
+---
+
+`eetr-auth` supports two multi-factor methods, and a user may have either or both. This guide covers
+enabling and operating them.
+
+## The two methods
+
+<Cards>
+  <Card icon={<Mail className="text-sky-500" />} title="Email OTP — site-wide">
+    An admin toggle. When on, every user with an email address receives a server-generated 6-digit
+    code by email at sign-in. Requires email delivery (Resend) to be configured.
+  </Card>
+  <Card icon={<Smartphone className="text-emerald-500" />} title="Authenticator app / TOTP — per-user">
+    A user opts in by enrolling an RFC 6238 authenticator (Google Authenticator, 1Password, etc.) from
+    account settings. No server email needed to challenge it.
+  </Card>
+</Cards>
+
+## Enabling site-wide email OTP
+
+1. Sign in to the admin dashboard.
+2. Ensure **email delivery is configured** — a `RESEND_API_KEY` secret and a site URL, so codes can
+   be sent and links resolve.
+3. Turn on the site-wide **MFA** toggle (`site_settings.mfa_enabled`).
+
+Once on, users with an email are challenged with a 6-digit code. The challenge is a short-lived,
+DB-backed token and is **attempt-capped** by `MFA_OTP_MAX_ATTEMPTS` (default 5); codes expire in 10
+minutes.
+
+<Callout type="warn" title="Email OTP needs working email">
+  If email delivery isn't configured, site-wide email OTP can't send codes. Configure Resend and the
+  site URL first (see [Configuration](/docs/reference/configuration)).
+</Callout>
+
+## Per-user authenticator (TOTP) enrollment
+
+A user enrolls from **account settings**:
+
+1. Choose to add an authenticator app. The server generates a base32 secret and shows a QR code /
+   secret.
+2. The user scans it into their authenticator (the issuer label shown is your **site title**).
+3. The user confirms with a current 6-digit code to complete enrollment.
+
+<AppShot
+  src="mfa-totp-enroll.png"
+  alt="Authenticator app enrollment showing a QR code, a manual entry key, and a verification code field with Verify and enable"
+  caption="Authenticator (TOTP) enrollment — scan the QR or enter the key manually, then confirm a 6-digit code to enable."
+/>
+
+<Callout title="Secret storage">
+  The TOTP secret is stored **encrypted at rest** (AES-GCM, key derived from `AUTH_SECRET`) in the
+  `user_totp` table. Enrolling an authenticator turns on MFA for **that user** even when the site-wide
+  email toggle is off.
+</Callout>
+
+## How a sign-in chooses a method
+
+At sign-in the server computes the methods available to the user:
+
+<Mermaid chart={`flowchart TD
+    A["User authenticates (password / passkey)"] --> B{Methods available?}
+    B -->|none| D["Signed in"]
+    B -->|one| C["Challenge with that method"]
+    B -->|both| E["User picks at a chooser<br/>(can fall back to email code)"]
+    C --> D
+    E --> D
+`} />
+
+- With **one** method it is used directly.
+- With **both** (site email MFA on *and* an authenticator enrolled) the user picks at a chooser and
+  can switch to an email code as a fallback. The email code is only sent once email is actually
+  chosen.
+
+<Callout type="info" title="Ordering with password policies">
+  The password max-age gate runs **before** MFA. If a user's password is expired by policy, sign-in
+  is halted and a reset is forced before any MFA challenge — see
+  [password policies](/docs/features/authentication#password-policies).
+</Callout>
+
+## Operational tips
+
+- **Attempt cap:** tune `MFA_OTP_MAX_ATTEMPTS` for email OTP. Lower is safer; too low frustrates
+  users on flaky email.
+- **Brute-force defense:** add WAF rate limits on the OTP verify endpoints — see the
+  [WAF guide](/docs/guides/waf-rate-limiting).
+- **Rotating `AUTH_SECRET`:** because TOTP secrets are encrypted with a key derived from
+  `AUTH_SECRET`, rotating it affects the ability to decrypt existing TOTP secrets. Treat
+  `AUTH_SECRET` rotation as a deliberate operation — see
+  [Secrets & key rotation](/docs/operations/secrets-and-keys).
