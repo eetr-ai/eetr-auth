@@ -4,6 +4,14 @@ description: Password authentication with Argon2id, password policies, passkeys 
 icon: ScanFace
 ---
 
+The sign-in experience supports passwords and passkeys, with MFA layered on top.
+
+<AppShot
+  src="sign-in.png"
+  alt="eetr-auth sign-in page with username and password fields and a 'Sign in with passkey' button"
+  caption="The sign-in page — password or passkey, branded with your site title and logo."
+/>
+
 ## Password authentication
 
 - Passwords are hashed with **Argon2id** via the [`argon-hasher`](/docs/architecture/argon-hasher)
@@ -35,6 +43,12 @@ Per-environment password policies are managed from **Setup → Password policies
   when delivery is configured, otherwise the user is directed to an administrator). Users whose
   password change predates this feature are never expired until their next change.
 </Callout>
+
+<AppShot
+  src="password-policies.png"
+  alt="Setup → Password policies editor with min length, character-class minimums, max age, and per-environment assignment"
+  caption="Setup → Password policies — complexity rules, max age, and per-environment assignment (plus the global admin sign-in policy)."
+/>
 
 ## Passkeys (WebAuthn)
 

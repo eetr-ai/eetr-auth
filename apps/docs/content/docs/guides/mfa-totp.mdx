@@ -45,6 +45,12 @@ A user enrolls from **account settings**:
 2. The user scans it into their authenticator (the issuer label shown is your **site title**).
 3. The user confirms with a current 6-digit code to complete enrollment.
 
+<AppShot
+  src="mfa-totp-enroll.png"
+  alt="Authenticator app enrollment showing a QR code, a manual entry key, and a verification code field with Verify and enable"
+  caption="Authenticator (TOTP) enrollment — scan the QR or enter the key manually, then confirm a 6-digit code to enable."
+/>
+
 <Callout title="Secret storage">
   The TOTP secret is stored **encrypted at rest** (AES-GCM, key derived from `AUTH_SECRET`) in the
   `user_totp` table. Enrolling an authenticator turns on MFA for **that user** even when the site-wide

@@ -18,7 +18,7 @@ consistency (dark is fine too — the frame adapts).
 | `clients-list.png` | Clients list showing the **Dynamic** badge + registration-type filter | features/clients |
 | `password-policies.png` | Setup → Password policies editor | features/authentication |
 | `mfa-totp-enroll.png` | Authenticator (TOTP) enrollment with the QR code | guides/mfa-totp |
-| `setup-wizard.png` | Setup wizard / Site identity | getting-started/cloudflare-template |
+| `setup-site-identity.png` | Dashboard → Setup → **Site identity** tab (title, logo, URL, CDN) | getting-started/cloudflare-template |
 
 ## Optional / nice-to-have
 

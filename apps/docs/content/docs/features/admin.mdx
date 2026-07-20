@@ -6,15 +6,22 @@ icon: Users
 
 ## Admin dashboard
 
-The dashboard (`/dashboard`) is the operator surface:
+The dashboard (`/dashboard`) is the operator surface. Its home view surfaces request **latency
+metrics** (authorize / token / validate) broken down by environment and by day:
+
+<AppShot
+  src="admin-dashboard.png"
+  alt="eetr-auth admin dashboard showing latency stat cards and per-environment and per-day request metrics"
+  caption="The admin dashboard home — latency and per-environment request metrics, with sidebar navigation to Users, Clients, Tokens, Logs, and the Audit log."
+/>
+
+It provides:
 
 - Full CRUD for **users**, including per-user environment grants.
 - View and manage **OAuth clients** (with a **Dynamic** badge + registration-type filter for
   DCR-registered clients).
 - **Token activity log** viewer.
-- **Site identity / branding** (title, logo, URL, CDN URL) via the setup wizard.
-- **Password policies** management (per-environment complexity rules + max password age).
-- Initial setup wizard.
+- **Setup** area (`Dashboard → Setup`) — a tabbed page covering **Site identity** (title, logo, URL, CDN URL), **Admin API**, **Environments**, **Scopes**, and **Password policies** (per-environment complexity rules + max password age).
 
 ## User management
 
