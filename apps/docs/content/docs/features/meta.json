@@ -1,0 +1,12 @@
+{
+  "title": "Features",
+  "icon": "Sparkles",
+  "pages": [
+    "index",
+    "oauth-and-grants",
+    "clients",
+    "authentication",
+    "tokens",
+    "admin"
+  ]
+}

@@ -1,0 +1,107 @@
+---
+title: Integrate a SPA (public client)
+description: Connect a browser single-page app using a public, PKCE-only client and the TypeScript client library.
+icon: Globe
+---
+
+A browser single-page app can't keep a client secret, so it uses a **public client** with
+`token_endpoint_auth_method: none` and proves possession with **PKCE**. This guide wires one up.
+
+## 1. Create a public client
+
+Either register one in the admin dashboard (**Clients → New Client**, auth method **none**) or let
+the app self-register via [DCR](/docs/guides/mcp-server-dcr). Note the `client_id` (there is no
+secret) and set the redirect URI to your app's callback (exact match).
+
+Grant the client the scopes it needs — at least `openid` if you want an `id_token` and `/userinfo`.
+
+## 2. Build the authorization URL with PKCE
+
+Use the [client library](/docs/client-library) so a scope typo can't drop `openid`:
+
+```ts
+import { fetchOIDCDiscovery, buildAuthorizationUrl, OIDCScope } from "@eetr/eetr-auth-client";
+
+const ISSUER = "https://auth.yourdomain.com";
+const discovery = await fetchOIDCDiscovery(ISSUER);
+
+// Generate a PKCE verifier + S256 challenge (Web Crypto), and a random state/nonce.
+const url = buildAuthorizationUrl(discovery.authorization_endpoint, {
+  clientId: "your-public-client-id",
+  redirectUri: "https://app.example.com/callback",
+  codeChallenge,                                  // base64url SHA-256 of the verifier
+  scopes: [OIDCScope.OpenId, OIDCScope.Profile, OIDCScope.Email],
+  state,
+  nonce,
+});
+
+window.location.assign(url);
+```
+
+Store the PKCE `verifier`, `state`, and `nonce` (e.g. in `sessionStorage`) for the callback.
+
+## 3. Exchange the code for tokens
+
+On the callback, verify `state`, then exchange the code with the verifier (no secret):
+
+```ts
+import { exchangeToken, validateIdToken } from "@eetr/eetr-auth-client";
+
+const tokens = await exchangeToken(
+  {
+    grantType: "authorization_code",
+    clientId: "your-public-client-id",
+    code: authorizationCode,
+    redirectUri: "https://app.example.com/callback",
+    codeVerifier,          // PKCE proof of possession
+  },
+  { tokenEndpoint: discovery.token_endpoint }
+);
+
+// Verify the id_token and the nonce you sent
+const claims = await validateIdToken(tokens.id_token!, discovery.jwks_uri, {
+  issuer: ISSUER,
+  audience: "your-public-client-id",
+  nonce,
+});
+```
+
+## 4. Manage the token lifecycle
+
+`TokenManager` caches the access token and transparently refreshes it (public clients need no
+secret):
+
+```ts
+import { TokenManager } from "@eetr/eetr-auth-client";
+
+const manager = new TokenManager({
+  issuerUrl: ISSUER,
+  clientId: "your-public-client-id",
+  tokenEndpoint: discovery.token_endpoint,
+});
+
+manager.setTokens(tokens);
+const accessToken = await manager.getAccessToken(); // refreshes if expired
+```
+
+## 5. Read the user profile
+
+```ts
+import { getUserInfo, toUserProfile, decodeJwtPayload, OAuthError } from "@eetr/eetr-auth-client";
+
+try {
+  const info = await getUserInfo(accessToken, discovery.userinfo_endpoint);
+  const profile = toUserProfile(info, decodeJwtPayload(tokens.id_token!));
+  // { sub, name?, preferredUsername?, picture?, email?, emailVerified? }
+} catch (err) {
+  if (err instanceof OAuthError && err.isInsufficientScope) {
+    // token is valid but missing `openid` — re-authorize requesting it
+  }
+}
+```
+
+<Callout title="Bind tokens to your API">
+  If your SPA calls a separate protected API, pass a `resource` parameter in steps 2–3 so the token's
+  `aud` is your API's URL (RFC 8707), and have the API validate the audience. See
+  [resource indicators](/docs/features/tokens#resource-indicators-rfc-8707).
+</Callout>

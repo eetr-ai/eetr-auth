@@ -1,0 +1,130 @@
+---
+title: The argon-hasher worker
+description: Why Argon2id password hashing runs in a separate Rust/Wasm Worker — a deliberate optimization around Cloudflare's per-isolate CPU budget.
+icon: Cpu
+---
+
+Password hashing in `eetr-auth` does **not** happen in the main auth Worker. It runs in
+`apps/argon-hasher` — a small, internal-only Cloudflare Worker written in **Rust (compiled to
+WebAssembly)** that implements **Argon2id** and is reachable exclusively through a service binding.
+
+<Callout title="Why a separate worker?">
+  Argon2id is intentionally CPU- and memory-expensive — that is what makes it a good password hash.
+  But Cloudflare bills and limits CPU **per isolate invocation**. Doing the hash inline in the auth
+  Worker would spend that Worker's CPU budget on every login and burn through the free tier's tight
+  per-request CPU allowance. Isolating the hash in its own Worker keeps the auth Worker's requests
+  cheap and lets the hashing workload be tuned (and, if needed, given a raised CPU limit)
+  independently.
+</Callout>
+
+## The CPU-budget problem
+
+Cloudflare Workers enforce a CPU-time limit per request. On the [Workers Free
+plan](https://developers.cloudflare.com/workers/platform/limits/#cpu-time) that ceiling is
+**10&nbsp;ms of CPU per request** — far less than a properly-tuned Argon2id hash needs. If hashing
+ran inside the auth isolate:
+
+- every sign-in and password change would consume the auth Worker's CPU budget, and
+- a single expensive hash could trip the per-request CPU limit for an otherwise cheap request path.
+
+By moving the hash into a dedicated Worker, the auth Worker stays well within its CPU budget on the
+hot paths (authorize, token, userinfo), and the hashing Worker can be given its own, higher CPU
+allowance:
+
+```toml
+# apps/argon-hasher/wrangler.toml
+[limits]
+cpu_ms = 30000
+```
+
+<Callout type="warn" title="Plan requirement">
+  Because Argon2id exceeds the 10&nbsp;ms free-plan CPU limit, `argon-hasher` usually needs
+  **Workers Paid** and may require raising the per-invocation CPU limit as above.
+</Callout>
+
+## How the auth Worker calls it
+
+The hasher is bound into the auth Worker as `ARGON_HASHER` and called over a service binding — never
+over the public internet.
+
+<Mermaid chart={`sequenceDiagram
+    participant Auth as apps/auth
+    participant Hasher as argon-hasher (Rust/Wasm)
+    Auth->>Hasher: POST /verify { password, hash } [service binding, props.internal=true]
+    Hasher->>Hasher: Argon2id verify (isolated CPU budget)
+    Hasher-->>Auth: { valid: true }
+`} />
+
+The caller's `wrangler.toml` declares the binding and passes `props` so the hasher can validate the
+call is internal:
+
+```toml
+[[services]]
+binding = "ARGON_HASHER"
+service = "argon-hasher"  # must match the hasher Worker's name
+
+  [services.props]
+  internal = true
+```
+
+## Security model
+
+The Worker checks `ctx.props.internal === true` on every request. Any request **without** this prop
+receives a **403 Forbidden**, so it can never be called directly from the internet — only via the
+`ARGON_HASHER` service binding from `apps/auth`.
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| `POST` | `/hash` | `{ "password": "..." }` | `200 { "hash": "..." }` |
+| `POST` | `/verify` | `{ "password": "...", "hash": "..." }` | `200 { "valid": <bool> }` |
+
+Other paths → **404**; wrong method → **405**; bad JSON / validation → **400**; missing or invalid
+service-binding context → **403**. Passwords and hashes are **never logged** — each request logs
+only the Argon2 wall time, e.g. `argon2 hash: 42.30ms`.
+
+## Argon2id parameters
+
+| Parameter | Value |
+|---|---|
+| Variant | argon2id |
+| Memory `m` | 19,456 KiB (~19 MiB) — tuned for Workers CPU/memory limits |
+| Time `t` | 3 |
+| Parallelism `p` | 1 |
+| Output length | 32 bytes (PHC string) |
+| Salt | 16 random bytes (`SaltString` / PHC) |
+
+## Building and deploying
+
+The Worker builds from Rust to WebAssembly via `worker-build`:
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo install worker-build --version '^0.7'
+worker-build --release
+```
+
+Deploy it **before** any caller that binds to it:
+
+```bash
+npm run deploy:argon-hasher   # from the repo root
+```
+
+<Callout type="info" title="Deploy order matters">
+  Deploy `argon-hasher` first, then `apps/auth`. If the auth Worker is deployed first it will fail
+  with "Service binding not found" because `ARGON_HASHER` has nothing to point at yet.
+</Callout>
+
+## Local development
+
+For local development, the auth server defaults to `HASH_METHOD=md5` (set by
+`npm run setup:local`) so you don't need the Rust Worker running to sign in. Direct HTTP to
+`wrangler dev` often does **not** include binding `props`, so calling `/hash` or `/verify`
+directly returns 403 — use a paired multi-service dev session, or the native CLI the crate also
+exposes:
+
+```bash
+cargo run -- hash admin
+cargo run -- verify admin '$argon2id$...'
+```
+
+The CLI uses the same Argon2id parameters as the Worker service.

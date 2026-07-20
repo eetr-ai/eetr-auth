@@ -1,0 +1,25 @@
+---
+title: Overview
+description: Conventions every contributor (human or agent) follows when changing eetr-auth.
+icon: GitBranch
+---
+
+These are the canonical conventions for changing the `apps/auth` codebase. They are the single source
+of truth for both human contributors and coding agents — keep new decisions here rather than letting
+them live only in chat.
+
+<Cards>
+  <Card icon={<Layers className="text-orange-500" />} title="Layer conventions" href="/docs/contributing/layer-conventions">
+    Entry points → services → repositories. Where new code goes, and the `worker.ts` OpenNext rule.
+  </Card>
+  <Card icon={<Sparkles className="text-violet-500" />} title="UX guidelines" href="/docs/contributing/ux-guidelines">
+    Component library, destructive-action confirmations, buttons, banners, icons, theming, and state
+    management for the admin/sign-in UI.
+  </Card>
+</Cards>
+
+<Callout type="info" title="Also authoritative">
+  Database schema mechanics are documented in [Database](/docs/database) (and `db/README.md` next to
+  the schema files). Feature behavior and config live under [Features](/docs/features) and
+  [Reference](/docs/reference).
+</Callout>

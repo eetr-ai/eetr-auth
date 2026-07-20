@@ -1,0 +1,54 @@
+---
+title: Administration
+description: The admin dashboard, user and environment management, and the bearer-protected admin API.
+icon: Users
+---
+
+## Admin dashboard
+
+The dashboard (`/dashboard`) is the operator surface:
+
+- Full CRUD for **users**, including per-user environment grants.
+- View and manage **OAuth clients** (with a **Dynamic** badge + registration-type filter for
+  DCR-registered clients).
+- **Token activity log** viewer.
+- **Site identity / branding** (title, logo, URL, CDN URL) via the setup wizard.
+- **Password policies** management (per-environment complexity rules + max password age).
+- Initial setup wizard.
+
+## User management
+
+### Profiles
+
+- Username, email, avatar.
+- Avatar upload to R2 (via the Cloudflare Images API).
+- Self-service profile update.
+- Gravatar-compatible avatar fallback (MD5-based).
+
+### Environment access
+
+Users are granted access to specific environments via a `users_environments` mapping:
+
+- Grants are edited inline in the admin **Users** list (and shown as badges per user).
+- Grants drive per-user password-policy resolution (the login max-age gate) and are re-checked on
+  every token refresh.
+- On upgrade, every existing user is granted every environment for backwards compatibility.
+
+<Callout type="info" title="Environments and clients">
+  A regular user's environment is derived from the client id used at sign-in. Admins do not belong to
+  an environment. DCR-registered clients land in `DCR_ENVIRONMENT_ID`, so grant the intended users
+  access to that environment or `/authorize` will reject them.
+</Callout>
+
+## Admin API
+
+- Bearer-token protected (a client-credential JWT from a client configured as an **admin API
+  client**).
+- Admin operations: create / update / delete users, manage tokens.
+- Drive it programmatically with the [client library](/docs/client-library#admin-api).
+
+<Callout type="warn" title="Lock down the admin surface">
+  The admin dashboard (`/dashboard*`) and admin API (`/api/admin/*`) should not be reachable by the
+  general public. Put them behind an IP allowlist or Cloudflare Access in addition to the in-app
+  bearer protection — see the [WAF guide](/docs/guides/waf-rate-limiting#restrict-the-admin-surface).
+</Callout>

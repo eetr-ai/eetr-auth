@@ -1,0 +1,54 @@
+---
+title: Teardown
+description: Empty R2 and destroy the provisioned infrastructure without leaving orphaned resources.
+icon: Trash2
+---
+
+To remove the provisioned infrastructure, run `terraform destroy` from `infra/terraform`. One snag:
+**Terraform cannot delete a non-empty R2 bucket** — it fails with `failed to delete R2 bucket ... is
+not empty (10008)`. Empty the bucket first.
+
+<Callout type="warn" title="Target the right account">
+  Make sure your shell targets the right account before deleting:
+  `export CLOUDFLARE_ACCOUNT_ID=<account_id from terraform.tfvars>`.
+</Callout>
+
+The auth server stores a few objects in the bucket: the JWKS (`jwks.json` by default), plus any
+uploaded avatars / site logo.
+
+## 1. Empty the R2 bucket
+
+If it only holds the JWKS (typical for a fresh or partial install), delete that one object —
+`wrangler` can only delete objects individually:
+
+```bash
+cd apps/auth
+npx wrangler r2 object delete <r2_bucket_name>/jwks.json --remote
+```
+
+If the bucket has more objects (avatars, logo, …), use R2's S3-compatible API. Create an **R2 API
+token** (Cloudflare dashboard → R2 → Manage R2 API Tokens — this is separate from
+`CLOUDFLARE_API_TOKEN`), then bulk-delete:
+
+```bash
+AWS_ACCESS_KEY_ID=<r2_access_key> AWS_SECRET_ACCESS_KEY=<r2_secret_key> \
+  aws s3 rm s3://<r2_bucket_name> --recursive \
+  --endpoint-url https://<account_id>.r2.cloudflarestorage.com
+```
+
+(`rclone purge` against the same endpoint works too.) The no-CLI option: empty and delete the bucket
+from the R2 dashboard.
+
+## 2. Destroy the infrastructure
+
+```bash
+cd infra/terraform && terraform destroy
+```
+
+<Callout type="error" title="This deletes the D1 database and all its data">
+  `terraform destroy` removes the D1 database and R2 bucket. Export anything you need first.
+</Callout>
+
+The Worker scripts themselves (auth, argon-hasher) are deployed by Wrangler, not Terraform. Delete
+them from the dashboard (Workers & Pages) or with `npx wrangler delete --name <worker_name>` if you
+also want those gone.

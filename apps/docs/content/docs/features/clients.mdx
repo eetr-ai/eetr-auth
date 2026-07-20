@@ -1,0 +1,78 @@
+---
+title: Clients & registration
+description: Confidential and public clients, RFC 7591 Dynamic Client Registration, and scope management.
+icon: Boxes
+---
+
+## OAuth clients
+
+- **Multi-tenant:** each client belongs to an **environment**.
+- Per-client scope grants and multiple redirect URIs per client.
+- Configurable client ID prefix (`CLIENT_KEY_PREFIX`).
+
+### Confidential and public clients
+
+`token_endpoint_auth_method` determines how a client authenticates at `/token`:
+
+| Method | Secret? | Proof at `/token` |
+|---|---|---|
+| `client_secret_basic` (default) | Yes (hashed secret generated) | Client secret |
+| `client_secret_post` | Yes | Client secret in the body |
+| `none` (public / PKCE-only) | No | PKCE `code_verifier` |
+
+<Callout title="Public clients">
+  Public clients have no secret — **PKCE is the proof of possession** at `/token`. This is the right
+  choice for SPAs, mobile apps, and MCP clients. `client_credentials` is rejected for public
+  clients. See the [SPA / public client guide](/docs/guides/spa-public-client).
+</Callout>
+
+## Dynamic Client Registration (RFC 7591)
+
+`POST /api/register` lets clients self-register without an admin. It is a public endpoint,
+CORS-enabled for browser-based MCP clients, and is how MCP clients (Claude, ChatGPT) connect.
+
+It accepts:
+
+- `redirect_uris` (**required**, exact-match `https` — `http://localhost` allowed for local clients,
+  capped in count)
+- `token_endpoint_auth_method` (default `none`)
+- `grant_types` (`authorization_code` / `refresh_token`)
+- `response_types` (`code`)
+- `client_name`
+- `scope` (must be known scopes)
+
+It returns `client_id` (plus `client_secret` only for confidential clients). Registered clients land
+in the `DCR_ENVIRONMENT_ID` environment and are flagged `is_dynamic`; the admin **Clients** list
+shows a **Dynamic** badge and a registration-type filter.
+
+<Callout type="warn" title="Abuse controls">
+  DCR is protected by a per-IP daily rate limit (`DCR_RATE_LIMIT_PER_DAY`, default 10, counting
+  every attempt), exact redirect-URI matching (no wildcards), and DB-backed counters pruned by the
+  daily cron. Disable it entirely by leaving `DCR_ENVIRONMENT_ID` unset or setting
+  `DCR_ENABLED=false`.
+</Callout>
+
+See the [MCP server with DCR guide](/docs/guides/mcp-server-dcr) for an end-to-end walkthrough.
+
+## Scopes
+
+**Default OIDC scopes are seeded on install:** `openid`, `profile`, and `email` are created by the
+schema/seed so OpenID Connect works out of the box.
+
+- `openid` is required to mint an `id_token` and to call `/userinfo`.
+- `profile` and `email` gate their respective claims.
+- Seeding only **defines** the scopes — an admin still **grants** them to each client, and the
+  client must **request** them at `/authorize` (or request no `scope`, which defaults to all of that
+  client's grants).
+
+Additional capabilities:
+
+- Custom scope definitions (admin dashboard → **Scopes**).
+- Per-client scope allowlist.
+- Scope propagation through token rotation.
+
+<Callout type="info" title="Scope resolution">
+  Requesting a scope a client wasn't granted fails with `invalid_scope`. In the
+  [client library](/docs/client-library), prefer the `OIDCScope` constants and the `scopes[]` array
+  so a typo can't silently drop `openid`.
+</Callout>

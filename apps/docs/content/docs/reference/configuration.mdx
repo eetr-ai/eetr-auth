@@ -1,0 +1,48 @@
+---
+title: Configuration
+description: Wrangler vars and secrets — what each controls and where to set it.
+icon: SlidersHorizontal
+---
+
+Configuration splits into non-secret **Wrangler vars** (rendered into `wrangler.generated.jsonc`) and
+**secrets** (set via `wrangler secret put` or provisioned by the setup scripts).
+
+## Wrangler vars (non-secret)
+
+| Variable | Description |
+|---|---|
+| `AUTH_URL` | Full Auth.js session endpoint (`https://auth.yourdomain.com/api/auth/session`) — the session URL, **not** the issuer. |
+| `ISSUER_BASE_URL` | OAuth/OIDC issuer base URL — the public auth host (e.g. `https://auth.yourdomain.com`). |
+| `JWKS_CDN_BASE_URL` | Base URL for the public JWKS endpoint (can be an R2 public URL). |
+| `JWKS_R2_KEY` | R2 key for `jwks.json` (default `jwks.json`). |
+| `JWT_KID` | Key ID for the active JWT signing key. Rendered by `infra:render-wrangler` / `setup:remote` — you don't normally set it by hand. |
+| `EMAIL_FROM_ADDRESS` | Optional transactional email sender. If unset, falls back to `no-reply@<site hostname>`. |
+| `CLIENT_KEY_PREFIX` | Prefix for generated OAuth client IDs (e.g. `eetr`). |
+| `HASH_METHOD` | Password hashing method: `argon` (default) or a legacy fallback (`md5` for local dev). |
+| `MFA_OTP_MAX_ATTEMPTS` | Max failed OTP attempts before the challenge is invalidated (default `5`). |
+| `DCR_ENVIRONMENT_ID` | Environment new DCR clients are placed in. **Required for `/api/register`** — leave unset to keep DCR disabled. Point it at an environment whose users are already granted access. |
+| `DCR_ENABLED` | Set to `false` to hard-disable DCR even when `DCR_ENVIRONMENT_ID` is set. |
+| `DCR_RATE_LIMIT_PER_DAY` | Max DCR registration attempts per client IP per UTC day (default `10`; counts every attempt). |
+
+## Secrets
+
+Set via `wrangler secret put` or `infra:provision`:
+
+| Secret | Description |
+|---|---|
+| `AUTH_SECRET` | NextAuth.js session encryption secret (random 32+ byte string); also derives the TOTP-at-rest encryption key. |
+| `HMAC_KEY` | HMAC-SHA256 signing key for internal request validation. |
+| `JWT_PRIVATE_KEY` | RS256 private key (PEM) for signing access / ID tokens. |
+| `RESEND_API_KEY` | Resend API key for transactional email. |
+
+<Callout title="Provisioning preserves existing secrets">
+  The setup/upgrade scripts provision only **missing** secrets by default. Rotate explicitly with
+  `--force-rotate-secrets` — see [Secrets & key rotation](/docs/operations/secrets-and-keys).
+</Callout>
+
+## Where values come from
+
+Most vars are set in `infra/terraform/terraform.tfvars` and rendered into the gitignored
+`wrangler.generated.jsonc` by `infra:render-wrangler` (run as part of `setup:remote`). Deployment
+knobs like `CLIENT_KEY_PREFIX`, `HASH_METHOD`, and the `DCR_*` vars live in
+`infra/wrangler.template.jsonc`. See [Deployment](/docs/getting-started/deployment#configure-terraform-variables).

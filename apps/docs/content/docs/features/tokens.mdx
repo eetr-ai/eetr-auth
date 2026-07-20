@@ -1,0 +1,57 @@
+---
+title: Tokens
+description: Access tokens, resource-indicator audience binding, refresh rotation, introspection, and scheduled cleanup.
+icon: KeyRound
+---
+
+## Access tokens
+
+- Short-lived JWTs signed with **RS256** (asymmetric key pair, rotatable).
+- Scoped per OAuth client grant.
+- Activity is logged on every use (`token_activity_log`).
+
+### Resource indicators (RFC 8707)
+
+A `resource` parameter at `/authorize` (and optionally repeated at `/token`) binds the access
+token's `aud` to that protected-resource URL instead of the client's own `client_id`.
+
+- The value is carried on the authorization code and **through refresh rotation**, so refreshed
+  tokens keep the same `aud`.
+- Accepts any `https` URL (`http://localhost` for local dev).
+- A malformed or mismatched `resource` returns `invalid_target`.
+
+<Callout type="info" title="Why audience binding matters">
+  Binding a token to a specific resource means a token minted for resource A cannot be replayed
+  against resource B. The discovery metadata advertises `resource_parameter_supported: true`.
+</Callout>
+
+### Introspection
+
+`POST /api/token/validate` is the introspection endpoint. It supports **optional audience binding**:
+a resource server passes its own URL (or `client_id`), and a token only validates when its bound
+audience (`resource`, falling back to `client_id`) matches — so a token minted for another
+resource/client is rejected.
+
+## Refresh tokens
+
+- Long-lived, **single-use with rotation**.
+- Revocable (the full token plus its associated refresh chain).
+- Scope is preserved through rotation.
+- **User environment access is re-checked on every refresh:** revoking a user's access to a client's
+  environment stops new tokens immediately rather than at the refresh token's natural expiry.
+
+## Authorization codes
+
+- Single-use and short-lived.
+- PKCE verifier validation (S256 only).
+- Redirect URI exact-match validation.
+
+## Scheduled cleanup
+
+A daily cron job (`0 0 * * *`) removes expired tokens, codes, and challenges from D1, and prunes the
+DB-backed DCR rate-limit counters.
+
+<Callout title="Observability">
+  Cloudflare Workers observability is enabled on both Workers, and the `token_activity_log` table
+  records every token use. The admin dashboard includes a token activity log viewer.
+</Callout>

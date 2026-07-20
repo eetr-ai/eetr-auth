@@ -1,0 +1,11 @@
+{
+  "title": "Getting started",
+  "icon": "Rocket",
+  "pages": [
+    "index",
+    "quick-start",
+    "deployment",
+    "local-development",
+    "cloudflare-template"
+  ]
+}

@@ -1,0 +1,55 @@
+---
+title: Upgrades
+description: Apply new schema patches and redeploy an existing environment while preserving secrets.
+icon: RefreshCw
+---
+
+Use the upgrade path when the environment already exists and you want to preserve current secrets by
+default. From the repository root:
+
+```bash
+npm run upgrade:remote
+```
+
+This automates the upgrade flow:
+
+- exports Terraform outputs
+- renders `wrangler.generated.jsonc`
+- validates upgrade prerequisites
+- provisions **only missing** secrets by default
+- applies versioned remote D1 patches via `db:migrate:remote`
+- builds and deploys the auth Worker
+
+<Callout title="Only rotate when you mean to">
+  Add `--force-rotate-secrets` **only** when intentionally rotating `AUTH_SECRET` / `HMAC_KEY` / JWT
+  material:
+
+  ```bash
+  npm run upgrade:remote -- --force-rotate-secrets
+  ```
+
+  See [Secrets & key rotation](/docs/operations/secrets-and-keys).
+</Callout>
+
+## Pulling upstream template changes
+
+If you are running a fork of the template, pull upstream first, then upgrade:
+
+```bash
+git remote add upstream https://github.com/eetr-ai/eetr-auth.git
+git fetch upstream
+git merge upstream/main
+npm run upgrade:remote
+```
+
+`upgrade:remote` applies any new versioned schema patches from `db/patches/` via `db:migrate:remote`.
+Not every release changes the schema — when none is needed, no patch is added and the schema version
+simply stays put. See [Database](/docs/database) for the patch/migration model.
+
+## After upgrading
+
+```bash
+npm run verify:remote
+```
+
+Confirm the signing key, published JWKS, seeded scopes, and secrets are still consistent.

@@ -1,0 +1,104 @@
+---
+title: Database
+description: The D1 schema, the versioned patch/migration convention, and how to apply schema changes.
+icon: Database
+---
+
+`eetr-auth` persists everything in **Cloudflare D1** (SQLite). The schema is managed with a snapshot
+plus **versioned patches**.
+
+<Callout type="info" title="Authoritative source">
+  `db/README.md` in the repo is authoritative on schema mechanics (it lives next to `schema.sql` and
+  `db/patches/`). This page is the public overview.
+</Callout>
+
+## Snapshot vs patches
+
+- **`db/schema.sql`** — the complete authoritative snapshot of the current schema, for a **fresh
+  install**. It seeds the default OIDC scopes (`openid`, `profile`, `email`) with idempotent
+  `INSERT OR IGNORE` so a new install can do OpenID Connect out of the box.
+- **`db/patches/<version>.sql`** — incremental patches named after released schema versions (e.g.
+  `0.1.0.sql`). A patch describes only the **delta** from the previous released schema — not a copy of
+  the full snapshot.
+
+Rule of thumb:
+
+- `schema.sql` = the latest full schema for a fresh database.
+- `patches/<version>.sql` = how an existing database catches up from the previous released version.
+
+## Migration strategy
+
+`db:migrate` / `db:migrate:remote` do the following:
+
+1. Read `schema_metadata.schema_version`.
+2. If the metadata table doesn't exist, assume version `0.0.0`.
+3. If the database has no application tables yet, apply `schema.sql` as the clean-install snapshot.
+4. Otherwise, apply every patch in `db/patches` with a version greater than the current, in ascending
+   semver order.
+5. Each patch updates `schema_metadata.schema_version` to its own version at the end.
+
+Not every app release needs a database patch. If a release doesn't change the schema, no new patch is
+added and the schema version stays put.
+
+## Applying the schema
+
+From the repository root:
+
+| Command | Use |
+|---|---|
+| `npm run db:schema` | Apply the fresh snapshot to **local** D1 |
+| `npm run db:schema:remote` | Apply the fresh snapshot to **remote** D1 |
+| `npm run db:bootstrap` | Both local + remote |
+| `npm run db:migrate` | Apply versioned patches to **local** D1 (upgrades) |
+| `npm run db:migrate:remote` | Apply versioned patches to **remote** D1 (upgrades) |
+
+<Callout title="Fresh install vs upgrade">
+  Use the `db:schema*` commands for a fresh installation. Use `db:migrate*` only when upgrading an
+  existing database with versioned patches. On a clean install, `npm run setup:remote` applies the
+  snapshot for you.
+</Callout>
+
+## Schema domains
+
+The database is organized around users, OAuth clients, tokens, and environments:
+
+<Mermaid chart={`erDiagram
+    users ||--o{ user_challenges : has
+    users ||--o| user_totp : enrolls
+    users ||--o{ tokens : owns
+    users ||--o{ passkeys : registers
+    users ||--o{ users_environments : granted
+    clients ||--o{ authorization_codes : issues
+    clients }o--|| environments : belongs_to
+    tokens ||--o| refresh_tokens : paired_with
+    tokens ||--o{ token_activity_log : logged_in
+    environments ||--o{ users_environments : grants
+    password_policies ||--o{ password_policy_environments : assigned_to
+`} />
+
+Key tables include `users`, `user_totp` (encrypted TOTP secrets), `clients`, `environments`,
+`scopes`, `authorization_codes`, `tokens`, `refresh_tokens`, `passkeys`, `password_policies`, and
+`token_activity_log`.
+
+## Creating an admin user
+
+Create an admin (`users.is_admin = 1`) in both local and remote D1 with `username` + `email`. The
+script stores a random placeholder password hash; finish setup via password reset (remote requires a
+configured site URL and working email).
+
+```bash
+npm run db:create-admin -- <username> <email>
+```
+
+- **Local seed admin:** `npm run db:seed-local-admin` (`admin` / `admin`, MD5, local-only)
+- **Seed default remote admin:** `npm run db:seed-remote-admin` (`admin` / `admin`, Argon2id)
+
+## Authoring the next schema release
+
+When the schema changes in a future release:
+
+1. Update `schema.sql` so it matches the new latest schema.
+2. Add / continue the unreleased patch file, named with the target schema release version, with only
+   the delta from the previous released schema.
+3. Make the patch idempotent enough for the expected upgrade path.
+4. End the patch by updating `schema_metadata.schema_version` to the released version.

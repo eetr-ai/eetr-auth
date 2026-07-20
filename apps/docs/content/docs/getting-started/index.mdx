@@ -1,0 +1,56 @@
+---
+title: Overview
+description: Prerequisites and the shape of an eetr-auth deployment before you begin.
+icon: Compass
+---
+
+`eetr-auth` deploys to **your** Cloudflare account. Terraform provisions the data stores
+(D1 + R2), Wrangler deploys the two Workers, and an automated setup script wires everything
+together. This section takes you from an empty Cloudflare account to a running server.
+
+## Prerequisites
+
+| Requirement | Notes |
+|---|---|
+| [Node.js](https://nodejs.org/) 20+ | Runs the workspace tooling and `apps/auth` build |
+| [Rust](https://rustup.rs/) + `wasm32-unknown-unknown` | Builds the `argon-hasher` Worker |
+| [`worker-build`](https://crates.io/crates/worker-build) `^0.7` | `cargo install worker-build --version '^0.7'` |
+| [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/) v4+ | Deploys Workers, applies D1 schema |
+| [Terraform CLI](https://developer.hashicorp.com/terraform/install) v1.5+ | Provisions D1 + R2 |
+| [Cloudflare account](https://cloudflare.com) | Workers, D1, R2, and Images enabled |
+| [Resend](https://resend.com) account | Optional — transactional email (password reset, OTP) |
+
+<Callout type="warn" title="Argon2id needs CPU headroom">
+  Argon2id is deliberately expensive. The Workers Free plan caps CPU at 10&nbsp;ms per request,
+  which is not enough for hashing — the `argon-hasher` Worker typically needs Workers Paid with a
+  raised per-invocation CPU limit. See [the argon-hasher worker](/docs/architecture/argon-hasher).
+</Callout>
+
+## The shape of a deployment
+
+<Mermaid chart={`flowchart TD
+    A["1 · terraform apply<br/>provision D1 + R2"] --> B
+    B["2 · deploy argon-hasher<br/>npm run deploy:argon-hasher"] --> C
+    C["3 · npm run setup:remote<br/>render config · secrets + JWKS<br/>apply schema · deploy auth · seed admin"]
+`} />
+
+The only manual operator inputs are: export a Cloudflare API token, fill the Terraform
+variables, run `terraform apply`, and deploy `argon-hasher`. After that, `npm run setup:remote`
+automates the rest.
+
+## Next
+
+<Cards>
+  <Card icon={<Rocket className="text-orange-500" />} title="Quick start" href="/docs/getting-started/quick-start">
+    The condensed happy path from clone to first login.
+  </Card>
+  <Card icon={<Server className="text-sky-500" />} title="Deployment" href="/docs/getting-started/deployment">
+    The authoritative step-by-step clean-install guide.
+  </Card>
+  <Card icon={<Terminal className="text-emerald-500" />} title="Local development" href="/docs/getting-started/local-development">
+    Run the auth server on your machine against a local D1.
+  </Card>
+  <Card icon={<Boxes className="text-violet-500" />} title="Cloudflare template" href="/docs/getting-started/cloudflare-template">
+    Fork it and make it your own auth server.
+  </Card>
+</Cards>

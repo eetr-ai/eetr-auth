@@ -1,0 +1,42 @@
+---
+title: Overview
+description: A tour of what eetr-auth does across OAuth/OIDC, clients, authentication, tokens, and administration.
+icon: Sparkles
+---
+
+`eetr-auth` is a complete authorization server, not just a token endpoint. This section documents
+the feature set in depth.
+
+<Cards>
+  <Card icon={<ShieldCheck className="text-orange-500" />} title="OAuth 2.1 & grants" href="/docs/features/oauth-and-grants">
+    Authorization Code + PKCE, Client Credentials, and Refresh Token with rotation.
+  </Card>
+  <Card icon={<Boxes className="text-sky-500" />} title="Clients & registration" href="/docs/features/clients">
+    Confidential and public clients, RFC 7591 Dynamic Client Registration, and scopes.
+  </Card>
+  <Card icon={<ScanFace className="text-emerald-500" />} title="Authentication" href="/docs/features/authentication">
+    Passwords (Argon2id), password policies, passkeys, and multi-factor auth.
+  </Card>
+  <Card icon={<KeyRound className="text-violet-500" />} title="Tokens" href="/docs/features/tokens">
+    Access/refresh tokens, resource-indicator audience binding, introspection, and cleanup.
+  </Card>
+  <Card icon={<Users className="text-rose-500" />} title="Administration" href="/docs/features/admin">
+    The admin dashboard, user & environment management, and the admin API.
+  </Card>
+  <Card icon={<BadgeCheck className="text-amber-500" />} title="OIDC compliance" href="/docs/oidc-compliance">
+    Supported specs, discovery metadata, claims, and conformance notes.
+  </Card>
+</Cards>
+
+## Security summary
+
+| Feature | Detail |
+|---|---|
+| Password hashing | Argon2id via isolated WASM Worker |
+| Password policies | Per-environment complexity rules + max password age enforced at login |
+| Token signing | RS256 asymmetric JWT |
+| Token MAC | HMAC-SHA256 for internal request signing |
+| PKCE | S256 mandatory for the Authorization Code flow |
+| Session encryption | `AUTH_SECRET` via NextAuth.js |
+| Service isolation | `argon-hasher` rejects non-service-binding calls (403) |
+| Redirect URI validation | Exact match required |

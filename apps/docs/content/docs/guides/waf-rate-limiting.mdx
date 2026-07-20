@@ -1,0 +1,84 @@
+---
+title: Cloudflare WAF & rate limiting
+description: Put the token, sign-in, and registration endpoints behind Cloudflare's WAF and rate-limiting rules as defense-in-depth for the auth server.
+icon: Gauge
+---
+
+Once the Worker is routed to your hostname, put it behind Cloudflare's WAF. These rules are
+**defense-in-depth on top of** the app's own controls (attempt-capped OTP, single-use reset links,
+per-refresh environment re-checks), not a substitute. Configure everything under **Security → WAF**
+for the auth zone.
+
+<Callout title="Start with managed protections">
+  Enable the **Cloudflare Managed Ruleset** (and the **OWASP Core Ruleset**) for the zone, and turn on
+  **Bot Fight Mode** (or Super Bot Fight Mode). Then add the targeted rules below.
+</Callout>
+
+## Rate-limit the authentication and token endpoints
+
+These are the credential-stuffing, OTP-brute-force, and email-abuse targets. Add **Rate Limiting
+Rules** (Security → WAF → Rate limiting rules). Thresholds are conservative starting points — tune
+to your real traffic.
+
+| Endpoint(s) | Why | Suggested limit (per client IP) |
+|---|---|---|
+| `POST /api/token` | OAuth token issuance / client-secret brute force | ~30 req / 1 min |
+| `POST /api/auth/*` (Auth.js sign-in/session) | Password credential stuffing | ~10 req / 1 min |
+| `POST /api/authorize`, `/api/authorize/complete` | Authorization-code abuse | ~30 req / 1 min |
+| `POST /api/register` | DCR abuse (client sprawl) | ~10 req / 1 min |
+| `POST /api/users/email-verification/request` | Email-send abuse (cost + spam) | ~5 req / 5 min |
+| `POST /api/users/email-verification/verify` | Email OTP brute force | ~10 req / 5 min |
+| `POST /forgot-password`, `POST /reset-password` | Reset-email abuse + token guessing | ~5 req / 5 min |
+| `POST /api/auth/passkey/verify`, `/api/users/passkey/verify` | WebAuthn assertion brute force | ~20 req / 1 min |
+
+Recommended action when a limit is exceeded: **Managed Challenge** (or **Block** for the email-send
+endpoints). Match on the path and `http.request.method eq "POST"` so cached `GET`s are unaffected.
+
+### The token endpoint specifically
+
+`POST /api/token` is the endpoint most worth protecting — it is where client-secret brute force and
+token-minting abuse land. A concrete rule:
+
+- **Field:** URI Path · **Operator:** equals · **Value:** `/api/token`
+- **And:** Request Method equals `POST`
+- **Rate:** 30 requests per 1 minute, per client IP
+- **Action:** Managed Challenge
+
+<Callout type="info" title="Server actions POST to page routes">
+  The forgot/reset flows are Next.js **server actions**, which POST to the page route that renders
+  them (`/forgot-password`, `/reset-password`), not to a dedicated `/api/...` endpoint — rate-limit
+  those page paths on `POST`. `requestPasswordReset` intentionally returns the same response whether
+  or not the address exists; rate limiting is what blunts both reset-email bombing and timing-based
+  account enumeration.
+</Callout>
+
+## Restrict the admin surface
+
+The admin dashboard and admin API should not be reachable by the general public. Add **WAF custom
+rules** that **block** (or require a challenge / Cloudflare Access) for:
+
+- `/dashboard*` — admin UI
+- `/api/admin/*` — admin users API and site-logo upload
+
+Prefer an **IP allowlist** (your office/VPN egress ranges) or **Cloudflare Access** in front of these
+paths. The admin API is also bearer-token protected in-app, so this is an additional layer.
+
+## Leave these open
+
+Do **not** block or aggressively rate-limit:
+
+- `/.well-known/openid-configuration` and `/.well-known/oauth-authorization-server` — discovery,
+  fetched by every relying party; keep public and cacheable.
+- The public JWKS at `JWKS_CDN_BASE_URL` (served from R2/CDN) — relying parties fetch it to verify
+  tokens.
+- `/api/health` — uptime checks.
+- `/api/userinfo` and `/api/token/validate` — already require a valid bearer token; light rate
+  limiting is fine but do not block.
+
+## Why this complements the app's own limits
+
+The WAF adds the per-IP request ceiling the app deliberately does not implement itself. In the app:
+email/MFA OTP codes are attempt-capped (`MFA_OTP_MAX_ATTEMPTS`, default 5) and expire in 10 minutes;
+password-reset links are single-use and invalidated on any password change; refresh tokens re-check
+environment access on every rotation; and DCR has its own per-IP daily counter
+(`DCR_RATE_LIMIT_PER_DAY`).

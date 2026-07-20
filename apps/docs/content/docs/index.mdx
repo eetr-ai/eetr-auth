@@ -1,13 +1,93 @@
 ---
 title: Introduction
-description: eetr-auth is an OAuth 2.1 and OpenID Connect authorization server that deploys to Cloudflare Workers — built to be forked as a template.
+description: eetr-auth is a production-ready OAuth 2.1 and OpenID Connect authorization server that runs entirely on Cloudflare's edge — built to be forked as a template.
 icon: House
 ---
 
-Welcome to the **eetr-auth** documentation. This starter page is replaced with
-the full introduction during content migration.
+**eetr-auth** is a self-hostable **OAuth 2.1 / OpenID Connect** authorization server that
+runs entirely on **Cloudflare's edge platform** — no VMs, no containers, no origin servers.
+It ships as an npm monorepo you **fork and deploy as a Cloudflare Workers template**: two
+Workers, a D1 database, an R2 bucket, and a publishable TypeScript client library.
+
+<Callout title="Built to be a Cloudflare template">
+  This is not just a library — it is a deployable starting point. Fork the repo, point it at
+  your Cloudflare account and domain, run the automated setup, and you have your own OAuth 2.1 /
+  OIDC server on the edge in minutes. See [Cloudflare template](/docs/getting-started/cloudflare-template).
+</Callout>
+
+## Architecture at a glance
+
+<Mermaid chart={`graph LR
+    APP["Your App"] -->|OAuth 2.1 / OIDC| AUTH
+    LIB["@eetr/eetr-auth-client"] -->|npm| APP
+
+    subgraph CF["Cloudflare Edge"]
+        AUTH["@eetr/auth<br/>Next.js Worker"]
+        HASHER["argon-hasher<br/>Rust / Wasm Worker"]
+        D1[("D1<br/>Database")]
+        R2[("R2<br/>JWKS · assets")]
+
+        AUTH -->|service binding| HASHER
+        AUTH --- D1
+        AUTH --- R2
+    end
+`} />
+
+## What you get
 
 <Cards>
-  <Card title="Getting started" href="/docs/getting-started" />
-  <Card title="Architecture" href="/docs/architecture" />
+  <Card icon={<Rocket className="text-orange-500" />} title="Deploy in minutes" href="/docs/getting-started/deployment">
+    Terraform provisions D1 + R2; one command renders config, provisions secrets, applies the
+    schema, deploys the Worker, and seeds an admin.
+  </Card>
+  <Card icon={<ShieldCheck className="text-emerald-500" />} title="OAuth 2.1 + OIDC" href="/docs/features/oauth-and-grants">
+    Authorization Code + PKCE, Client Credentials, and Refresh Token with rotation. Full OIDC
+    discovery, JWKS, and <code>/userinfo</code>.
+  </Card>
+  <Card icon={<ScanFace className="text-sky-500" />} title="Modern auth" href="/docs/features/authentication">
+    Argon2id passwords, WebAuthn passkeys, email OTP and authenticator-app (TOTP) MFA, and Google
+    sign-in.
+  </Card>
+  <Card icon={<Cpu className="text-violet-500" />} title="Edge-optimized hashing" href="/docs/architecture/argon-hasher">
+    Argon2id runs in an isolated Rust/Wasm Worker to keep expensive hashing off the main isolate's
+    CPU budget.
+  </Card>
+  <Card icon={<Plug className="text-amber-500" />} title="MCP-ready" href="/docs/guides/mcp-server-dcr">
+    RFC 7591 Dynamic Client Registration lets MCP clients (Claude, ChatGPT) self-register — public,
+    PKCE-only clients with resource-indicator audience binding.
+  </Card>
+  <Card icon={<Package className="text-rose-500" />} title="Typed client library" href="/docs/client-library">
+    <code>@eetr/eetr-auth-client</code> — discovery, token management, introspection, and JWT
+    validation for browser, Node, and Workers.
+  </Card>
+</Cards>
+
+## Feature highlights
+
+| Category | Highlights |
+|---|---|
+| **OAuth 2.1** | Authorization Code + PKCE (S256), Client Credentials, Refresh Token with rotation |
+| **OpenID Connect** | OIDC discovery, JWKS endpoint, `/userinfo`, ID tokens (RS256) |
+| **Dynamic Client Registration** | RFC 7591 self-registration for public clients (MCP-ready), rate-limited |
+| **Resource indicators** | RFC 8707 `resource` audience binding on access tokens |
+| **Authentication** | Password (Argon2id), passkeys (WebAuthn), Google sign-in |
+| **Multi-factor** | Email OTP (site-wide) and authenticator-app TOTP (per-user, RFC 6238) |
+| **Admin** | Dashboard for users, clients, tokens, audit log, site settings, password policies |
+| **Infrastructure** | Cloudflare D1 (SQLite), R2 (object storage), Terraform provisioning |
+
+## Where to go next
+
+<Cards>
+  <Card icon={<Rocket className="text-orange-500" />} title="Getting started" href="/docs/getting-started">
+    Prerequisites, quick start, and the full deployment walkthrough.
+  </Card>
+  <Card icon={<Building2 className="text-sky-500" />} title="Architecture" href="/docs/architecture">
+    Packages, layers, Cloudflare bindings, and the argon2id hashing worker.
+  </Card>
+  <Card icon={<BookOpen className="text-emerald-500" />} title="Guides" href="/docs/guides">
+    Practical how-tos: MCP + DCR, WAF rate limiting, MFA/TOTP, and SPA integration.
+  </Card>
+  <Card icon={<Wrench className="text-violet-500" />} title="Operations" href="/docs/operations">
+    Secrets and key rotation, maintenance, upgrades, and teardown.
+  </Card>
 </Cards>

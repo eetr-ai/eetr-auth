@@ -1,0 +1,31 @@
+---
+title: Overview
+description: Running an eetr-auth deployment day to day — secrets, maintenance, upgrades, and teardown.
+icon: Wrench
+---
+
+Once deployed, `eetr-auth` needs the usual operational care: keeping secrets and signing keys
+consistent, letting scheduled maintenance run, applying upgrades, and tearing down cleanly when
+needed.
+
+<Cards>
+  <Card icon={<FileKey className="text-orange-500" />} title="Secrets & key rotation" href="/docs/operations/secrets-and-keys">
+    The secrets the server needs, how JWT signing keys and the published JWKS stay consistent, and how
+    to rotate safely.
+  </Card>
+  <Card icon={<Timer className="text-sky-500" />} title="Maintenance & monitoring" href="/docs/operations/maintenance">
+    The daily cleanup cron, the `verify` checks, and observability.
+  </Card>
+  <Card icon={<RefreshCw className="text-emerald-500" />} title="Upgrades" href="/docs/operations/upgrades">
+    Apply new schema patches and redeploy while preserving secrets.
+  </Card>
+  <Card icon={<Trash2 className="text-rose-500" />} title="Teardown" href="/docs/operations/teardown">
+    Empty R2 and destroy the infrastructure without leaving orphans.
+  </Card>
+</Cards>
+
+<Callout type="info" title="Recurring safety net">
+  `npm run verify` (local) and `npm run verify:remote` (deployed) re-check that the JWT signing key,
+  the published JWKS, the seeded OIDC scopes, and the required secrets are all consistent. Run
+  `verify:remote` after any key rotation or schema migration.
+</Callout>
