@@ -5,6 +5,7 @@ import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 import { Step, Steps } from 'fumadocs-ui/components/steps';
 import { Mermaid } from '@/components/mermaid';
+import { AppShot } from '@/components/app-shot';
 
 export function getMDXComponents(components?: MDXComponents) {
   return {
@@ -18,6 +19,7 @@ export function getMDXComponents(components?: MDXComponents) {
     Step,
     Steps,
     Mermaid,
+    AppShot,
     ...components,
   } satisfies MDXComponents;
 }

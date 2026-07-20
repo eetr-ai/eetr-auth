@@ -22,9 +22,11 @@ concurrency:
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    # The `github-pages` environment block is optional per actions/deploy-pages
+    # (pages:write + id-token:write are what's required) and is omitted so editors
+    # don't flag an environment that only exists once Pages is enabled. The deploy
+    # still targets the github-pages environment by default; the URL is in the
+    # deploy step's `page_url` output.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
