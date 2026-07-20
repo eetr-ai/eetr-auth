@@ -4,7 +4,7 @@ import { cn } from "./cn";
 
 export type ButtonVariant = "primary" | "secondary" | "destructiveConfirm";
 
-/** Variant → class strings, taken verbatim from docs/UX_GUIDELINES.md. */
+/** Variant → class strings, taken verbatim from apps/docs/content/docs/contributing/ux-guidelines.mdx. */
 export const buttonVariants: Record<ButtonVariant, string> = {
 	primary:
 		"rounded-full bg-brand px-5 py-2 text-sm font-medium text-white hover:bg-brand-muted disabled:opacity-50",
