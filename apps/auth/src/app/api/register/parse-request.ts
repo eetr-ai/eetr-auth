@@ -1,4 +1,5 @@
 import { DcrServiceError, type DcrRegistrationRequest } from "@/lib/services/dcr.service";
+import { isLoopbackHostname } from "@/lib/services/loopback-uri";
 
 /** Cap on redirect URIs a single dynamic registration may declare. */
 const MAX_REDIRECT_URIS = 5;
@@ -15,8 +16,10 @@ function isValidRedirectUri(value: string): boolean {
 	}
 	// No wildcards, no fragment (RFC 7591 / OAuth 2.1 exact-match).
 	if (url.hash) return false;
-	const isLocalhost = url.hostname === "localhost" || url.hostname === "127.0.0.1";
-	return url.protocol === "https:" || (url.protocol === "http:" && isLocalhost);
+	// RFC 8252 §7.3: native clients redirect to the loopback interface, spelled `localhost`,
+	// any 127.0.0.0/8 address, or `[::1]`. Accept the whole set so registration recognizes
+	// every spelling /authorize is willing to match.
+	return url.protocol === "https:" || (url.protocol === "http:" && isLoopbackHostname(url.hostname));
 }
 
 function asStringArray(value: unknown): string[] | null {

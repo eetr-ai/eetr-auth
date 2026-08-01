@@ -4,6 +4,7 @@ import type { AuthorizationCodeRepository } from "@/lib/repositories/authorizati
 import type { UserRepository } from "@/lib/repositories/admin.repository";
 import { OAuthServiceError } from "./oauth.types";
 import { normalizeResourceParam } from "./resource-indicator";
+import { matchRegisteredRedirectUri } from "./loopback-uri";
 
 const AUTHORIZATION_CODE_TTL_SECONDS = 300;
 
@@ -112,8 +113,20 @@ export class OauthAuthorizationService {
 			);
 		}
 
+		// Match loopback-tolerantly and carry the *registered* URI forward from here on: it is
+		// the spelling the client told us about, so it is what the code binds to and where the
+		// browser is sent. The token exchange receives redirect_uri in an unmangled request
+		// body, and compares it against the code — which only lines up if we store this form.
 		const redirectUris = await this.clientRepo.getRedirectUris(client.id);
-		if (!redirectUris.includes(params.redirectUri)) {
+		const redirectUri = matchRegisteredRedirectUri(params.redirectUri, redirectUris);
+		if (!redirectUri) {
+			// Log both sides: a mismatch here is almost always a spelling difference between
+			// registration and request, which is invisible from the client-facing error alone.
+			console.warn("[oauth_authorize] redirect_uri matched no registered URI", {
+				clientId: client.clientId,
+				requested: params.redirectUri,
+				registered: redirectUris,
+			});
 			throw new OAuthServiceError("invalid_request", "Invalid redirect_uri.", 400);
 		}
 
@@ -128,7 +141,7 @@ export class OauthAuthorizationService {
 				"invalid_scope",
 				"Requested scopes are not allowed for this client.",
 				400,
-				{ redirectUri: params.redirectUri, state: params.state ?? undefined }
+				{ redirectUri, state: params.state ?? undefined }
 			);
 		}
 
@@ -140,7 +153,7 @@ export class OauthAuthorizationService {
 				id: crypto.randomUUID(),
 				code_id: codeId,
 				client_id: client.id,
-				redirect_uri: params.redirectUri,
+				redirect_uri: redirectUri,
 				code_challenge: params.codeChallenge,
 				code_challenge_method: params.codeChallengeMethod,
 				subject: params.subject,
@@ -157,7 +170,7 @@ export class OauthAuthorizationService {
 			grants.map((grant) => grant.clientScopeId)
 		);
 
-		const redirect = new URL(params.redirectUri);
+		const redirect = new URL(redirectUri);
 		redirect.searchParams.set("code", codeId);
 		if (params.state) {
 			redirect.searchParams.set("state", params.state);

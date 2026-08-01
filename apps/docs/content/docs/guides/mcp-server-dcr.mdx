@@ -76,8 +76,9 @@ Response (public client — **no secret**):
 ```
 
 <Callout type="info" title="Registration rules">
-  `redirect_uris` is required and must be **exact-match** `https` (or `http://localhost` for local
-  clients) — no wildcards. `token_endpoint_auth_method` defaults to `none` (public/PKCE). Requesting
+  `redirect_uris` is required and must be **exact-match** `https` (or `http` on a
+  [loopback host](/docs/features/clients#loopback-redirect-uris) for local clients) — no wildcards.
+  `token_endpoint_auth_method` defaults to `none` (public/PKCE). Requesting
   an unknown scope, a bad redirect URI, or exceeding the daily rate limit returns
   `invalid_client_metadata`, `invalid_redirect_uri`, or `too_many_requests` respectively.
 </Callout>

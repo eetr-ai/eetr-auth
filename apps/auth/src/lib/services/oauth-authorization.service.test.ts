@@ -234,6 +234,123 @@ describe("OauthAuthorizationService", () => {
 		});
 	});
 
+	describe("loopback redirect URIs", () => {
+		// Next.js rewrites loopback hosts to `localhost` throughout the request URL string, so a
+		// redirect_uri query parameter arrives mangled while the registration (a JSON body) kept
+		// 127.0.0.1. Both spellings address the same local port and must match.
+		const loopbackParams = {
+			...baseParams,
+			redirectUri: "http://localhost:57162/callback/iDt-RqU9krou",
+		} as const;
+		const registeredUri = "http://127.0.0.1:57162/callback/iDt-RqU9krou";
+
+		function createLoopbackService(registered: string[]) {
+			const clientRepo = createClientRepoMock();
+			const tokenRepo = createTokenRepoMock();
+			const authorizationCodeRepo = createAuthorizationCodeRepoMock();
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient());
+			clientRepo.getRedirectUris.mockResolvedValue(registered);
+			tokenRepo.getClientScopeGrantsByNames.mockResolvedValue([
+				makeGrant({ clientScopeId: "client-scope-read", scopeName: "read:users" }),
+				makeGrant({
+					clientScopeId: "client-scope-write",
+					scopeId: "scope-2",
+					scopeName: "write:users",
+				}),
+			]);
+			return {
+				service: createService({ clientRepo, tokenRepo, authorizationCodeRepo }),
+				authorizationCodeRepo,
+			};
+		}
+
+		it("accepts a localhost request against a 127.0.0.1 registration", async () => {
+			const { service } = createLoopbackService([registeredUri]);
+
+			const result = await service.authorize(loopbackParams);
+
+			const redirect = new URL(result.redirectTo);
+			expect(redirect.searchParams.get("code")).toMatch(/^code_[0-9a-f]{64}$/);
+			expect(redirect.searchParams.get("state")).toBe(loopbackParams.state);
+		});
+
+		it("redirects the browser to the registered spelling, not the requested one", async () => {
+			const { service } = createLoopbackService([registeredUri]);
+
+			const result = await service.authorize(loopbackParams);
+
+			const redirect = new URL(result.redirectTo);
+			expect(redirect.origin + redirect.pathname).toBe(registeredUri);
+		});
+
+		it("binds the authorization code to the registered spelling", async () => {
+			// The token exchange receives redirect_uri in an unmangled body and compares it to the
+			// code; binding the requested (mangled) form here would break that comparison.
+			const { service, authorizationCodeRepo } = createLoopbackService([registeredUri]);
+
+			await service.authorize(loopbackParams);
+
+			expect(authorizationCodeRepo.create).toHaveBeenCalledWith(
+				expect.objectContaining({ redirect_uri: registeredUri }),
+				expect.any(Array)
+			);
+		});
+
+		it("accepts a 127.0.0.1 request against a localhost registration", async () => {
+			const { service, authorizationCodeRepo } = createLoopbackService([
+				"http://localhost:6274/oauth/callback",
+			]);
+
+			await service.authorize({
+				...baseParams,
+				redirectUri: "http://127.0.0.1:6274/oauth/callback",
+			});
+
+			expect(authorizationCodeRepo.create).toHaveBeenCalledWith(
+				expect.objectContaining({ redirect_uri: "http://localhost:6274/oauth/callback" }),
+				expect.any(Array)
+			);
+		});
+
+		it("still rejects a loopback URI on a different port", async () => {
+			// Codex binds a fresh ephemeral port per attempt; a stale port must not be honoured.
+			const { service } = createLoopbackService(["http://127.0.0.1:59836/callback/x"]);
+
+			await expect(
+				service.authorize({ ...baseParams, redirectUri: "http://localhost:60033/callback/x" })
+			).rejects.toMatchObject({ code: "invalid_request", message: "Invalid redirect_uri." });
+		});
+
+		it("still rejects a non-loopback host against a loopback registration", async () => {
+			const { service } = createLoopbackService(["http://127.0.0.1:57162/callback/x"]);
+
+			await expect(
+				service.authorize({
+					...baseParams,
+					redirectUri: "http://localhost.evil.com:57162/callback/x",
+				})
+			).rejects.toMatchObject({ code: "invalid_request", message: "Invalid redirect_uri." });
+		});
+
+		it("reports the registered spelling on the invalid_scope error redirect", async () => {
+			const clientRepo = createClientRepoMock();
+			const tokenRepo = createTokenRepoMock();
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient());
+			clientRepo.getRedirectUris.mockResolvedValue([registeredUri]);
+			tokenRepo.getClientScopeGrantsByNames.mockResolvedValue([makeGrant()]);
+			const service = createService({
+				clientRepo,
+				tokenRepo,
+				authorizationCodeRepo: createAuthorizationCodeRepoMock(),
+			});
+
+			await expect(service.authorize(loopbackParams)).rejects.toMatchObject({
+				code: "invalid_scope",
+				redirectUri: registeredUri,
+			});
+		});
+	});
+
 	it("rejects scope requests the client has not been granted", async () => {
 		const clientRepo = createClientRepoMock();
 		const tokenRepo = createTokenRepoMock();
