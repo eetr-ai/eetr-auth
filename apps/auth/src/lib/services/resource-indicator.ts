@@ -1,4 +1,5 @@
 import { OAuthServiceError } from "./oauth.types";
+import { canonicalizeLoopbackUri, isLoopbackHostname } from "./loopback-uri";
 
 /**
  * RFC 8707 Resource Indicators. The `resource` parameter names the protected resource
@@ -26,8 +27,8 @@ export function normalizeResourceParam(resource: string | null | undefined): str
 		throw new OAuthServiceError("invalid_target", "resource must not contain a fragment.", 400);
 	}
 
-	const isLocalhost = url.hostname === "localhost" || url.hostname === "127.0.0.1";
-	const schemeOk = url.protocol === "https:" || (url.protocol === "http:" && isLocalhost);
+	const isLoopback = isLoopbackHostname(url.hostname);
+	const schemeOk = url.protocol === "https:" || (url.protocol === "http:" && isLoopback);
 	if (!schemeOk) {
 		throw new OAuthServiceError(
 			"invalid_target",
@@ -36,5 +37,10 @@ export function normalizeResourceParam(resource: string | null | undefined): str
 		);
 	}
 
-	return trimmed;
+	// Collapse loopback hosts to a single spelling. /authorize reads `resource` from the query
+	// string, where Next.js rewrites 127.0.0.1 to `localhost`, while /token reads it from the
+	// request body untouched — canonicalizing both sides is what lets them compare equal. It
+	// also makes the minted `aud` deterministic rather than dependent on which spelling (and,
+	// because the rewrite is not global, which query-parameter order) the client happened to use.
+	return canonicalizeLoopbackUri(trimmed);
 }

@@ -61,6 +61,21 @@ describe("parseDcrRegistrationRequest", () => {
 
 	it("rejects an http redirect_uri that is not localhost", () => {
 		expectRejection({ redirect_uris: ["http://evil.example.com/cb"] }, "invalid_redirect_uri");
+		expectRejection({ redirect_uris: ["http://localhost.evil.com/cb"] }, "invalid_redirect_uri");
+		expectRejection({ redirect_uris: ["http://126.0.0.1/cb"] }, "invalid_redirect_uri");
+		expectRejection({ redirect_uris: ["http://192.168.0.5/cb"] }, "invalid_redirect_uri");
+	});
+
+	it("accepts every RFC 8252 loopback spelling over http", () => {
+		// Native MCP clients bind an ephemeral loopback port and spell the host inconsistently.
+		for (const uri of [
+			"http://localhost:6274/oauth/callback",
+			"http://127.0.0.1:57162/callback/abc",
+			"http://127.0.0.2:8080/cb",
+			"http://[::1]:57162/cb",
+		]) {
+			expect(parseDcrRegistrationRequest({ redirect_uris: [uri] }).redirectUris).toEqual([uri]);
+		}
 	});
 
 	it("rejects a redirect_uri with a fragment", () => {
