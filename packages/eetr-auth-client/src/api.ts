@@ -167,7 +167,11 @@ export async function introspectToken(
 export interface RegisterClientParams {
   /** Human-readable name shown on the consent screen. */
   clientName?: string;
-  /** Required. Exact-match https URLs (http allowed only for localhost). */
+  /**
+   * Required. Exact-match https URLs; http is allowed only on a loopback host
+   * (`localhost`, any 127.0.0.0/8 address, or `[::1]`). At `/authorize` the loopback host is
+   * matched interchangeably — scheme, port, and path still have to match exactly.
+   */
   redirectUris: string[];
   /** Defaults server-side to `none` (public/PKCE). Use a confidential method for a secret. */
   tokenEndpointAuthMethod?: "none" | "client_secret_basic" | "client_secret_post";
