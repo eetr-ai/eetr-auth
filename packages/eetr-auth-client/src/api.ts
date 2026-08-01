@@ -170,7 +170,7 @@ export interface RegisterClientParams {
   /**
    * Required. Exact-match https URLs; http is allowed only on a loopback host
    * (`localhost`, any 127.0.0.0/8 address, or `[::1]`). At `/authorize` the loopback host is
-   * matched interchangeably — scheme, port, and path still have to match exactly.
+   * matched interchangeably — scheme, port, path, and query still have to match exactly.
    */
   redirectUris: string[];
   /** Defaults server-side to `none` (public/PKCE). Use a confidential method for a secret. */

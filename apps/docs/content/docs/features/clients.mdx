@@ -64,8 +64,10 @@ See the [MCP server with DCR guide](/docs/guides/mcp-server-dcr) for an end-to-e
 
 Redirect URIs are matched **exactly**, with one deliberate exception: for loopback URIs the host
 is treated as fungible. `localhost`, any `127.0.0.0/8` address, and `[::1]` all address the same
-machine, and a client may register one spelling but request another. **Scheme, port, and path are
-still compared strictly** — a client that binds a new ephemeral port must register that port.
+machine, and a client may register one spelling but request another. **Scheme, port, path, and
+query are still compared strictly** — a client that binds a new ephemeral port must register that
+port. Ports are compared after normalization, so an explicit default (`:80` on http, `:443` on
+https) matches the same URI with the port omitted.
 
 When a loopback request matches, the **registered** spelling is what gets bound to the
 authorization code and used for the redirect. That matters because the token exchange sends
@@ -80,7 +82,9 @@ authorization code and used for the redirect. That matters because the token exc
   *first* loopback address in the URL, which makes the effect depend on query-parameter order.
   The same reasoning applies to the `resource` indicator, whose loopback host is canonicalized to
   `localhost` so `/authorize` and `/token` agree; that canonical form is what lands in the token's
-  `aud`.
+  `aud`. Canonicalizing re-serializes the URL, so a pathless loopback resource picks up a trailing
+  slash (`http://localhost:3000` → `http://localhost:3000/`). An `https` resource is never
+  rewritten.
 </Callout>
 
 ## Scopes

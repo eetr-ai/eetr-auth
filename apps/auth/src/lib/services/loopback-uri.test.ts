@@ -66,9 +66,24 @@ describe("canonicalizeLoopbackUri", () => {
 		);
 	});
 
-	it("returns a localhost URI byte-identical rather than re-serializing it", () => {
-		// No trailing slash added — a re-serialized URL would have produced "http://localhost:3000/".
-		expect(canonicalizeLoopbackUri("http://localhost:3000")).toBe("http://localhost:3000");
+	it("normalizes an already-canonical localhost URI the same way", () => {
+		// Both spellings must take the same serialization path or they stop comparing equal.
+		expect(canonicalizeLoopbackUri("http://localhost:3000")).toBe("http://localhost:3000/");
+	});
+
+	it.each([
+		// pathless — the serializer appends "/"
+		["http://127.0.0.1:3000", "http://localhost:3000"],
+		// default http port — the serializer drops ":80"
+		["http://127.0.0.1:80/cb", "http://localhost:80/cb"],
+		// default https port — the serializer drops ":443"
+		["https://127.0.0.1:443/cb", "https://localhost:443/cb"],
+		// implicit vs explicit default port
+		["http://127.0.0.1/cb", "http://localhost:80/cb"],
+		// pathless with a default port
+		["http://127.0.0.1:80", "http://localhost"],
+	])("canonicalizes %s and %s to the same value", (a, b) => {
+		expect(canonicalizeLoopbackUri(a)).toBe(canonicalizeLoopbackUri(b));
 	});
 
 	it("leaves non-loopback URIs untouched", () => {
@@ -148,6 +163,15 @@ describe("matchRegisteredRedirectUri", () => {
 				"http://127.0.0.1:5173/cb",
 			])
 		).toBeNull();
+	});
+
+	it.each([
+		["http://localhost:3000", "http://127.0.0.1:3000"],
+		["http://localhost:80/cb", "http://127.0.0.1/cb"],
+		["https://localhost:443/cb", "https://127.0.0.1/cb"],
+	])("matches %s against a registered %s despite serializer normalization", (requested, registered) => {
+		// Regression: an asymmetric canonicalizer made these equivalent pairs fail to match.
+		expect(matchRegisteredRedirectUri(requested, [registered])).toBe(registered);
 	});
 
 	it("returns null against an empty allowlist", () => {

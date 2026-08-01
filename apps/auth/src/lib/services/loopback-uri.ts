@@ -33,8 +33,14 @@ export function isLoopbackHostname(hostname: string): boolean {
 /**
  * Collapse a loopback URI's host to `localhost` so every spelling of the local machine
  * compares equal. Non-loopback URIs, and anything that isn't a parsable absolute URL, are
- * returned untouched — as is a URI already on `localhost`, so the common case is never
- * re-serialized (which would otherwise introduce cosmetic changes such as a trailing slash).
+ * returned untouched.
+ *
+ * Every loopback URI is re-serialized through `URL`, including one already on `localhost`.
+ * Skipping that for the already-canonical host would be an asymmetry, not an optimization:
+ * the WHATWG serializer appends `/` to a pathless URL and drops a default port, so
+ * `http://127.0.0.1:3000` would normalize to `http://localhost:3000/` while
+ * `http://localhost:3000` stayed as-is, and the two would no longer compare equal. Both
+ * sides therefore have to take the same path.
  */
 export function canonicalizeLoopbackUri(value: string): string {
 	let url: URL;
@@ -43,7 +49,7 @@ export function canonicalizeLoopbackUri(value: string): string {
 	} catch {
 		return value;
 	}
-	if (url.hostname.toLowerCase() === "localhost" || !isLoopbackHostname(url.hostname)) {
+	if (!isLoopbackHostname(url.hostname)) {
 		return value;
 	}
 	url.hostname = "localhost";

@@ -29,6 +29,14 @@ describe("normalizeResourceParam", () => {
 		expect(fromTokenBody).toBe(fromAuthorizeQuery);
 	});
 
+	it("re-serializes a loopback resource, so a pathless one gains a trailing slash", () => {
+		// Canonicalizing has to run both spellings through the same serializer or they stop
+		// comparing equal. The cost is this normalization, which lands in the token's `aud` —
+		// but only ever for loopback resources, never for an https one.
+		expect(normalizeResourceParam("http://localhost:3000")).toBe("http://localhost:3000/");
+		expect(normalizeResourceParam("http://127.0.0.1:3000")).toBe("http://localhost:3000/");
+	});
+
 	it("leaves non-loopback resources byte-identical", () => {
 		expect(normalizeResourceParam("https://mcp.example.com/mcp")).toBe(
 			"https://mcp.example.com/mcp"
