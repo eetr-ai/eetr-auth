@@ -39,7 +39,7 @@ CORS-enabled for browser-based MCP clients, and is how MCP clients (Claude, Chat
 
 It accepts:
 
-- `redirect_uris` (**required**, exact-match `https` — `http://localhost` allowed for local clients,
+- `redirect_uris` (**required**, exact-match `https` — `http` allowed for loopback clients,
   capped in count)
 - `token_endpoint_auth_method` (default `none`)
 - `grant_types` (`authorization_code` / `refresh_token`)
@@ -59,6 +59,29 @@ shows a **Dynamic** badge and a registration-type filter.
 </Callout>
 
 See the [MCP server with DCR guide](/docs/guides/mcp-server-dcr) for an end-to-end walkthrough.
+
+### Loopback redirect URIs
+
+Redirect URIs are matched **exactly**, with one deliberate exception: for loopback URIs the host
+is treated as fungible. `localhost`, any `127.0.0.0/8` address, and `[::1]` all address the same
+machine, and a client may register one spelling but request another. **Scheme, port, and path are
+still compared strictly** — a client that binds a new ephemeral port must register that port.
+
+When a loopback request matches, the **registered** spelling is what gets bound to the
+authorization code and used for the redirect. That matters because the token exchange sends
+`redirect_uri` in a request body and must match the code.
+
+<Callout type="info" title="Why the host has to be fungible">
+  Beyond RFC 8252 §7.3, Next.js forces this: it rewrites loopback hosts to `localhost` across the
+  *entire* request URL string rather than just its hostname (`REGEX_LOCALHOST_HOSTNAME` in
+  `next/dist/server/web/next-url.js`). A `redirect_uri=http://127.0.0.1:5173/cb` query parameter
+  therefore reaches a route handler already rewritten, while the same URI in a JSON or form body —
+  registration, token exchange — arrives untouched. The rewrite is not global, so it hits only the
+  *first* loopback address in the URL, which makes the effect depend on query-parameter order.
+  The same reasoning applies to the `resource` indicator, whose loopback host is canonicalized to
+  `localhost` so `/authorize` and `/token` agree; that canonical form is what lands in the token's
+  `aud`.
+</Callout>
 
 ## Scopes
 
