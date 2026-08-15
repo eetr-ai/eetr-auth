@@ -10,6 +10,11 @@ import {
 	type AssetBucket,
 } from "./staged-upload";
 
+/**
+ * Objects are held as text for readable assertions, but `get`/`put` exchange
+ * ArrayBuffers exactly as R2 does — a fake that took a stream would not have
+ * caught `put` refusing a body of unknown length.
+ */
 function createBucket(objects: Record<string, string> = {}): AssetBucket & {
 	store: Record<string, string>;
 } {
@@ -18,11 +23,14 @@ function createBucket(objects: Record<string, string> = {}): AssetBucket & {
 		store,
 		get: vi.fn(async (key: string) =>
 			key in store
-				? { body: store[key] as unknown as ReadableStream, httpMetadata: { contentType: "image/png" } }
+				? {
+						arrayBuffer: async () => new TextEncoder().encode(store[key]).buffer as ArrayBuffer,
+						httpMetadata: { contentType: "image/png" },
+					}
 				: null,
 		),
-		put: vi.fn(async (key: string, value: unknown) => {
-			store[key] = value as string;
+		put: vi.fn(async (key: string, value: ArrayBuffer) => {
+			store[key] = new TextDecoder().decode(value);
 		}),
 		delete: vi.fn(async (key: string) => {
 			delete store[key];
@@ -83,6 +91,29 @@ describe("promoteStagedUpload", () => {
 		expect(result).toBe("avatars/u1.png");
 		expect(bucket.store["avatars/u1.png"]).toBe("bytes");
 		expect(bucket.store[staged]).toBeUndefined();
+	});
+
+	it("writes bytes rather than a stream", async () => {
+		// R2 rejects a ReadableStream whose length it cannot know, which is what
+		// the body of a get is. Passing one through fails only at runtime.
+		const staged = newStagedKey("image/png");
+		const bucket = createBucket({ [staged]: "bytes" });
+
+		await promoteStagedUpload(bucket, staged, "avatars/u1.png");
+
+		const [, value] = vi.mocked(bucket.put).mock.calls[0];
+		expect(value).toBeInstanceOf(ArrayBuffer);
+	});
+
+	it("carries the staged content type across", async () => {
+		const staged = newStagedKey("image/png");
+		const bucket = createBucket({ [staged]: "bytes" });
+
+		await promoteStagedUpload(bucket, staged, "avatars/u1.png");
+
+		expect(vi.mocked(bucket.put).mock.calls[0][2]).toEqual({
+			httpMetadata: { contentType: "image/png" },
+		});
 	});
 
 	it("refuses to promote a key outside staging", async () => {

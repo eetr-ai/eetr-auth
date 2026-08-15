@@ -87,12 +87,12 @@ export class StagedUploadError extends Error {}
 /** The subset of R2Bucket this module needs, so tests need no R2. */
 export interface AssetBucket {
 	get(key: string): Promise<{
-		body: ReadableStream | null;
+		arrayBuffer(): Promise<ArrayBuffer>;
 		httpMetadata?: { contentType?: string };
 	} | null>;
 	put(
 		key: string,
-		value: ReadableStream | ArrayBuffer,
+		value: ArrayBuffer,
 		options?: { httpMetadata?: { contentType?: string } },
 	): Promise<unknown>;
 	delete(key: string): Promise<void>;
@@ -114,11 +114,18 @@ export async function promoteStagedUpload(
 		throw new StagedUploadError("That upload reference is not valid.");
 	}
 	const staged = await bucket.get(stagedKey);
-	if (!staged || !staged.body) {
+	if (!staged) {
 		throw new StagedUploadError("That upload has expired. Please choose the file again.");
 	}
 
-	await bucket.put(finalKey, staged.body, {
+	// Buffered rather than piped: `put` rejects a ReadableStream whose length it
+	// cannot know ("Provided readable stream must have a known length"), and the
+	// body of an R2 get is exactly that. Streaming it would need a
+	// FixedLengthStream; uploads are capped at 5MB, so reading it is simpler and
+	// costs little. Staging writes a buffer for the same reason.
+	const bytes = await staged.arrayBuffer();
+
+	await bucket.put(finalKey, bytes, {
 		httpMetadata: { contentType: staged.httpMetadata?.contentType },
 	});
 
