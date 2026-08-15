@@ -17,6 +17,13 @@ import { useEffect, useState } from "react";
  * `prefers-reduced-motion` the animation is suppressed and no `animationend`
  * would ever fire, which would strand the overlay mounted forever.
  *
+ * The trade-off is that browsers clamp timers to ~1s in a hidden tab, so an
+ * overlay closed just before the tab is backgrounded can linger. That is
+ * deliberate: it only happens where nobody is watching the animation, whereas
+ * the `animationend` failure mode strands the overlay in front of someone who
+ * is. (This also makes exit timing unmeasurable in a hidden page — check
+ * `document.visibilityState` before concluding the panel is slow.)
+ *
  * `durationMs` MUST match the `duration-*` class on the animated node.
  */
 export function usePresence(open: boolean, durationMs: number): { mounted: boolean } {

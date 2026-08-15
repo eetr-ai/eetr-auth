@@ -1,8 +1,7 @@
 "use client";
 
-import { ReducerAction, bootstrapProvider } from "@eetr/react-reducer-utils";
-import { useEffect } from "react";
-import { Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Pencil, Plus, Users } from "lucide-react";
 import {
 	createUser,
 	deleteUser,
@@ -12,396 +11,292 @@ import {
 import { listEnvironments } from "@/app/actions/environment-actions";
 import type { UserRecord } from "@/lib/repositories/admin.repository";
 import type { Environment } from "@/lib/repositories/environment.repository";
-import { FullPageSpinner, PageHeader } from "@/components/ui";
-import { CreateUserForm } from "./_components/create-user-form";
-import { UsersSection } from "./_components/users-section";
+import {
+	Banner,
+	Button,
+	ConfirmDialog,
+	EmptyState,
+	FullPageSpinner,
+	PageHeader,
+	SidePanel,
+} from "@/components/ui";
+import {
+	draftFromUser,
+	emptyDraft,
+	isUserDraftDirty,
+	type UserDraft,
+} from "./_components/user-draft";
+import { UserForm } from "./_components/user-form";
+import { UsersTable } from "./_components/users-table";
 
-enum UsersPageActionType {
-	SET_USERS = "SET_USERS",
-	SET_ENVIRONMENTS = "SET_ENVIRONMENTS",
-	SET_LOADING = "SET_LOADING",
-	SET_ERROR = "SET_ERROR",
-	SET_USERNAME = "SET_USERNAME",
-	SET_NAME = "SET_NAME",
-	SET_EMAIL = "SET_EMAIL",
-	SET_PASSWORD = "SET_PASSWORD",
-	SET_IS_ADMIN = "SET_IS_ADMIN",
-	SET_EDITING_USER_ID = "SET_EDITING_USER_ID",
-	SET_EDITING_USERNAME = "SET_EDITING_USERNAME",
-	SET_EDITING_NAME = "SET_EDITING_NAME",
-	SET_EDITING_EMAIL = "SET_EDITING_EMAIL",
-	SET_EDITING_PASSWORD = "SET_EDITING_PASSWORD",
-	SET_EDITING_IS_ADMIN = "SET_EDITING_IS_ADMIN",
-	SET_EDITING_ENVIRONMENT_IDS = "SET_EDITING_ENVIRONMENT_IDS",
-	SET_UPLOADING_AVATAR_USER_ID = "SET_UPLOADING_AVATAR_USER_ID",
-	SET_RESETTING_VERIFICATION_USER_ID = "SET_RESETTING_VERIFICATION_USER_ID",
-	SET_CONFIRMING_DELETE_USER_ID = "SET_CONFIRMING_DELETE_USER_ID",
-	SET_DELETING_USER_ID = "SET_DELETING_USER_ID",
-}
-
-interface UsersPageState {
-	users: UserRecord[];
-	environments: Environment[];
-	loading: boolean;
-	error: string | null;
-	username: string;
-	name: string;
-	email: string;
-	password: string;
-	isAdmin: boolean;
-	editingUserId: string | null;
-	editingUsername: string;
-	editingName: string;
-	editingEmail: string;
-	editingPassword: string;
-	editingIsAdmin: boolean;
-	editingEnvironmentIds: string[];
-	uploadingAvatarUserId: string | null;
-	resettingVerificationUserId: string | null;
-	confirmingDeleteUserId: string | null;
-	deletingUserId: string | null;
-}
-
-const initialState: UsersPageState = {
-	users: [],
-	environments: [],
-	loading: true,
-	error: null,
-	username: "",
-	name: "",
-	email: "",
-	password: "",
-	isAdmin: true,
-	editingUserId: null,
-	editingUsername: "",
-	editingName: "",
-	editingEmail: "",
-	editingPassword: "",
-	editingIsAdmin: true,
-	editingEnvironmentIds: [],
-	uploadingAvatarUserId: null,
-	resettingVerificationUserId: null,
-	confirmingDeleteUserId: null,
-	deletingUserId: null,
-};
-
-function reducer(
-	state: UsersPageState = initialState,
-	action: ReducerAction<UsersPageActionType>
-): UsersPageState {
-	switch (action.type) {
-		case UsersPageActionType.SET_USERS:
-			return { ...state, users: (action.data as UserRecord[]) ?? [] };
-		case UsersPageActionType.SET_ENVIRONMENTS:
-			return { ...state, environments: (action.data as Environment[]) ?? [] };
-		case UsersPageActionType.SET_LOADING:
-			return { ...state, loading: (action.data as boolean | undefined) ?? false };
-		case UsersPageActionType.SET_ERROR:
-			return { ...state, error: (action.data as string | null) ?? null };
-		case UsersPageActionType.SET_USERNAME:
-			return { ...state, username: (action.data as string) ?? "" };
-		case UsersPageActionType.SET_NAME:
-			return { ...state, name: (action.data as string) ?? "" };
-		case UsersPageActionType.SET_EMAIL:
-			return { ...state, email: (action.data as string) ?? "" };
-		case UsersPageActionType.SET_PASSWORD:
-			return { ...state, password: (action.data as string) ?? "" };
-		case UsersPageActionType.SET_IS_ADMIN:
-			return { ...state, isAdmin: (action.data as boolean | undefined) ?? false };
-		case UsersPageActionType.SET_EDITING_USER_ID:
-			return { ...state, editingUserId: (action.data as string | null) ?? null };
-		case UsersPageActionType.SET_EDITING_USERNAME:
-			return { ...state, editingUsername: (action.data as string) ?? "" };
-		case UsersPageActionType.SET_EDITING_NAME:
-			return { ...state, editingName: (action.data as string) ?? "" };
-		case UsersPageActionType.SET_EDITING_EMAIL:
-			return { ...state, editingEmail: (action.data as string) ?? "" };
-		case UsersPageActionType.SET_EDITING_PASSWORD:
-			return { ...state, editingPassword: (action.data as string) ?? "" };
-		case UsersPageActionType.SET_EDITING_IS_ADMIN:
-			return { ...state, editingIsAdmin: (action.data as boolean | undefined) ?? false };
-		case UsersPageActionType.SET_EDITING_ENVIRONMENT_IDS:
-			return { ...state, editingEnvironmentIds: (action.data as string[]) ?? [] };
-		case UsersPageActionType.SET_UPLOADING_AVATAR_USER_ID:
-			return { ...state, uploadingAvatarUserId: (action.data as string | null) ?? null };
-		case UsersPageActionType.SET_RESETTING_VERIFICATION_USER_ID:
-			return { ...state, resettingVerificationUserId: (action.data as string | null) ?? null };
-		case UsersPageActionType.SET_CONFIRMING_DELETE_USER_ID:
-			return { ...state, confirmingDeleteUserId: (action.data as string | null) ?? null };
-		case UsersPageActionType.SET_DELETING_USER_ID:
-			return { ...state, deletingUserId: (action.data as string | null) ?? null };
-		default:
-			return state;
-	}
-}
-
-const { Provider: UsersPageStateProvider, useContextAccessors: useUsersPageState } =
-	bootstrapProvider<UsersPageState, ReducerAction<UsersPageActionType>>(
-		reducer,
-		initialState
-	);
+/** The form lives in the panel body; its submit button lives in the panel footer. */
+const FORM_ID = "user-form";
 
 export default function UsersPage() {
-	return (
-		<UsersPageStateProvider>
-			<UsersPageContent />
-		</UsersPageStateProvider>
+	const [users, setUsers] = useState<UserRecord[]>([]);
+	const [environments, setEnvironments] = useState<Environment[]>([]);
+	const [initialLoading, setInitialLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+
+	const [panelOpen, setPanelOpen] = useState(false);
+	const [editingId, setEditingId] = useState<string | null>(null);
+	const [draft, setDraft] = useState<UserDraft>(emptyDraft);
+	const [baseline, setBaseline] = useState<UserDraft>(emptyDraft);
+	const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+	const [saving, setSaving] = useState(false);
+
+	const [uploadingAvatarUserId, setUploadingAvatarUserId] = useState<string | null>(null);
+	const [resettingVerificationUserId, setResettingVerificationUserId] = useState<string | null>(
+		null,
 	);
-}
+	const [confirmingDeleteUserId, setConfirmingDeleteUserId] = useState<string | null>(null);
+	const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
-function UsersPageContent() {
-	const { state, dispatch } = useUsersPageState();
-	const {
-		users,
-		environments,
-		loading,
-		error,
-		username,
-		name,
-		email,
-		password,
-		isAdmin,
-		editingUserId,
-		editingUsername,
-		editingName,
-		editingEmail,
-		editingPassword,
-		editingIsAdmin,
-		editingEnvironmentIds,
-		uploadingAvatarUserId,
-		resettingVerificationUserId,
-		confirmingDeleteUserId,
-		deletingUserId,
-	} = state;
+	const dirty = isUserDraftDirty(draft, baseline);
 
-	const load = async () => {
-		dispatch({ type: UsersPageActionType.SET_LOADING, data: true });
+	/**
+	 * `silent` skips the full-page spinner. Post-mutation refreshes must be
+	 * silent: swapping the page for a spinner would unmount an open side panel
+	 * mid-animation, and the acting control shows its own in-flight state.
+	 */
+	const load = async ({ silent = false }: { silent?: boolean } = {}) => {
 		try {
 			const [items, envs] = await Promise.all([listUsers(), listEnvironments()]);
-			dispatch({ type: UsersPageActionType.SET_USERS, data: items });
-			dispatch({ type: UsersPageActionType.SET_ENVIRONMENTS, data: envs });
+			setUsers(items);
+			setEnvironments(envs);
 		} catch (err) {
-			dispatch({
-				type: UsersPageActionType.SET_ERROR,
-				data: err instanceof Error ? err.message : "Failed to load users",
-			});
+			setError(err instanceof Error ? err.message : "Failed to load users");
 		} finally {
-			dispatch({ type: UsersPageActionType.SET_LOADING, data: false });
+			if (!silent) setInitialLoading(false);
 		}
 	};
 
 	useEffect(() => {
 		load();
-	}, [dispatch]);
+	}, []);
 
-	const handleCreate = async (e: React.FormEvent) => {
-		e.preventDefault();
-		dispatch({ type: UsersPageActionType.SET_ERROR, data: null });
-		try {
-			await createUser(username, password, isAdmin, name, email);
-			dispatch({ type: UsersPageActionType.SET_USERNAME, data: "" });
-			dispatch({ type: UsersPageActionType.SET_NAME, data: "" });
-			dispatch({ type: UsersPageActionType.SET_EMAIL, data: "" });
-			dispatch({ type: UsersPageActionType.SET_PASSWORD, data: "" });
-			dispatch({ type: UsersPageActionType.SET_IS_ADMIN, data: true });
-			await load();
-		} catch (err) {
-			dispatch({
-				type: UsersPageActionType.SET_ERROR,
-				data: err instanceof Error ? err.message : "Failed to create user",
-			});
-		}
+	const openCreate = () => {
+		setError(null);
+		setEditingId(null);
+		setDraft(emptyDraft);
+		setBaseline(emptyDraft);
+		setPanelOpen(true);
 	};
 
 	const startEdit = (user: UserRecord) => {
-		dispatch({ type: UsersPageActionType.SET_EDITING_USER_ID, data: user.id });
-		dispatch({ type: UsersPageActionType.SET_EDITING_USERNAME, data: user.username });
-		dispatch({ type: UsersPageActionType.SET_EDITING_NAME, data: user.name ?? "" });
-		dispatch({ type: UsersPageActionType.SET_EDITING_EMAIL, data: user.email ?? "" });
-		dispatch({ type: UsersPageActionType.SET_EDITING_PASSWORD, data: "" });
-		dispatch({ type: UsersPageActionType.SET_EDITING_IS_ADMIN, data: user.isAdmin });
-		dispatch({
-			type: UsersPageActionType.SET_EDITING_ENVIRONMENT_IDS,
-			data: user.environmentIds ?? [],
-		});
+		setError(null);
+		const next = draftFromUser(user);
+		setEditingId(user.id);
+		setDraft(next);
+		setBaseline(next);
+		setPanelOpen(true);
 	};
 
-	const handleUpdate = async (e: React.FormEvent) => {
+	// Deliberately does not reset draft/editingId: the panel keeps rendering its
+	// children while it animates out. Every open path re-initialises both.
+	const closePanel = () => {
+		setConfirmingDiscard(false);
+		setPanelOpen(false);
+		setError(null);
+	};
+
+	const requestClose = () => {
+		// The panel stays mounted for its exit animation, so without this a second
+		// Escape would re-open the discard dialog over an already-closing panel.
+		if (!panelOpen || saving) return;
+		if (dirty) setConfirmingDiscard(true);
+		else closePanel();
+	};
+
+	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (!editingUserId) return;
-		dispatch({ type: UsersPageActionType.SET_ERROR, data: null });
+		setSaving(true);
+		setError(null);
 		try {
-			await updateUser(editingUserId, {
-				username: editingUsername,
-				name: editingName,
-				email: editingEmail,
-				password: editingPassword,
-				isAdmin: editingIsAdmin,
-				environmentIds: editingEnvironmentIds,
-			});
-			dispatch({ type: UsersPageActionType.SET_EDITING_USER_ID, data: null });
-			dispatch({ type: UsersPageActionType.SET_EDITING_USERNAME, data: "" });
-			dispatch({ type: UsersPageActionType.SET_EDITING_NAME, data: "" });
-			dispatch({ type: UsersPageActionType.SET_EDITING_EMAIL, data: "" });
-			dispatch({ type: UsersPageActionType.SET_EDITING_PASSWORD, data: "" });
-			dispatch({ type: UsersPageActionType.SET_EDITING_ENVIRONMENT_IDS, data: [] });
-			await load();
+			if (editingId) {
+				await updateUser(editingId, {
+					username: draft.username,
+					name: draft.name,
+					email: draft.email,
+					// Omit rather than send "" — blank means "keep the current password",
+					// so there is no reason to put it on the wire at all.
+					...(draft.password ? { password: draft.password } : {}),
+					isAdmin: draft.isAdmin,
+					environmentIds: draft.environmentIds,
+				});
+			} else {
+				// createUser cannot take environments, so assigning them on create is a
+				// second call. If it fails the user still exists — the message says so
+				// rather than implying nothing was created.
+				const created = await createUser(
+					draft.username,
+					draft.password,
+					draft.isAdmin,
+					draft.name,
+					draft.email,
+				);
+				if (draft.environmentIds.length > 0 && created?.id) {
+					try {
+						await updateUser(created.id, { environmentIds: draft.environmentIds });
+					} catch (err) {
+						await load({ silent: true });
+						setError(
+							`User created, but assigning environments failed: ${
+								err instanceof Error ? err.message : "unknown error"
+							}`,
+						);
+						return;
+					}
+				}
+			}
+			await load({ silent: true });
+			closePanel();
 		} catch (err) {
-			dispatch({
-				type: UsersPageActionType.SET_ERROR,
-				data: err instanceof Error ? err.message : "Failed to update user",
-			});
+			setError(
+				err instanceof Error
+					? err.message
+					: `Failed to ${editingId ? "update" : "create"} user`,
+			);
+		} finally {
+			setSaving(false);
 		}
 	};
 
-	const requestDelete = (user: UserRecord) => {
-		dispatch({ type: UsersPageActionType.SET_ERROR, data: null });
-		dispatch({ type: UsersPageActionType.SET_CONFIRMING_DELETE_USER_ID, data: user.id });
-	};
-
-	const cancelDelete = () => {
-		dispatch({ type: UsersPageActionType.SET_CONFIRMING_DELETE_USER_ID, data: null });
-	};
-
 	const confirmDelete = async (user: UserRecord) => {
-		dispatch({ type: UsersPageActionType.SET_ERROR, data: null });
-		dispatch({ type: UsersPageActionType.SET_DELETING_USER_ID, data: user.id });
+		setError(null);
+		setDeletingUserId(user.id);
 		try {
 			await deleteUser(user.id);
-			dispatch({ type: UsersPageActionType.SET_CONFIRMING_DELETE_USER_ID, data: null });
-			await load();
+			setConfirmingDeleteUserId(null);
+			await load({ silent: true });
 		} catch (err) {
-			dispatch({
-				type: UsersPageActionType.SET_ERROR,
-				data: err instanceof Error ? err.message : "Failed to delete user",
-			});
+			setError(err instanceof Error ? err.message : "Failed to delete user");
 		} finally {
-			dispatch({ type: UsersPageActionType.SET_DELETING_USER_ID, data: null });
+			setDeletingUserId(null);
 		}
 	};
 
 	const handleAvatarUpload = async (userId: string, file: File) => {
-		dispatch({ type: UsersPageActionType.SET_ERROR, data: null });
-		dispatch({ type: UsersPageActionType.SET_UPLOADING_AVATAR_USER_ID, data: userId });
+		setError(null);
+		setUploadingAvatarUserId(userId);
 		try {
 			const formData = new FormData();
 			formData.set("userId", userId);
 			formData.set("file", file);
-			const response = await fetch("/api/users/avatar", {
-				method: "POST",
-				body: formData,
-			});
+			const response = await fetch("/api/users/avatar", { method: "POST", body: formData });
 			if (!response.ok) {
 				const payload = (await response.json().catch(() => null)) as
 					| { error_description?: string; error?: string }
 					| null;
 				throw new Error(payload?.error_description ?? payload?.error ?? "Failed to upload avatar");
 			}
-			await load();
+			await load({ silent: true });
 		} catch (err) {
-			dispatch({
-				type: UsersPageActionType.SET_ERROR,
-				data: err instanceof Error ? err.message : "Failed to upload avatar",
-			});
+			setError(err instanceof Error ? err.message : "Failed to upload avatar");
 		} finally {
-			dispatch({ type: UsersPageActionType.SET_UPLOADING_AVATAR_USER_ID, data: null });
+			setUploadingAvatarUserId(null);
 		}
 	};
 
 	const handleResetVerification = async (user: UserRecord) => {
-		dispatch({ type: UsersPageActionType.SET_ERROR, data: null });
-		dispatch({ type: UsersPageActionType.SET_RESETTING_VERIFICATION_USER_ID, data: user.id });
+		setError(null);
+		setResettingVerificationUserId(user.id);
 		try {
 			await updateUser(user.id, { emailVerifiedAt: null });
-			await load();
+			await load({ silent: true });
 		} catch (err) {
-			dispatch({
-				type: UsersPageActionType.SET_ERROR,
-				data: err instanceof Error ? err.message : "Failed to reset email verification",
-			});
+			setError(err instanceof Error ? err.message : "Failed to reset email verification");
 		} finally {
-			dispatch({ type: UsersPageActionType.SET_RESETTING_VERIFICATION_USER_ID, data: null });
+			setResettingVerificationUserId(null);
 		}
 	};
 
-	if (loading) {
+	if (initialLoading) {
 		return <FullPageSpinner />;
 	}
 
+	const newUserButton = (
+		<Button type="button" icon={Plus} onClick={openCreate}>
+			New user
+		</Button>
+	);
+
 	return (
 		<main className="min-h-screen bg-background p-6 text-foreground">
-			<PageHeader icon={Users} title="Users" />
+			<PageHeader icon={Users} title="Users" action={newUserButton} />
 
-			<div className="mt-8 grid gap-8">
-				<CreateUserForm
-					username={username}
-					onUsernameChange={(value) =>
-						dispatch({ type: UsersPageActionType.SET_USERNAME, data: value })
-					}
-					name={name}
-					onNameChange={(value) =>
-						dispatch({ type: UsersPageActionType.SET_NAME, data: value })
-					}
-					email={email}
-					onEmailChange={(value) =>
-						dispatch({ type: UsersPageActionType.SET_EMAIL, data: value })
-					}
-					password={password}
-					onPasswordChange={(value) =>
-						dispatch({ type: UsersPageActionType.SET_PASSWORD, data: value })
-					}
-					isAdmin={isAdmin}
-					onIsAdminChange={(value) =>
-						dispatch({ type: UsersPageActionType.SET_IS_ADMIN, data: value })
-					}
-					error={error}
-					onSubmit={handleCreate}
+			{/* Save errors surface inside the panel; list-level errors here. */}
+			<Banner variant="error" message={panelOpen ? null : error} />
+
+			{users.length === 0 ? (
+				<EmptyState
+					icon={Users}
+					title="No users yet"
+					description="Create the first account that can sign in to this tenant."
+					action={newUserButton}
 				/>
-
-				<UsersSection
+			) : (
+				<UsersTable
 					users={users}
 					environments={environments}
-					editingUserId={editingUserId}
-					editingUsername={editingUsername}
-					onEditingUsernameChange={(value) =>
-						dispatch({ type: UsersPageActionType.SET_EDITING_USERNAME, data: value })
-					}
-					editingName={editingName}
-					onEditingNameChange={(value) =>
-						dispatch({ type: UsersPageActionType.SET_EDITING_NAME, data: value })
-					}
-					editingEmail={editingEmail}
-					onEditingEmailChange={(value) =>
-						dispatch({ type: UsersPageActionType.SET_EDITING_EMAIL, data: value })
-					}
-					editingPassword={editingPassword}
-					onEditingPasswordChange={(value) =>
-						dispatch({ type: UsersPageActionType.SET_EDITING_PASSWORD, data: value })
-					}
-					editingIsAdmin={editingIsAdmin}
-					onEditingIsAdminChange={(value) =>
-						dispatch({ type: UsersPageActionType.SET_EDITING_IS_ADMIN, data: value })
-					}
-					editingEnvironmentIds={editingEnvironmentIds}
-					onEditingEnvironmentIdsChange={(ids) =>
-						dispatch({ type: UsersPageActionType.SET_EDITING_ENVIRONMENT_IDS, data: ids })
-					}
-					onUpdate={handleUpdate}
-					onCancelEdit={() =>
-						dispatch({ type: UsersPageActionType.SET_EDITING_USER_ID, data: null })
-					}
-					onStartEdit={startEdit}
 					uploadingAvatarUserId={uploadingAvatarUserId}
 					onAvatarUpload={(userId, file) => void handleAvatarUpload(userId, file)}
 					resettingVerificationUserId={resettingVerificationUserId}
 					onResetVerification={handleResetVerification}
+					onStartEdit={startEdit}
 					confirmingDeleteUserId={confirmingDeleteUserId}
 					deletingUserId={deletingUserId}
-					onRequestDelete={requestDelete}
+					onRequestDelete={(user) => {
+						setError(null);
+						setConfirmingDeleteUserId(user.id);
+					}}
 					onConfirmDelete={confirmDelete}
-					onCancelDelete={cancelDelete}
+					onCancelDelete={() => setConfirmingDeleteUserId(null)}
 				/>
-			</div>
+			)}
+
+			<SidePanel
+				open={panelOpen}
+				onRequestClose={requestClose}
+				icon={Users}
+				title={editingId ? "Edit user" : "New user"}
+				description={
+					editingId
+						? "Leave the password blank to keep the current one."
+						: "The account can sign in as soon as it is created."
+				}
+				footer={
+					<div className="flex items-center gap-2">
+						<Button type="submit" form={FORM_ID} icon={editingId ? Pencil : Plus} loading={saving}>
+							{editingId ? "Save user" : "Add user"}
+						</Button>
+						<Button type="button" variant="secondary" onClick={requestClose} disabled={saving}>
+							Cancel
+						</Button>
+					</div>
+				}
+			>
+				<UserForm
+					formId={FORM_ID}
+					draft={draft}
+					onChange={(patch) => setDraft((prev) => ({ ...prev, ...patch }))}
+					environments={environments}
+					editingId={editingId}
+					error={error}
+					onSubmit={handleSubmit}
+				/>
+			</SidePanel>
+
+			<ConfirmDialog
+				open={confirmingDiscard}
+				title="Discard changes?"
+				description="This user has unsaved edits. Closing the panel will lose them."
+				confirmLabel="Discard changes"
+				cancelLabel="Keep editing"
+				emphasis="cancel"
+				onConfirm={closePanel}
+				onCancel={() => setConfirmingDiscard(false)}
+			/>
 		</main>
 	);
 }
