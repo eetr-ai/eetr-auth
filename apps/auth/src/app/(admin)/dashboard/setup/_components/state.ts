@@ -30,7 +30,9 @@ export enum SetupPageActionType {
 	SET_EDITING_ENV_ID = "SET_EDITING_ENV_ID",
 	SET_EDITING_ENV_NAME = "SET_EDITING_ENV_NAME",
 	SET_ENV_ERROR = "SET_ENV_ERROR",
+	SET_ENV_SAVING = "SET_ENV_SAVING",
 	SET_SCOPE_ERROR = "SET_SCOPE_ERROR",
+	SET_SCOPE_SAVING = "SET_SCOPE_SAVING",
 	SET_SITE_SETTINGS = "SET_SITE_SETTINGS",
 	SET_SITE_TITLE_INPUT = "SET_SITE_TITLE_INPUT",
 	SET_SITE_URL_INPUT = "SET_SITE_URL_INPUT",
@@ -57,7 +59,11 @@ export interface SetupPageState {
 	editingEnvId: string | null;
 	editingEnvName: string;
 	envError: string | null;
+	/** In flight for an environment create/update/delete, to block double submits. */
+	envSaving: boolean;
 	scopeError: string | null;
+	/** In flight for a scope create/delete, to block double submits. */
+	scopeSaving: boolean;
 	siteSettings: SiteSettingsDto | null;
 	siteTitleInput: string;
 	siteUrlInput: string;
@@ -84,7 +90,9 @@ export const initialState: SetupPageState = {
 	editingEnvId: null,
 	editingEnvName: "",
 	envError: null,
+	envSaving: false,
 	scopeError: null,
+	scopeSaving: false,
 	siteSettings: null,
 	siteTitleInput: "",
 	siteUrlInput: "",
@@ -129,8 +137,12 @@ export function reducer(
 			return { ...state, editingEnvName: (action.data as string) ?? "" };
 		case SetupPageActionType.SET_ENV_ERROR:
 			return { ...state, envError: (action.data as string | null) ?? null };
+		case SetupPageActionType.SET_ENV_SAVING:
+			return { ...state, envSaving: (action.data as boolean | undefined) ?? false };
 		case SetupPageActionType.SET_SCOPE_ERROR:
 			return { ...state, scopeError: (action.data as string | null) ?? null };
+		case SetupPageActionType.SET_SCOPE_SAVING:
+			return { ...state, scopeSaving: (action.data as boolean | undefined) ?? false };
 		case SetupPageActionType.SET_SITE_SETTINGS: {
 			const dto = action.data as SiteSettingsDto | null;
 			return {

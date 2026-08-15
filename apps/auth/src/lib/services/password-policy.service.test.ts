@@ -11,7 +11,9 @@ import { AdminAuditLogService } from "@/lib/services/admin-audit-log.service";
 
 function createPolicyRepoMock(): PasswordPolicyRepository {
 	return {
-		list: vi.fn(),
+		// Default to "no existing policies" so the name-uniqueness check has
+		// something to read; individual tests override it.
+		list: vi.fn().mockResolvedValue([]),
 		listWithEnvironments: vi.fn(),
 		getById: vi.fn(),
 		getWithEnvironments: vi.fn(),
@@ -175,6 +177,16 @@ describe("PasswordPolicyService", () => {
 			expect(result.error).toMatch(/already assigned to policy "Existing"/);
 			expect(mockRepo.create).not.toHaveBeenCalled();
 		});
+
+		it("rejects a duplicate name instead of letting the unique constraint fire", async () => {
+			vi.mocked(mockRepo.list).mockResolvedValue([makePolicy({ id: "other", name: "Strong" })]);
+			const service = createService(mockRepo);
+			// The name is compared after trimming, the same way it is persisted.
+			const result = await service.create(makeInput({ name: "  Strong  " }), []);
+			expect(result.ok).toBe(false);
+			expect(result.error).toMatch(/already exists/i);
+			expect(mockRepo.create).not.toHaveBeenCalled();
+		});
 	});
 
 	describe("update", () => {
@@ -184,6 +196,27 @@ describe("PasswordPolicyService", () => {
 			const result = await service.update("missing", { name: "X" }, undefined);
 			expect(result.ok).toBe(false);
 			expect(result.error).toMatch(/not found/i);
+		});
+
+		it("allows a policy to keep its own name", async () => {
+			vi.mocked(mockRepo.getById).mockResolvedValue(makePolicy({ id: "p1", name: "Strong" }));
+			vi.mocked(mockRepo.list).mockResolvedValue([makePolicy({ id: "p1", name: "Strong" })]);
+			const service = createService(mockRepo);
+			const result = await service.update("p1", { name: "Strong" }, undefined);
+			expect(result.ok).toBe(true);
+		});
+
+		it("rejects renaming onto another policy's name", async () => {
+			vi.mocked(mockRepo.getById).mockResolvedValue(makePolicy({ id: "p1", name: "Strong" }));
+			vi.mocked(mockRepo.list).mockResolvedValue([
+				makePolicy({ id: "p1", name: "Strong" }),
+				makePolicy({ id: "p2", name: "Stronger" }),
+			]);
+			const service = createService(mockRepo);
+			const result = await service.update("p1", { name: "Stronger" }, undefined);
+			expect(result.ok).toBe(false);
+			expect(result.error).toMatch(/already exists/i);
+			expect(mockRepo.update).not.toHaveBeenCalled();
 		});
 
 		it("validates cross-field rules against the merged record", async () => {

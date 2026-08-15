@@ -73,6 +73,22 @@ function validateRules(input: {
 	return null;
 }
 
+function duplicateNameError(name: string): string {
+	return `A policy named "${name}" already exists`;
+}
+
+/**
+ * True for the driver error raised when `password_policies.name` collides.
+ *
+ * The pre-check in `findNameConflict` is a check-then-act and cannot close the
+ * race on its own, so the write paths translate the constraint error too rather
+ * than letting a raw `D1_ERROR: UNIQUE constraint failed…` reach the user.
+ */
+function isDuplicateNameViolation(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error);
+	return /UNIQUE constraint failed:\s*password_policies\.name/i.test(message);
+}
+
 export class PasswordPolicyService {
 	private readonly policyRepo: PasswordPolicyRepository;
 	private readonly adminAuditLogService: AdminAuditLogService;
@@ -107,6 +123,24 @@ export class PasswordPolicyService {
 		return null;
 	}
 
+	/**
+	 * Returns an error message if another policy already uses `name`, else null.
+	 *
+	 * The name column is UNIQUE, so without this the driver's raw constraint
+	 * error is what reaches the user. Matched exactly against the trimmed name
+	 * that would be stored, so this rejects precisely what the database would.
+	 *
+	 * This is a check-then-act, so it cannot be the only defence — a concurrent
+	 * write can still land between the read and the insert. The write paths also
+	 * translate the constraint error itself; see `duplicateNameError`.
+	 */
+	private async findNameConflict(name: string, policyId: string | null): Promise<string | null> {
+		const trimmed = name.trim();
+		const existing = await this.policyRepo.list();
+		const clash = existing.find((policy) => policy.id !== policyId && policy.name === trimmed);
+		return clash ? duplicateNameError(trimmed) : null;
+	}
+
 	async create(
 		input: CreatePasswordPolicyInput,
 		environmentIds: string[],
@@ -116,6 +150,10 @@ export class PasswordPolicyService {
 		if (ruleError) {
 			return { ok: false, error: ruleError };
 		}
+		const nameConflict = await this.findNameConflict(input.name, null);
+		if (nameConflict) {
+			return { ok: false, error: nameConflict };
+		}
 		const conflict = await this.findEnvironmentConflict(environmentIds, null);
 		if (conflict) {
 			return { ok: false, error: conflict };
@@ -123,7 +161,15 @@ export class PasswordPolicyService {
 
 		const id = crypto.randomUUID();
 		const now = new Date().toISOString();
-		await this.policyRepo.create(id, { ...input, name: input.name.trim() }, now);
+		const trimmedName = input.name.trim();
+		try {
+			await this.policyRepo.create(id, { ...input, name: trimmedName }, now);
+		} catch (error) {
+			if (isDuplicateNameViolation(error)) {
+				return { ok: false, error: duplicateNameError(trimmedName) };
+			}
+			throw error;
+		}
 		if (environmentIds.length > 0) {
 			await this.policyRepo.setEnvironments(id, environmentIds);
 		}
@@ -163,6 +209,12 @@ export class PasswordPolicyService {
 		if (ruleError) {
 			return { ok: false, error: ruleError };
 		}
+		if (updates.name !== undefined) {
+			const nameConflict = await this.findNameConflict(updates.name, id);
+			if (nameConflict) {
+				return { ok: false, error: nameConflict };
+			}
+		}
 		if (environmentIds !== undefined) {
 			const conflict = await this.findEnvironmentConflict(environmentIds, id);
 			if (conflict) {
@@ -175,7 +227,14 @@ export class PasswordPolicyService {
 			...updates,
 			...(updates.name !== undefined ? { name: updates.name.trim() } : {}),
 		};
-		await this.policyRepo.update(id, patch, now);
+		try {
+			await this.policyRepo.update(id, patch, now);
+		} catch (error) {
+			if (isDuplicateNameViolation(error)) {
+				return { ok: false, error: duplicateNameError(patch.name ?? existing.name) };
+			}
+			throw error;
+		}
 		if (environmentIds !== undefined) {
 			await this.policyRepo.setEnvironments(id, environmentIds);
 		}

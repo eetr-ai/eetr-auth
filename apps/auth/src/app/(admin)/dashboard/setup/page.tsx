@@ -73,7 +73,9 @@ function SetupPageContent() {
 		editingEnvId,
 		editingEnvName,
 		envError,
+		envSaving,
 		scopeError,
+		scopeSaving,
 		siteSettings,
 		siteTitleInput,
 		siteUrlInput,
@@ -92,8 +94,14 @@ function SetupPageContent() {
 
 	const envById = new Map(environments.map((e) => [e.id, e.name]));
 
-	const load = async () => {
-		dispatch({ type: SetupPageActionType.SET_LOADING, data: true });
+	/**
+	 * `silent` skips the full-page spinner. Post-mutation refreshes must be
+	 * silent: swapping the whole page for a spinner would unmount any open side
+	 * panel mid-animation, and the control that triggered the mutation already
+	 * shows its own in-flight state.
+	 */
+	const load = async ({ silent = false }: { silent?: boolean } = {}) => {
+		if (!silent) dispatch({ type: SetupPageActionType.SET_LOADING, data: true });
 		try {
 			const [envs, scopesList, policiesList, settings, clientsRaw, adminIds] = await Promise.all([
 				listEnvironments(),
@@ -121,7 +129,7 @@ function SetupPageContent() {
 			dispatch({ type: SetupPageActionType.SET_CLIENTS, data: clientItems });
 			dispatch({ type: SetupPageActionType.SET_SELECTED_ADMIN_CLIENT_IDS, data: adminIds });
 		} finally {
-			dispatch({ type: SetupPageActionType.SET_LOADING, data: false });
+			if (!silent) dispatch({ type: SetupPageActionType.SET_LOADING, data: false });
 		}
 	};
 
@@ -134,15 +142,18 @@ function SetupPageContent() {
 		dispatch({ type: SetupPageActionType.SET_ENV_ERROR, data: null });
 		const name = envName.trim();
 		if (!name) return;
+		dispatch({ type: SetupPageActionType.SET_ENV_SAVING, data: true });
 		try {
 			await createEnvironment(name);
 			dispatch({ type: SetupPageActionType.SET_ENV_NAME, data: "" });
-			await load();
+			await load({ silent: true });
 		} catch (err) {
 			dispatch({
 				type: SetupPageActionType.SET_ENV_ERROR,
 				data: err instanceof Error ? err.message : "Failed to create environment",
 			});
+		} finally {
+			dispatch({ type: SetupPageActionType.SET_ENV_SAVING, data: false });
 		}
 	};
 
@@ -150,27 +161,38 @@ function SetupPageContent() {
 		e.preventDefault();
 		if (!editingEnvId) return;
 		dispatch({ type: SetupPageActionType.SET_ENV_ERROR, data: null });
+		dispatch({ type: SetupPageActionType.SET_ENV_SAVING, data: true });
 		try {
+			// The action resolves to the updated Environment, or null when the id no
+			// longer exists — say so rather than leaving the row silently in edit mode.
 			const result = await updateEnvironment(editingEnvId, editingEnvName.trim());
 			if (result) {
 				dispatch({ type: SetupPageActionType.SET_EDITING_ENV_ID, data: null });
 				dispatch({ type: SetupPageActionType.SET_EDITING_ENV_NAME, data: "" });
-				await load();
+				await load({ silent: true });
+			} else {
+				dispatch({
+					type: SetupPageActionType.SET_ENV_ERROR,
+					data: "Environment no longer exists",
+				});
 			}
 		} catch (err) {
 			dispatch({
 				type: SetupPageActionType.SET_ENV_ERROR,
 				data: err instanceof Error ? err.message : "Failed to update environment",
 			});
+		} finally {
+			dispatch({ type: SetupPageActionType.SET_ENV_SAVING, data: false });
 		}
 	};
 
 	const handleDeleteEnv = async (id: string) => {
 		dispatch({ type: SetupPageActionType.SET_ENV_ERROR, data: null });
+		dispatch({ type: SetupPageActionType.SET_ENV_SAVING, data: true });
 		try {
 			const result = await deleteEnvironment(id);
 			if (result.ok) {
-				await load();
+				await load({ silent: true });
 			} else {
 				dispatch({
 					type: SetupPageActionType.SET_ENV_ERROR,
@@ -182,6 +204,8 @@ function SetupPageContent() {
 				type: SetupPageActionType.SET_ENV_ERROR,
 				data: err instanceof Error ? err.message : "Failed to delete environment",
 			});
+		} finally {
+			dispatch({ type: SetupPageActionType.SET_ENV_SAVING, data: false });
 		}
 	};
 
@@ -190,24 +214,28 @@ function SetupPageContent() {
 		dispatch({ type: SetupPageActionType.SET_SCOPE_ERROR, data: null });
 		const name = scopeName.trim();
 		if (!name) return;
+		dispatch({ type: SetupPageActionType.SET_SCOPE_SAVING, data: true });
 		try {
 			await createScope(name);
 			dispatch({ type: SetupPageActionType.SET_SCOPE_NAME, data: "" });
-			await load();
+			await load({ silent: true });
 		} catch (err) {
 			dispatch({
 				type: SetupPageActionType.SET_SCOPE_ERROR,
 				data: err instanceof Error ? err.message : "Failed to create scope",
 			});
+		} finally {
+			dispatch({ type: SetupPageActionType.SET_SCOPE_SAVING, data: false });
 		}
 	};
 
 	const handleDeleteScope = async (id: string) => {
 		dispatch({ type: SetupPageActionType.SET_SCOPE_ERROR, data: null });
+		dispatch({ type: SetupPageActionType.SET_SCOPE_SAVING, data: true });
 		try {
 			const result = await deleteScope(id);
 			if (result.ok) {
-				await load();
+				await load({ silent: true });
 			} else {
 				dispatch({
 					type: SetupPageActionType.SET_SCOPE_ERROR,
@@ -219,6 +247,8 @@ function SetupPageContent() {
 				type: SetupPageActionType.SET_SCOPE_ERROR,
 				data: err instanceof Error ? err.message : "Failed to delete scope",
 			});
+		} finally {
+			dispatch({ type: SetupPageActionType.SET_SCOPE_SAVING, data: false });
 		}
 	};
 
@@ -236,7 +266,7 @@ function SetupPageContent() {
 				});
 				return false;
 			}
-			await load();
+			await load({ silent: true });
 			return true;
 		} catch (err) {
 			dispatch({
@@ -262,7 +292,7 @@ function SetupPageContent() {
 				});
 				return false;
 			}
-			await load();
+			await load({ silent: true });
 			return true;
 		} catch (err) {
 			dispatch({
@@ -284,7 +314,7 @@ function SetupPageContent() {
 				});
 				return false;
 			}
-			await load();
+			await load({ silent: true });
 			return true;
 		} catch (err) {
 			dispatch({
@@ -447,6 +477,7 @@ function SetupPageContent() {
 			/>
 
 			<EnvironmentsSection
+				saving={envSaving}
 				activeTab={activeTab}
 				environments={environments}
 				envName={envName}
@@ -460,6 +491,7 @@ function SetupPageContent() {
 			/>
 
 			<ScopesSection
+				saving={scopeSaving}
 				activeTab={activeTab}
 				scopes={scopes}
 				scopeName={scopeName}

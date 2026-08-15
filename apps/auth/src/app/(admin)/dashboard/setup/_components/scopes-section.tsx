@@ -13,6 +13,8 @@ interface ScopesSectionProps {
 	dispatch: (action: ReducerAction<SetupPageActionType>) => void;
 	onCreate: (e: FormEvent) => void;
 	onDelete: (id: string) => void;
+	/** A mutation is in flight; disable the controls so it cannot be double-submitted. */
+	saving: boolean;
 }
 
 export function ScopesSection({
@@ -23,6 +25,7 @@ export function ScopesSection({
 	dispatch,
 	onCreate,
 	onDelete,
+	saving,
 }: ScopesSectionProps) {
 	return (
 		<section
@@ -47,7 +50,7 @@ export function ScopesSection({
 					placeholder="Scope name"
 					className="flex-1"
 				/>
-				<Button type="submit" icon={Plus}>
+				<Button type="submit" icon={Plus} loading={saving}>
 					Add
 				</Button>
 			</form>
@@ -62,7 +65,8 @@ export function ScopesSection({
 							type="button"
 							variant="danger"
 							aria-label="Delete"
-							onClick={() => onDelete(scope.id)}
+							disabled={saving}
+										onClick={() => onDelete(scope.id)}
 						>
 							<Trash2 className="h-4 w-4" />
 						</IconButton>

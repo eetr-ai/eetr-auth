@@ -16,6 +16,8 @@ interface EnvironmentsSectionProps {
 	onCreate: (e: FormEvent) => void;
 	onUpdate: (e: FormEvent) => void;
 	onDelete: (id: string) => void;
+	/** A mutation is in flight; disable the controls so it cannot be double-submitted. */
+	saving: boolean;
 }
 
 export function EnvironmentsSection({
@@ -29,6 +31,7 @@ export function EnvironmentsSection({
 	onCreate,
 	onUpdate,
 	onDelete,
+	saving,
 }: EnvironmentsSectionProps) {
 	return (
 		<section
@@ -50,7 +53,7 @@ export function EnvironmentsSection({
 					placeholder="Environment name"
 					className="flex-1"
 				/>
-				<Button type="submit" icon={Plus}>
+				<Button type="submit" icon={Plus} loading={saving}>
 					Add
 				</Button>
 			</form>
@@ -76,7 +79,8 @@ export function EnvironmentsSection({
 								/>
 								<button
 									type="submit"
-									className="rounded-full border border-border px-2 py-1 text-sm hover:bg-surface-hover"
+									disabled={saving}
+									className="rounded-full border border-border px-2 py-1 text-sm hover:bg-surface-hover disabled:opacity-50"
 								>
 									Save
 								</button>
@@ -104,6 +108,7 @@ export function EnvironmentsSection({
 									<IconButton
 										type="button"
 										aria-label="Edit"
+										disabled={saving}
 										onClick={() => {
 											dispatch({
 												type: SetupPageActionType.SET_EDITING_ENV_ID,
@@ -121,6 +126,7 @@ export function EnvironmentsSection({
 										type="button"
 										variant="danger"
 										aria-label="Delete"
+										disabled={saving}
 										onClick={() => onDelete(env.id)}
 									>
 										<Trash2 className="h-4 w-4" />
