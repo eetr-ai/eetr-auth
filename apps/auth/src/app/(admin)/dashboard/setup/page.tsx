@@ -88,6 +88,8 @@ function SetupPageContent() {
 		adminClientsError,
 		siteSaving,
 		logoUploading,
+		logoStagedKey,
+		logoPreviewUrl,
 		adminClientsSaving,
 	} = state;
 
@@ -343,6 +345,9 @@ function SetupPageContent() {
 
 	const handleSaveSite = async (e: React.FormEvent) => {
 		e.preventDefault();
+		// A staged logo is not on the wire yet, so saving mid-upload would persist
+		// the rest of the form and silently drop the picture.
+		if (logoUploading) return;
 		dispatch({ type: SetupPageActionType.SET_SITE_ERROR, data: null });
 		dispatch({ type: SetupPageActionType.SET_SITE_SAVING, data: true });
 		try {
@@ -351,8 +356,14 @@ function SetupPageContent() {
 				siteUrl: siteUrlInput.trim() || null,
 				cdnUrl: cdnUrlInput.trim() || null,
 				mfaEnabled: mfaEnabledInput,
+				...(logoStagedKey ? { logoStagedKey } : {}),
 			});
 			dispatch({ type: SetupPageActionType.SET_SITE_SETTINGS, data: dto });
+			if (logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl);
+			dispatch({
+				type: SetupPageActionType.SET_STAGED_LOGO,
+				data: { key: null, previewUrl: null },
+			});
 		} catch (err) {
 			dispatch({
 				type: SetupPageActionType.SET_SITE_ERROR,
@@ -363,6 +374,10 @@ function SetupPageContent() {
 		}
 	};
 
+	/**
+	 * Uploads to staging and records the key. The live logo is only replaced when
+	 * the Site identity form is saved.
+	 */
 	const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
 		const file = e.target.files?.[0];
 		e.target.value = "";
@@ -372,22 +387,18 @@ function SetupPageContent() {
 		try {
 			const body = new FormData();
 			body.set("file", file);
-			const res = await fetch("/api/admin/site-logo", {
-				method: "POST",
-				body,
+			const res = await fetch("/api/admin/site-logo", { method: "POST", body });
+			const json = (await res.json().catch(() => null)) as
+				| { stagedKey?: string; error_description?: string; error?: string }
+				| null;
+			if (!res.ok || !json?.stagedKey) {
+				throw new Error(json?.error_description ?? json?.error ?? "Upload failed");
+			}
+			if (logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl);
+			dispatch({
+				type: SetupPageActionType.SET_STAGED_LOGO,
+				data: { key: json.stagedKey, previewUrl: URL.createObjectURL(file) },
 			});
-			const json = (await res.json()) as { settings?: SiteSettingsDto; error?: string };
-			if (!res.ok) {
-				throw new Error(
-					(json as { error_description?: string }).error_description ?? json.error ?? "Upload failed"
-				);
-			}
-			if (json.settings) {
-				dispatch({ type: SetupPageActionType.SET_SITE_SETTINGS, data: json.settings });
-			} else {
-				const dto = await getSiteSettings();
-				dispatch({ type: SetupPageActionType.SET_SITE_SETTINGS, data: dto });
-			}
 		} catch (err) {
 			dispatch({
 				type: SetupPageActionType.SET_SITE_ERROR,
@@ -404,6 +415,13 @@ function SetupPageContent() {
 		try {
 			const dto = await clearSiteLogo();
 			dispatch({ type: SetupPageActionType.SET_SITE_SETTINGS, data: dto });
+			// Drop any staged logo too, or the next save would promote it and undo
+			// the clear the admin just asked for.
+			if (logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl);
+			dispatch({
+				type: SetupPageActionType.SET_STAGED_LOGO,
+				data: { key: null, previewUrl: null },
+			});
 		} catch (err) {
 			dispatch({
 				type: SetupPageActionType.SET_SITE_ERROR,
@@ -459,6 +477,7 @@ function SetupPageContent() {
 				siteError={siteError}
 				siteSaving={siteSaving}
 				logoUploading={logoUploading}
+				logoPreviewUrl={logoPreviewUrl}
 				logoInputRef={logoInputRef}
 				dispatch={dispatch}
 				onSubmit={handleSaveSite}

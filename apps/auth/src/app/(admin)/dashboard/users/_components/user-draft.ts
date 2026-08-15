@@ -9,6 +9,10 @@ export interface UserDraft {
 	password: string;
 	isAdmin: boolean;
 	environmentIds: string[];
+	/** A `staging/` key for a picked-but-unsaved avatar, promoted on save. */
+	avatarStagedKey: string | null;
+	/** Local object URL for previewing that file before it is saved. */
+	avatarPreviewUrl: string | null;
 }
 
 export const emptyDraft: UserDraft = {
@@ -18,6 +22,8 @@ export const emptyDraft: UserDraft = {
 	password: "",
 	isAdmin: true,
 	environmentIds: [],
+	avatarStagedKey: null,
+	avatarPreviewUrl: null,
 };
 
 export function draftFromUser(user: UserRecord): UserDraft {
@@ -28,6 +34,8 @@ export function draftFromUser(user: UserRecord): UserDraft {
 		password: "",
 		isAdmin: user.isAdmin,
 		environmentIds: [...(user.environmentIds ?? [])],
+		avatarStagedKey: null,
+		avatarPreviewUrl: null,
 	};
 }
 
@@ -47,6 +55,8 @@ function userSignature(draft: UserDraft): string {
 		draft.password,
 		draft.isAdmin,
 		[...draft.environmentIds].sort(),
+		// A picked-but-unsaved photo is an unsaved change like any other.
+		draft.avatarStagedKey,
 	]);
 }
 

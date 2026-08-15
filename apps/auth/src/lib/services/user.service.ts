@@ -3,6 +3,12 @@ import type { UserRecord, UserRepository } from "@/lib/repositories/admin.reposi
 import type { UserChallengeRepository } from "@/lib/repositories/user-challenge.repository";
 import { hashPassword } from "@/lib/auth/password-hash";
 import { normalizeOptionalProfileField } from "@/lib/users/profile";
+import {
+	StagedUploadError,
+	extensionOfStagedKey,
+	promoteStagedUpload,
+	type AssetBucket,
+} from "@/lib/uploads/staged-upload";
 import type { AdminAuditLogService } from "./admin-audit-log.service";
 import { AUDIT_ACTION, AUDIT_RESOURCE } from "./audit-actions";
 
@@ -13,6 +19,8 @@ interface UpdateUserInput {
 	password?: string;
 	isAdmin?: boolean;
 	avatarKey?: string | null;
+	/** A `staging/` key from the upload endpoint, promoted to the final avatar on save. */
+	avatarStagedKey?: string | null;
 	emailVerifiedAt?: string | null;
 	/** When provided, replaces the user's full set of environment grants. */
 	environmentIds?: string[];
@@ -22,6 +30,8 @@ export interface UserServiceDependencies {
 	userRepository: UserRepository;
 	adminAuditLogService: AdminAuditLogService;
 	avatarCdnBaseUrl: string;
+	/** R2 bucket holding avatars. Absent in contexts that never write one. */
+	assetBucket?: AssetBucket;
 	argonHasher?: Fetcher;
 	hashMethod: HashMethod;
 	/**
@@ -35,6 +45,7 @@ export class UserService {
 	private readonly userRepository: UserRepository;
 	private readonly adminAuditLogService: AdminAuditLogService;
 	private readonly avatarCdnBaseUrl: string;
+	private readonly assetBucket?: AssetBucket;
 	private readonly argonHasher?: Fetcher;
 	private readonly hashMethod: HashMethod;
 	private readonly userChallengeRepository?: UserChallengeRepository;
@@ -43,6 +54,7 @@ export class UserService {
 		userRepository,
 		adminAuditLogService,
 		avatarCdnBaseUrl,
+		assetBucket,
 		argonHasher,
 		hashMethod,
 		userChallengeRepository,
@@ -50,6 +62,7 @@ export class UserService {
 		this.userRepository = userRepository;
 		this.adminAuditLogService = adminAuditLogService;
 		this.avatarCdnBaseUrl = avatarCdnBaseUrl.replace(/\/+$/, "");
+		this.assetBucket = assetBucket;
 		this.argonHasher = argonHasher;
 		this.hashMethod = hashMethod;
 		this.userChallengeRepository = userChallengeRepository;
@@ -207,7 +220,10 @@ export class UserService {
 			});
 			patch.passwordUpdatedAt = new Date().toISOString();
 		}
-		if (updates.avatarKey !== undefined) {
+		if (updates.avatarStagedKey && !this.assetBucket) {
+			throw new StagedUploadError("Avatar storage is not configured.");
+		}
+		if (!updates.avatarStagedKey && updates.avatarKey !== undefined) {
 			patch.avatarKey = updates.avatarKey;
 		}
 		if (updates.isAdmin !== undefined) {
@@ -222,6 +238,16 @@ export class UserService {
 				}
 			}
 			patch.isAdmin = updates.isAdmin;
+		}
+
+		// Promoted last, once nothing above can still reject: promotion overwrites
+		// the live avatar, and a validation error afterwards would leave the new
+		// picture in place on a save that never happened. The final key is derived
+		// from the user id, never from anything the caller supplied.
+		if (updates.avatarStagedKey && this.assetBucket) {
+			const finalKey = `avatars/${id}.${extensionOfStagedKey(updates.avatarStagedKey)}`;
+			await promoteStagedUpload(this.assetBucket, updates.avatarStagedKey, finalKey);
+			patch.avatarKey = finalKey;
 		}
 
 		await this.userRepository.update(id, patch);

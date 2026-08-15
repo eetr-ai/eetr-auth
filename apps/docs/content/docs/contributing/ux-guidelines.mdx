@@ -275,6 +275,41 @@ HTML `form` attribute.
 
 Mobile is not a design target for the admin surface; `w-full` below `sm` is the whole story.
 
+## File uploads
+
+Uploads are **staged**, never written straight to their final location.
+
+1. The upload endpoint validates the file and writes it under `staging/<uuid>.<ext>`,
+   returning that key. It does **not** touch the live asset or the record.
+2. The form holds the staged key in its draft, previews the file from a local
+   object URL, and counts it as an unsaved change like any other field.
+3. Saving passes the staged key to the service, which promotes it — copy to the
+   final key, then delete the staged object — and records the result.
+
+Cancelling therefore leaves the current avatar or logo exactly as it was, and a
+rejected file never overwrites a good one.
+
+<Callout type="warn" title="Only promote from staging">
+  `promoteStagedUpload` refuses any key outside the `staging/` prefix, and any
+  key containing a path separator or `..`. The key comes from the client, so
+  without that check a request could name another record's asset and have it
+  copied over its own target. Final keys are always derived server-side from the
+  record id — never from anything the caller sent.
+</Callout>
+
+Staged objects that are never promoted are orphans. Configure an R2 lifecycle
+rule expiring the `staging/` prefix after a day; a browser that closes mid-edit
+cannot be relied on to clean up.
+
+### Testing uploads locally
+
+In production the bucket sits behind a CDN on its own domain, so every asset
+load is cross-origin. `npm run dev` therefore starts a second server
+(`scripts/dev-cdn.mjs`, port 8788) that serves the bucket with CORS headers, so
+that split exists locally too. Point **Setup → Site identity → CDN URL** at
+`http://localhost:8788`. It proxies to a dev-only route that reads the R2
+binding, and that route is disabled when `NODE_ENV` is production.
+
 ## Empty states
 
 Use `EmptyState` when a list can be empty and there is a create affordance; it owns the CTA. Copy

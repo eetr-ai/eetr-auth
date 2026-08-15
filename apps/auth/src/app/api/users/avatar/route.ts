@@ -1,18 +1,16 @@
 import { NextResponse } from "next/server";
 import { authenticateSessionOrBearerUser } from "@/lib/auth/authenticate-session-or-bearer-user";
 import { withApiContext } from "@/lib/context/with-api-context";
-import { getAvatarUrl } from "@/lib/users/profile";
+import { newStagedKey, validateImageUpload } from "@/lib/uploads/staged-upload";
 
-const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
-const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
-
-function extensionForMimeType(contentType: string): string {
-	if (contentType === "image/jpeg") return "jpg";
-	if (contentType === "image/png") return "png";
-	if (contentType === "image/webp") return "webp";
-	return "bin";
-}
-
+/**
+ * Stages a user avatar.
+ *
+ * This no longer replaces the live avatar. The file lands under `staging/` and
+ * the returned key is held by the form until it is saved, so cancelling an edit
+ * leaves the current picture untouched. Saving promotes it — see
+ * `UserService.updateUser`.
+ */
 export const POST = withApiContext(async (req, ctx, getServices) => {
 	const authResult = await authenticateSessionOrBearerUser(req, getServices);
 	if ("response" in authResult) {
@@ -34,28 +32,16 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 			{
 				error: "invalid_request",
 				error_description:
-					authMethod === "bearer"
-						? "file is required."
-						: "Both userId and file are required.",
+					authMethod === "bearer" ? "file is required." : "Both userId and file are required.",
 			},
 			{ status: 400 }
 		);
 	}
-	if (!ALLOWED_MIME_TYPES.has(file.type)) {
+
+	const invalid = validateImageUpload(file);
+	if (invalid) {
 		return NextResponse.json(
-			{
-				error: "invalid_request",
-				error_description: "Unsupported image type. Use JPEG, PNG, or WEBP.",
-			},
-			{ status: 400 }
-		);
-	}
-	if (file.size > MAX_AVATAR_BYTES) {
-		return NextResponse.json(
-			{
-				error: "invalid_request",
-				error_description: "Image is too large. Maximum is 5MB.",
-			},
+			{ error: "invalid_request", error_description: invalid },
 			{ status: 400 }
 		);
 	}
@@ -72,13 +58,13 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 		);
 	}
 
+	// Still resolved here so an upload against a missing user fails now, rather
+	// than at save time with a staged object already written.
 	const targetUser = await userService.getById(targetUserId);
 	if (!targetUser) {
 		return NextResponse.json({ error: "not_found" }, { status: 404 });
 	}
 
-	const extension = extensionForMimeType(file.type);
-	const avatarKey = `avatars/${targetUserId}.${extension}`;
 	const env = ctx.env as unknown as { AUTH_ASSETS?: R2Bucket };
 	const bucket = env.AUTH_ASSETS;
 	if (!bucket) {
@@ -91,24 +77,10 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 		);
 	}
 
-	const bodyBuffer = await file.arrayBuffer();
-	await bucket.put(avatarKey, bodyBuffer, {
+	const stagedKey = newStagedKey(file.type);
+	await bucket.put(stagedKey, await file.arrayBuffer(), {
 		httpMetadata: { contentType: file.type },
 	});
 
-	const updated = await userService.updateUser(
-		targetUserId,
-		{ avatarKey },
-		actorUserId
-	);
-	const envRecord = ctx.env as unknown as Record<string, unknown>;
-
-	return NextResponse.json(
-		{
-			ok: true,
-			avatarKey,
-			picture: updated.avatarUrl ?? getAvatarUrl(avatarKey, envRecord),
-		},
-		{ status: 200 }
-	);
+	return NextResponse.json({ ok: true, stagedKey, contentType: file.type }, { status: 200 });
 });

@@ -44,6 +44,7 @@ export enum SetupPageActionType {
 	SET_ADMIN_CLIENTS_ERROR = "SET_ADMIN_CLIENTS_ERROR",
 	SET_SITE_SAVING = "SET_SITE_SAVING",
 	SET_LOGO_UPLOADING = "SET_LOGO_UPLOADING",
+	SET_STAGED_LOGO = "SET_STAGED_LOGO",
 	SET_ADMIN_CLIENTS_SAVING = "SET_ADMIN_CLIENTS_SAVING",
 }
 
@@ -75,6 +76,10 @@ export interface SetupPageState {
 	adminClientsError: string | null;
 	siteSaving: boolean;
 	logoUploading: boolean;
+	/** A `staging/` key for a picked-but-unsaved logo, promoted when the form saves. */
+	logoStagedKey: string | null;
+	/** Local object URL previewing that file before it is saved. */
+	logoPreviewUrl: string | null;
 	adminClientsSaving: boolean;
 }
 
@@ -104,6 +109,8 @@ export const initialState: SetupPageState = {
 	adminClientsError: null,
 	siteSaving: false,
 	logoUploading: false,
+	logoStagedKey: null,
+	logoPreviewUrl: null,
 	adminClientsSaving: false,
 };
 
@@ -172,6 +179,10 @@ export function reducer(
 			return { ...state, adminClientsError: (action.data as string | null) ?? null };
 		case SetupPageActionType.SET_SITE_SAVING:
 			return { ...state, siteSaving: (action.data as boolean | undefined) ?? false };
+		case SetupPageActionType.SET_STAGED_LOGO: {
+			const data = action.data as { key: string | null; previewUrl: string | null } | undefined;
+			return { ...state, logoStagedKey: data?.key ?? null, logoPreviewUrl: data?.previewUrl ?? null };
+		}
 		case SetupPageActionType.SET_LOGO_UPLOADING:
 			return { ...state, logoUploading: (action.data as boolean | undefined) ?? false };
 		case SetupPageActionType.SET_ADMIN_CLIENTS_SAVING:

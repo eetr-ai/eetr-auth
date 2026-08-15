@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pencil, Plus, Users } from "lucide-react";
 import {
 	createUser,
@@ -53,6 +53,10 @@ export default function UsersPage() {
 	const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
 	const dirty = isUserDraftDirty(draft, baseline);
+	// An upload can outlive the panel it was started from. Results are applied
+	// only while the same user is still being edited.
+	const editingIdRef = useRef<string | null>(null);
+	editingIdRef.current = editingId;
 	// Derived from `users` rather than snapshotted, so the silent refetch after an
 	// avatar upload refreshes the picture in the open panel.
 	const editingUser = editingId ? (users.find((user) => user.id === editingId) ?? null) : null;
@@ -101,6 +105,12 @@ export default function UsersPage() {
 		setConfirmingDiscard(false);
 		setPanelOpen(false);
 		setError(null);
+		// The staged object itself is swept by the bucket's lifecycle rule; this
+		// just releases the local preview.
+		setDraft((prev) => {
+			if (prev.avatarPreviewUrl) URL.revokeObjectURL(prev.avatarPreviewUrl);
+			return { ...prev, avatarPreviewUrl: null };
+		});
 	};
 
 	const requestClose = () => {
@@ -113,6 +123,9 @@ export default function UsersPage() {
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
+		// A photo still uploading has no staged key yet, so saving now would persist
+		// the rest of the form and silently drop the picture.
+		if (uploadingAvatarUserId) return;
 		setSaving(true);
 		setError(null);
 		try {
@@ -126,6 +139,7 @@ export default function UsersPage() {
 					...(draft.password ? { password: draft.password } : {}),
 					isAdmin: draft.isAdmin,
 					environmentIds: draft.environmentIds,
+					...(draft.avatarStagedKey ? { avatarStagedKey: draft.avatarStagedKey } : {}),
 				});
 			} else {
 				// createUser cannot take environments, so assigning them on create is a
@@ -179,6 +193,10 @@ export default function UsersPage() {
 		}
 	};
 
+	/**
+	 * Uploads to staging and records the key on the draft. The live avatar is
+	 * only replaced when the form is saved, so cancelling changes nothing.
+	 */
 	const handleAvatarUpload = async (userId: string, file: File) => {
 		setError(null);
 		setUploadingAvatarUserId(userId);
@@ -187,15 +205,29 @@ export default function UsersPage() {
 			formData.set("userId", userId);
 			formData.set("file", file);
 			const response = await fetch("/api/users/avatar", { method: "POST", body: formData });
-			if (!response.ok) {
-				const payload = (await response.json().catch(() => null)) as
-					| { error_description?: string; error?: string }
-					| null;
-				throw new Error(payload?.error_description ?? payload?.error ?? "Failed to upload avatar");
+			const payload = (await response.json().catch(() => null)) as
+				| { stagedKey?: string; error_description?: string; error?: string }
+				| null;
+			if (!response.ok || !payload?.stagedKey) {
+				throw new Error(payload?.error_description ?? payload?.error ?? "Failed to upload photo");
 			}
-			await load({ silent: true });
+			if (editingIdRef.current !== userId) {
+				// The panel moved on (or closed) while this was in flight. The staged
+				// object is left for the lifecycle rule rather than applied to whoever
+				// is on screen now.
+				return;
+			}
+			setDraft((prev) => {
+				// Release the previous preview so picking repeatedly does not leak.
+				if (prev.avatarPreviewUrl) URL.revokeObjectURL(prev.avatarPreviewUrl);
+				return {
+					...prev,
+					avatarStagedKey: payload.stagedKey ?? null,
+					avatarPreviewUrl: URL.createObjectURL(file),
+				};
+			});
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to upload avatar");
+			setError(err instanceof Error ? err.message : "Failed to upload photo");
 		} finally {
 			setUploadingAvatarUserId(null);
 		}

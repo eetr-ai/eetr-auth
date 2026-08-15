@@ -45,6 +45,16 @@ describe("isUserDraftDirty", () => {
 	it("detects the admin flag flipping", () => {
 		expect(isUserDraftDirty(withDraft({ isAdmin: false }), baseline)).toBe(true);
 	});
+
+	it("treats a picked-but-unsaved photo as a change", () => {
+		expect(isUserDraftDirty(withDraft({ avatarStagedKey: "staging/abc.png" }), baseline)).toBe(
+			true,
+		);
+	});
+
+	it("ignores the local preview url, which is not persisted", () => {
+		expect(isUserDraftDirty(withDraft({ avatarPreviewUrl: "blob:x" }), baseline)).toBe(false);
+	});
 });
 
 describe("draftFromUser", () => {
@@ -66,6 +76,9 @@ describe("draftFromUser", () => {
 			password: "",
 			isAdmin: false,
 			environmentIds: ["env-a"],
+			// An existing user starts with no pending upload.
+			avatarStagedKey: null,
+			avatarPreviewUrl: null,
 		});
 	});
 

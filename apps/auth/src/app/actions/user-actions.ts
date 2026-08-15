@@ -54,6 +54,7 @@ export async function updateUser(
 		password?: string;
 		isAdmin?: boolean;
 		avatarKey?: string | null;
+		avatarStagedKey?: string | null;
 		environmentIds?: string[];
 	}
 ) {
@@ -73,6 +74,9 @@ export async function updateUser(
 		...(updates.password !== undefined ? { password: updates.password } : {}),
 		...(updates.isAdmin !== undefined ? { isAdmin: updates.isAdmin } : {}),
 		...(updates.avatarKey !== undefined ? { avatarKey: updates.avatarKey } : {}),
+		...(updates.avatarStagedKey !== undefined
+			? { avatarStagedKey: updates.avatarStagedKey }
+			: {}),
 		...(updates.environmentIds !== undefined ? { environmentIds: updates.environmentIds } : {}),
 	};
 

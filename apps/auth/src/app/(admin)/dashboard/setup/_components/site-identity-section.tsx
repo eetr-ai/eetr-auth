@@ -15,6 +15,8 @@ interface SiteIdentitySectionProps {
 	siteError: string | null;
 	siteSaving: boolean;
 	logoUploading: boolean;
+	/** Local object URL for a picked-but-unsaved logo, shown instead of the live one. */
+	logoPreviewUrl: string | null;
 	logoInputRef: RefObject<HTMLInputElement | null>;
 	dispatch: (action: ReducerAction<SetupPageActionType>) => void;
 	onSubmit: (e: FormEvent) => void;
@@ -32,13 +34,15 @@ export function SiteIdentitySection({
 	siteError,
 	siteSaving,
 	logoUploading,
+	logoPreviewUrl,
 	logoInputRef,
 	dispatch,
 	onSubmit,
 	onLogoChange,
 	onClearLogo,
 }: SiteIdentitySectionProps) {
-	const previewLogoUrl = siteSettings?.displayLogoUrl ?? null;
+	// The picked file wins over the stored logo until the form is saved.
+	const previewLogoUrl = logoPreviewUrl ?? siteSettings?.displayLogoUrl ?? null;
 
 	return (
 		<section

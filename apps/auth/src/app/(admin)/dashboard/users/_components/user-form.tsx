@@ -50,7 +50,18 @@ export function UserForm({
 
 			{user ? (
 				<div className="flex items-center gap-4">
-					<UserAvatar user={user} className="h-16 w-16" />
+					{/* Shows the picked file straight away, while the record still holds the
+					    old avatar — nothing is replaced until the form is saved. */}
+					{draft.avatarPreviewUrl ? (
+						// eslint-disable-next-line @next/next/no-img-element -- local object URL
+						<img
+							src={draft.avatarPreviewUrl}
+							alt=""
+							className="h-16 w-16 shrink-0 rounded-full border border-border bg-surface-sunken object-cover"
+						/>
+					) : (
+						<UserAvatar user={user} className="h-16 w-16" />
+					)}
 					<div>
 						{/* Uploads immediately rather than joining the draft: it is a separate
 						    multipart endpoint, not part of the user record this form saves. */}
@@ -75,7 +86,11 @@ export function UserForm({
 						>
 							Change photo
 						</Button>
-						<p className="mt-1 text-xs text-muted-foreground">Saved as soon as you pick a file.</p>
+						<p className="mt-1 text-xs text-muted-foreground">
+							{draft.avatarStagedKey
+								? "Replaces the current photo when you save."
+								: "Applied when you save."}
+						</p>
 					</div>
 				</div>
 			) : null}
