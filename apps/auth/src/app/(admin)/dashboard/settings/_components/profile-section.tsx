@@ -8,6 +8,8 @@ interface ProfileSectionProps {
 	username: string;
 	avatarPreview: string | null;
 	avatarUploading: boolean;
+	/** A photo has been staged and applies when the form is saved. */
+	avatarPending: boolean;
 	avatarInputRef: RefObject<HTMLInputElement | null>;
 	onAvatarChange: (e: ChangeEvent<HTMLInputElement>) => void;
 	pending: boolean;
@@ -22,6 +24,7 @@ export function ProfileSection({
 	username,
 	avatarPreview,
 	avatarUploading,
+	avatarPending,
 	avatarInputRef,
 	onAvatarChange,
 	pending,
@@ -41,10 +44,10 @@ export function ProfileSection({
 					<img
 						src={avatarPreview}
 						alt=""
-						className="h-16 w-16 shrink-0 rounded-full border border-brand-muted object-cover"
+						className="h-16 w-16 shrink-0 rounded-full border border-border object-cover"
 					/>
 				) : (
-					<div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-dashed border-brand-muted">
+					<div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-dashed border-border">
 						<ImageIcon className="h-6 w-6 text-muted-foreground" />
 					</div>
 				)}
@@ -65,7 +68,9 @@ export function ProfileSection({
 					>
 						{avatarUploading ? "Uploading…" : "Change avatar"}
 					</Button>
-					<p className="mt-1 text-xs text-muted-foreground">JPEG, PNG, or WEBP · Max 5 MB</p>
+					<p className="mt-1 text-xs text-muted-foreground">
+						{avatarPending ? "Applied when you save." : "JPEG, PNG, or WEBP · Max 5 MB"}
+					</p>
 				</div>
 			</div>
 

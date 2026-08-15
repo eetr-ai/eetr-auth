@@ -1,12 +1,33 @@
 import { useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
-import { Banner, Button, IconButton, InlineDeleteConfirm, Input } from "@/components/ui";
+import { Lock, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+	Banner,
+	Button,
+	ConfirmDialog,
+	EmptyState,
+	IconButton,
+	InlineDeleteConfirm,
+	Select,
+	SidePanel,
+} from "@/components/ui";
 import type { Environment } from "@/lib/repositories/environment.repository";
 import type {
 	CreatePasswordPolicyInput,
 	PasswordPolicyWithEnvironments,
 } from "@/lib/repositories/password-policy.repository";
+import {
+	draftFromPolicy,
+	draftToInput,
+	emptyDraft,
+	isPolicyDraftDirty,
+	summarize,
+	type PolicyDraft,
+} from "./policy-draft";
+import { PolicyForm } from "./policy-form";
 import type { SetupTabId } from "./state";
+
+/** The form lives in the panel body; its submit button lives in the panel footer. */
+const FORM_ID = "password-policy-form";
 
 interface PasswordPoliciesSectionProps {
 	activeTab: SetupTabId;
@@ -27,90 +48,6 @@ interface PasswordPoliciesSectionProps {
 	onSetAdminPolicy: (policyId: string | null) => Promise<boolean>;
 }
 
-interface PolicyDraft {
-	name: string;
-	enabled: boolean;
-	minLength: string;
-	maxLength: string;
-	minUppercase: string;
-	minLowercase: string;
-	minNumber: string;
-	minSpecial: string;
-	rejectContainsIdentifier: boolean;
-	maxPasswordAgeDays: string;
-	environmentIds: string[];
-}
-
-const emptyDraft: PolicyDraft = {
-	name: "",
-	enabled: true,
-	minLength: "8",
-	maxLength: "",
-	minUppercase: "0",
-	minLowercase: "0",
-	minNumber: "0",
-	minSpecial: "0",
-	rejectContainsIdentifier: false,
-	maxPasswordAgeDays: "0",
-	environmentIds: [],
-};
-
-// Minimum-count fields rendered as number inputs: [draft key, label].
-const COUNT_FIELDS: Array<[keyof PolicyDraft, string]> = [
-	["minUppercase", "Min uppercase"],
-	["minLowercase", "Min lowercase"],
-	["minNumber", "Min numbers"],
-	["minSpecial", "Min special chars"],
-];
-
-function draftFromPolicy(policy: PasswordPolicyWithEnvironments): PolicyDraft {
-	return {
-		name: policy.name,
-		enabled: policy.enabled,
-		minLength: String(policy.minLength),
-		maxLength: policy.maxLength === null ? "" : String(policy.maxLength),
-		minUppercase: String(policy.minUppercase),
-		minLowercase: String(policy.minLowercase),
-		minNumber: String(policy.minNumber),
-		minSpecial: String(policy.minSpecial),
-		rejectContainsIdentifier: policy.rejectContainsIdentifier,
-		maxPasswordAgeDays: String(policy.maxPasswordAgeDays),
-		environmentIds: [...policy.environmentIds],
-	};
-}
-
-function draftToInput(draft: PolicyDraft): CreatePasswordPolicyInput {
-	const parsedMax = draft.maxLength.trim();
-	const count = (value: string) => Math.max(0, Number.parseInt(value, 10) || 0);
-	return {
-		name: draft.name.trim(),
-		enabled: draft.enabled,
-		minLength: Number.parseInt(draft.minLength, 10) || 0,
-		maxLength: parsedMax === "" ? null : Number.parseInt(parsedMax, 10) || 0,
-		minUppercase: count(draft.minUppercase),
-		minLowercase: count(draft.minLowercase),
-		minNumber: count(draft.minNumber),
-		minSpecial: count(draft.minSpecial),
-		rejectContainsIdentifier: draft.rejectContainsIdentifier,
-		maxPasswordAgeDays: Number.parseInt(draft.maxPasswordAgeDays, 10) || 0,
-	};
-}
-
-function summarize(policy: PasswordPolicyWithEnvironments): string {
-	const parts = [`min ${policy.minLength}`];
-	if (policy.maxLength !== null) parts.push(`max ${policy.maxLength}`);
-	const classes = [
-		policy.minUppercase > 0 && `${policy.minUppercase}×A-Z`,
-		policy.minLowercase > 0 && `${policy.minLowercase}×a-z`,
-		policy.minNumber > 0 && `${policy.minNumber}×0-9`,
-		policy.minSpecial > 0 && `${policy.minSpecial}×symbol`,
-	].filter(Boolean);
-	if (classes.length) parts.push(classes.join("/"));
-	if (policy.rejectContainsIdentifier) parts.push("no identifier");
-	parts.push(policy.maxPasswordAgeDays > 0 ? `expires ${policy.maxPasswordAgeDays}d` : "no expiry");
-	return parts.join(" · ");
-}
-
 export function PasswordPoliciesSection({
 	activeTab,
 	policies,
@@ -123,12 +60,17 @@ export function PasswordPoliciesSection({
 	onDelete,
 	onSetAdminPolicy,
 }: PasswordPoliciesSectionProps) {
-	const [draft, setDraft] = useState<PolicyDraft>(emptyDraft);
+	const [panelOpen, setPanelOpen] = useState(false);
 	const [editingId, setEditingId] = useState<string | null>(null);
+	const [draft, setDraft] = useState<PolicyDraft>(emptyDraft);
+	const [baseline, setBaseline] = useState<PolicyDraft>(emptyDraft);
+	const [confirmingDiscard, setConfirmingDiscard] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 	const [deletingId, setDeletingId] = useState<string | null>(null);
 	const [savingAdminPolicy, setSavingAdminPolicy] = useState(false);
+
+	const dirty = isPolicyDraftDirty(draft, baseline);
 
 	const handleAdminPolicyChange = async (value: string) => {
 		onClearError();
@@ -149,25 +91,41 @@ export function PasswordPoliciesSection({
 		}
 	}
 
-	const update = (patch: Partial<PolicyDraft>) => setDraft((prev) => ({ ...prev, ...patch }));
-
-	const resetForm = () => {
-		setDraft(emptyDraft);
+	const openCreate = () => {
+		onClearError();
 		setEditingId(null);
+		setDraft(emptyDraft);
+		setBaseline(emptyDraft);
+		setPanelOpen(true);
 	};
 
 	const startEdit = (policy: PasswordPolicyWithEnvironments) => {
 		onClearError();
+		const next = draftFromPolicy(policy);
 		setEditingId(policy.id);
-		setDraft(draftFromPolicy(policy));
+		setDraft(next);
+		setBaseline(next);
+		setPanelOpen(true);
 	};
 
-	const toggleEnvironment = (envId: string) => {
-		update({
-			environmentIds: draft.environmentIds.includes(envId)
-				? draft.environmentIds.filter((id) => id !== envId)
-				: [...draft.environmentIds, envId],
-		});
+	// Deliberately does not reset draft/editingId: the panel keeps rendering its
+	// children while it animates out, so clearing them would slide out an empty
+	// form. Every open path re-initialises both.
+	const closePanel = () => {
+		setConfirmingDiscard(false);
+		setPanelOpen(false);
+		// Drop any save error, so it cannot resurface in the section banner once
+		// the panel stops suppressing it.
+		onClearError();
+	};
+
+	const requestClose = () => {
+		// The panel stays mounted (and its Escape handler live) for the length of
+		// the exit animation, so without this a second Escape would re-open the
+		// discard dialog over an already-closing panel.
+		if (!panelOpen || saving) return;
+		if (dirty) setConfirmingDiscard(true);
+		else closePanel();
 	};
 
 	const handleSubmit = async (e: React.FormEvent) => {
@@ -178,7 +136,7 @@ export function PasswordPoliciesSection({
 			const ok = editingId
 				? await onUpdate(editingId, input, draft.environmentIds)
 				: await onCreate(input, draft.environmentIds);
-			if (ok) resetForm();
+			if (ok) closePanel();
 		} finally {
 			setSaving(false);
 		}
@@ -188,10 +146,7 @@ export function PasswordPoliciesSection({
 		setDeletingId(id);
 		try {
 			const ok = await onDelete(id);
-			if (ok) {
-				setConfirmingDeleteId(null);
-				if (editingId === id) resetForm();
-			}
+			if (ok) setConfirmingDeleteId(null);
 		} finally {
 			setDeletingId(null);
 		}
@@ -199,20 +154,32 @@ export function PasswordPoliciesSection({
 
 	return (
 		<section
-			className={`mt-6 rounded-xl border border-brand-muted p-6 ${activeTab !== "password-policies" ? "hidden" : ""}`}
+			className={`mt-6 ${activeTab !== "password-policies" ? "hidden" : ""}`}
 			role="tabpanel"
 			id="setup-panel-password-policies"
 			aria-labelledby="setup-tab-password-policies"
 			aria-hidden={activeTab !== "password-policies"}
 		>
-			<h2 className="mb-1 text-lg font-medium">Password policies</h2>
-			<p className="mb-4 text-sm text-muted-foreground">
-				Define complexity rules and a maximum password age, then assign each policy to one or
-				more environments. An environment can hold at most one policy.
-			</p>
-			<Banner variant="error" message={error} />
+			<div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+				<div className="min-w-0">
+					<h2 className="mb-1 flex items-center gap-2 text-lg font-medium">
+						<Lock className="h-5 w-5" />
+						Password policies
+					</h2>
+					<p className="text-sm text-muted-foreground">
+						Define complexity rules and a maximum password age, then assign each policy to one or
+						more environments. An environment can hold at most one policy.
+					</p>
+				</div>
+				<Button type="button" icon={Plus} onClick={openCreate}>
+					New policy
+				</Button>
+			</div>
 
-			<div className="mb-6 rounded-xl border border-brand-muted p-4">
+			{/* Save errors surface inside the panel; list and admin-policy errors here. */}
+			<Banner variant="error" message={panelOpen ? null : error} />
+
+			<div className="mb-6 rounded-card border border-border p-4">
 				<label className="text-sm" htmlFor="admin-password-policy">
 					<span className="mb-1 block font-medium">Admin sign-in policy</span>
 					<span className="mb-2 block text-xs text-muted-foreground">
@@ -220,12 +187,12 @@ export function PasswordPoliciesSection({
 						admin signs in. Leave as <span className="font-medium">None</span> to enforce no policy
 						for admins.
 					</span>
-					<select
+					<Select
 						id="admin-password-policy"
 						value={adminPasswordPolicyId ?? ""}
 						disabled={savingAdminPolicy}
 						onChange={(e) => handleAdminPolicyChange(e.target.value)}
-						className="w-full max-w-sm rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand disabled:opacity-50"
+						className="w-full max-w-sm"
 					>
 						<option value="">None</option>
 						{policies.map((policy) => (
@@ -234,208 +201,147 @@ export function PasswordPoliciesSection({
 								{!policy.enabled ? " (disabled)" : ""}
 							</option>
 						))}
-					</select>
+					</Select>
 				</label>
 			</div>
 
-			<form onSubmit={handleSubmit} className="mb-6 space-y-4 rounded-xl border border-brand-muted p-4">
-				<div className="flex flex-wrap items-center gap-3">
-					<Input
-						type="text"
-						value={draft.name}
-						onChange={(e) => update({ name: e.target.value })}
-						placeholder="Policy name"
-						className="flex-1"
-					/>
-					<label className="flex items-center gap-2 text-sm">
-						<input
-							type="checkbox"
-							checked={draft.enabled}
-							onChange={(e) => update({ enabled: e.target.checked })}
-							className="rounded border-brand-muted"
-						/>
-						Enabled
-					</label>
-				</div>
-
-				<div className="grid gap-4 sm:grid-cols-3">
-					<label className="text-sm">
-						<span className="mb-1 block text-muted-foreground">Min length</span>
-						<Input
-							type="number"
-							min={1}
-							value={draft.minLength}
-							onChange={(e) => update({ minLength: e.target.value })}
-						/>
-					</label>
-					<label className="text-sm">
-						<span className="mb-1 block text-muted-foreground">Max length (optional)</span>
-						<Input
-							type="number"
-							min={1}
-							value={draft.maxLength}
-							onChange={(e) => update({ maxLength: e.target.value })}
-							placeholder="No max"
-						/>
-					</label>
-					<label className="text-sm">
-						<span className="mb-1 block text-muted-foreground">Max age in days (0 = none)</span>
-						<Input
-							type="number"
-							min={0}
-							value={draft.maxPasswordAgeDays}
-							onChange={(e) => update({ maxPasswordAgeDays: e.target.value })}
-						/>
-					</label>
-				</div>
-
-				<div className="grid gap-4 sm:grid-cols-4">
-					{COUNT_FIELDS.map(([key, label]) => (
-						<label key={key} className="text-sm">
-							<span className="mb-1 block text-muted-foreground">{label}</span>
-							<Input
-								type="number"
-								min={0}
-								value={draft[key] as string}
-								onChange={(e) => update({ [key]: e.target.value } as Partial<PolicyDraft>)}
-							/>
-						</label>
-					))}
-				</div>
-
-				<p className="text-xs text-muted-foreground">
-					Each field is the minimum number of characters of that class a password must contain.
-					Use <span className="font-medium">0</span> to not require any.
-				</p>
-
-				<div className="flex flex-wrap gap-4">
-					<label className="flex items-center gap-2 text-sm">
-						<input
-							type="checkbox"
-							checked={draft.rejectContainsIdentifier}
-							onChange={(e) => update({ rejectContainsIdentifier: e.target.checked })}
-							className="rounded border-brand-muted"
-						/>
-						No username/email
-					</label>
-				</div>
-
-				<div>
-					<span className="mb-1 block text-sm text-muted-foreground">Environments</span>
-					{environments.length === 0 ? (
-						<p className="text-sm text-muted-foreground">No environments defined.</p>
-					) : (
-						<div className="flex flex-wrap gap-3">
-							{environments.map((env) => {
-								const owner = envOwner.get(env.id);
-								const ownedByOther = !!owner && owner.id !== editingId;
-								const checked = draft.environmentIds.includes(env.id);
-								return (
-									<label
-										key={env.id}
-										className={`flex items-center gap-2 text-sm ${ownedByOther ? "opacity-50" : "cursor-pointer"}`}
-										title={ownedByOther ? `Already assigned to "${owner!.name}"` : undefined}
-									>
-										<input
-											type="checkbox"
-											checked={checked}
-											disabled={ownedByOther}
-											onChange={() => toggleEnvironment(env.id)}
-											className="rounded border-brand-muted"
-										/>
-										<span>{env.name}</span>
-										{ownedByOther ? (
-											<span className="text-xs text-muted-foreground">(in {owner!.name})</span>
-										) : null}
-									</label>
-								);
-							})}
-						</div>
-					)}
-				</div>
-
-				<div className="flex items-center gap-2">
-					<Button type="submit" icon={editingId ? Pencil : Plus} loading={saving}>
-						{editingId ? "Save policy" : "Add policy"}
-					</Button>
-					{editingId ? (
-						<Button type="button" variant="secondary" onClick={resetForm} disabled={saving}>
-							Cancel
+			{policies.length === 0 ? (
+				<EmptyState
+					icon={Lock}
+					title="No password policies yet"
+					description="Create a policy to enforce password complexity and expiry, then assign it to an environment."
+					action={
+						<Button type="button" icon={Plus} onClick={openCreate}>
+							New policy
 						</Button>
-					) : null}
-				</div>
-			</form>
-
-			<ul className="space-y-2">
-				{policies.map((policy) => {
-					const envNames = policy.environmentIds
-						.map((id) => environments.find((env) => env.id === id)?.name)
-						.filter((name): name is string => !!name)
-						.sort((a, b) => a.localeCompare(b));
-					return (
-						<li
-							key={policy.id}
-							className="flex items-start justify-between gap-3 rounded-xl border border-brand-muted px-3 py-2"
-						>
-							<div className="min-w-0">
-								<div className="flex items-center gap-2">
-									<span className="font-medium">{policy.name}</span>
-									{!policy.enabled ? (
-										<span className="rounded-full bg-brand-muted/40 px-2 py-0.5 text-xs text-muted-foreground">
-											Disabled
-										</span>
-									) : null}
-								</div>
-								<p className="text-xs text-muted-foreground">{summarize(policy)}</p>
-								<div className="mt-1 flex flex-wrap gap-1">
-									{envNames.length === 0 ? (
-										<span className="text-xs text-muted-foreground">No environments</span>
-									) : (
-										envNames.map((name) => (
-											<span
-												key={name}
-												className="rounded-full bg-brand-muted/40 px-2 py-0.5 text-xs text-muted-foreground"
-											>
-												{name}
+					}
+				/>
+			) : (
+				<ul className="divide-y divide-border overflow-hidden rounded-card border border-border">
+					{policies.map((policy) => {
+						const envNames = policy.environmentIds
+							.map((id) => environments.find((env) => env.id === id)?.name)
+							.filter((name): name is string => !!name)
+							.sort((a, b) => a.localeCompare(b));
+						return (
+							// Row click is a convenience for pointer users; the pencil remains
+							// the keyboard-reachable, labelled way to do the same thing.
+							<li
+								key={policy.id}
+								onClick={() => startEdit(policy)}
+								className="flex cursor-pointer items-start justify-between gap-3 px-4 py-3 transition-colors hover:bg-surface-hover"
+							>
+								{/* Environments ride beside the name as pills rather than taking a
+								    third line of their own. */}
+								<div className="min-w-0">
+									<div className="flex flex-wrap items-center gap-2">
+										<span className="font-medium">{policy.name}</span>
+										{!policy.enabled ? (
+											<span className="rounded-full bg-surface-sunken px-2 py-0.5 text-xs text-muted-foreground">
+												Disabled
 											</span>
-										))
+										) : null}
+										{envNames.length === 0 ? (
+											<span className="text-xs text-muted-foreground">No environments</span>
+										) : (
+											envNames.map((name) => (
+												<span
+													key={name}
+													className="rounded-full bg-surface-sunken px-2 py-0.5 text-xs text-muted-foreground"
+												>
+													{name}
+												</span>
+											))
+										)}
+									</div>
+									<p className="mt-0.5 text-xs text-muted-foreground">{summarize(policy)}</p>
+								</div>
+								{/* Actions own their clicks, so hitting one never also opens the panel. */}
+								<div
+									className="flex shrink-0 items-center gap-2"
+									onClick={(event) => event.stopPropagation()}
+								>
+									{confirmingDeleteId === policy.id ? (
+										<InlineDeleteConfirm
+											label={`Delete "${policy.name}"?`}
+											busy={deletingId === policy.id}
+											onConfirm={() => confirmDelete(policy.id)}
+											onCancel={() => setConfirmingDeleteId(null)}
+										/>
+									) : (
+										<>
+											<IconButton
+												type="button"
+												aria-label={`Edit ${policy.name}`}
+												title="Edit"
+												onClick={() => startEdit(policy)}
+											>
+												<Pencil className="h-4 w-4" />
+											</IconButton>
+											<IconButton
+												type="button"
+												variant="danger"
+												aria-label={`Delete ${policy.name}`}
+												title="Delete"
+												onClick={() => {
+													onClearError();
+													setConfirmingDeleteId(policy.id);
+												}}
+											>
+												<Trash2 className="h-4 w-4" />
+											</IconButton>
+										</>
 									)}
 								</div>
-							</div>
-							<div className="flex shrink-0 items-center gap-2">
-								{confirmingDeleteId === policy.id ? (
-									<InlineDeleteConfirm
-										label={`Delete "${policy.name}"?`}
-										busy={deletingId === policy.id}
-										onConfirm={() => confirmDelete(policy.id)}
-										onCancel={() => setConfirmingDeleteId(null)}
-									/>
-								) : (
-									<>
-										<IconButton type="button" aria-label="Edit policy" onClick={() => startEdit(policy)}>
-											<Pencil className="h-4 w-4" />
-										</IconButton>
-										<IconButton
-											type="button"
-											variant="danger"
-											aria-label="Delete policy"
-											onClick={() => {
-												onClearError();
-												setConfirmingDeleteId(policy.id);
-											}}
-										>
-											<Trash2 className="h-4 w-4" />
-										</IconButton>
-									</>
-								)}
-							</div>
-						</li>
-					);
-				})}
-				{policies.length === 0 && (
-					<li className="py-2 text-sm text-muted-foreground">No password policies yet. Add one above.</li>
-				)}
-			</ul>
+							</li>
+						);
+					})}
+				</ul>
+			)}
+
+			<SidePanel
+				open={panelOpen}
+				onRequestClose={requestClose}
+				icon={Lock}
+				title={editingId ? "Edit policy" : "New policy"}
+				description={
+					editingId
+						? "Changes apply the next time a password is set or checked."
+						: "Assign the policy to the environments it should govern."
+				}
+				footer={
+					<div className="flex items-center gap-2">
+						<Button type="submit" form={FORM_ID} icon={editingId ? Pencil : Plus} loading={saving}>
+							{editingId ? "Save policy" : "Add policy"}
+						</Button>
+						<Button type="button" variant="secondary" onClick={requestClose} disabled={saving}>
+							Cancel
+						</Button>
+					</div>
+				}
+			>
+				<PolicyForm
+					formId={FORM_ID}
+					draft={draft}
+					onChange={(patch) => setDraft((prev) => ({ ...prev, ...patch }))}
+					environments={environments}
+					envOwner={envOwner}
+					editingId={editingId}
+					error={error}
+					onSubmit={handleSubmit}
+				/>
+			</SidePanel>
+
+			<ConfirmDialog
+				open={confirmingDiscard}
+				title="Discard changes?"
+				description="This policy has unsaved edits. Closing the panel will lose them."
+				confirmLabel="Discard changes"
+				cancelLabel="Keep editing"
+				emphasis="cancel"
+				onConfirm={closePanel}
+				onCancel={() => setConfirmingDiscard(false)}
+			/>
 		</section>
 	);
 }

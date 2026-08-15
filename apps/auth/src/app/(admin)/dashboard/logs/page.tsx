@@ -13,6 +13,7 @@ import type { Environment } from "@/lib/repositories/environment.repository";
 import { LogsFilters, type LogsFiltersState } from "./_components/logs-filters";
 import { LogsTable } from "./_components/logs-table";
 import { LogsPagination } from "./_components/logs-pagination";
+import { Banner, PageHeader } from "@/components/ui";
 
 const PAGE_SIZE = 50;
 
@@ -85,16 +86,9 @@ export default function LogsPage() {
 
 	return (
 		<main className="flex h-screen flex-col bg-background p-6 text-foreground">
-			<div className="mb-6 flex shrink-0 items-center gap-2 text-xl font-semibold">
-				<ListTodo className="h-6 w-6" />
-				Token activity logs
-			</div>
+			<PageHeader icon={ListTodo} title="Token activity logs" />
 
-			{error && (
-				<p className="mb-4 shrink-0 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
-					{error}
-				</p>
-			)}
+			<Banner variant="error" message={error} className="shrink-0" />
 
 			<LogsFilters
 				filters={filters}

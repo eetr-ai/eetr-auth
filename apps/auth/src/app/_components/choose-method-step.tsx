@@ -18,7 +18,7 @@ export function ChooseMethodStep({ error, pending, onChooseMethod, onSignOut }: 
 					type="button"
 					disabled={pending}
 					onClick={() => onChooseMethod("totp")}
-					className="flex w-full items-center gap-3 rounded-xl border border-brand-muted px-4 py-3 text-left hover:bg-brand-muted/20 focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-50"
+					className="flex w-full items-center gap-3 rounded-card border border-border px-4 py-3 text-left hover:bg-surface-sunken focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-50"
 				>
 					<Smartphone className="h-5 w-5 shrink-0 text-muted-foreground" />
 					<span className="flex-1">
@@ -30,7 +30,7 @@ export function ChooseMethodStep({ error, pending, onChooseMethod, onSignOut }: 
 					type="button"
 					disabled={pending}
 					onClick={() => onChooseMethod("email")}
-					className="flex w-full items-center gap-3 rounded-xl border border-brand-muted px-4 py-3 text-left hover:bg-brand-muted/20 focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-50"
+					className="flex w-full items-center gap-3 rounded-card border border-border px-4 py-3 text-left hover:bg-surface-sunken focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-50"
 				>
 					<Mail className="h-5 w-5 shrink-0 text-muted-foreground" />
 					<span className="flex-1">

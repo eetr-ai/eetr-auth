@@ -13,6 +13,7 @@ import {
 } from "./_components/audit-log-filters";
 import { AuditLogTable } from "./_components/audit-log-table";
 import { AuditLogPagination } from "./_components/audit-log-pagination";
+import { Banner, PageHeader } from "@/components/ui";
 
 const PAGE_SIZE = 50;
 
@@ -67,16 +68,9 @@ export default function AuditLogPage() {
 
 	return (
 		<main className="flex h-screen flex-col bg-background p-6 text-foreground">
-			<div className="mb-6 flex shrink-0 items-center gap-2 text-xl font-semibold">
-				<ClipboardList className="h-6 w-6" />
-				Admin audit log
-			</div>
+			<PageHeader icon={ClipboardList} title="Admin audit log" />
 
-			{error && (
-				<p className="mb-4 shrink-0 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
-					{error}
-				</p>
-			)}
+			<Banner variant="error" message={error} className="shrink-0" />
 
 			<AuditLogFilters
 				filters={filters}

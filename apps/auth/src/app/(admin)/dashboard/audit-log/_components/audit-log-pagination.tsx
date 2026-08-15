@@ -25,7 +25,7 @@ export function AuditLogPagination({
 					type="button"
 					onClick={onPrev}
 					disabled={page === 0}
-					className="rounded border border-brand-muted px-2 py-1 hover:bg-brand-muted/30 disabled:opacity-50"
+					className="rounded border border-border px-2 py-1 hover:bg-surface-hover disabled:opacity-50"
 				>
 					Previous
 				</button>
@@ -33,7 +33,7 @@ export function AuditLogPagination({
 					type="button"
 					onClick={onNext}
 					disabled={page >= totalPages - 1}
-					className="rounded border border-brand-muted px-2 py-1 hover:bg-brand-muted/30 disabled:opacity-50"
+					className="rounded border border-border px-2 py-1 hover:bg-surface-hover disabled:opacity-50"
 				>
 					Next
 				</button>

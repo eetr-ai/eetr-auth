@@ -8,7 +8,7 @@ import { UserRepositoryD1 } from "@/lib/repositories/admin.repository.d1";
 import { SiteSettingsRepositoryD1 } from "@/lib/repositories/site-settings.repository.d1";
 import { verifyPassword } from "@/lib/auth/password-hash";
 import { resolveHashMethod } from "@/lib/config/hash-method";
-import { getAvatarUrl } from "@/lib/users/profile";
+import { resolveAvatarUrl } from "@/lib/users/profile";
 import type { RequestContext } from "@/lib/context/types";
 import { PasskeyService } from "@/lib/services/passkey.service";
 import { getServices } from "@/lib/services/registry";
@@ -304,7 +304,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 					username: user.username,
 					name: user.name ?? user.username,
 					email: user.email,
-					image: getAvatarUrl(user.avatarKey, env as unknown as Record<string, unknown>),
+					image: resolveAvatarUrl(user.avatarKey, siteRow?.cdnUrl, env as unknown as Record<string, unknown>),
 					isAdmin: user.isAdmin,
 				};
 			},
@@ -392,7 +392,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 					username: user.username,
 					name: user.name ?? user.username,
 					email: user.email,
-					image: getAvatarUrl(user.avatarKey, env as unknown as Record<string, unknown>),
+					image: resolveAvatarUrl(user.avatarKey, siteRow?.cdnUrl, env as unknown as Record<string, unknown>),
 					isAdmin: user.isAdmin,
 				};
 			},

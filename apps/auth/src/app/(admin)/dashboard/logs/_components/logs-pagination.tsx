@@ -25,7 +25,7 @@ export function LogsPagination({
 					type="button"
 					onClick={onPrev}
 					disabled={page === 0}
-					className="rounded border border-brand-muted px-2 py-1 disabled:opacity-50 hover:bg-brand-muted/30"
+					className="rounded border border-border px-2 py-1 disabled:opacity-50 hover:bg-surface-hover"
 				>
 					Previous
 				</button>
@@ -33,7 +33,7 @@ export function LogsPagination({
 					type="button"
 					onClick={onNext}
 					disabled={page >= totalPages - 1}
-					className="rounded border border-brand-muted px-2 py-1 disabled:opacity-50 hover:bg-brand-muted/30"
+					className="rounded border border-border px-2 py-1 disabled:opacity-50 hover:bg-surface-hover"
 				>
 					Next
 				</button>

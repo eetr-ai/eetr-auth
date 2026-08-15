@@ -1,12 +1,14 @@
-import { getAvatarUrl } from "@/lib/users/profile";
-
 export interface UserInfoClaimsUser {
 	id: string;
 	username: string;
 	name: string | null;
 	email: string | null;
 	emailVerifiedAt: string | null;
-	avatarKey: string | null;
+	/**
+	 * Already resolved against the CDN base by UserService, so this honours the
+	 * site's CDN URL setting rather than rebuilding the URL from the environment.
+	 */
+	avatarUrl?: string | null;
 }
 
 /**
@@ -18,15 +20,14 @@ export interface UserInfoClaimsUser {
  */
 export function buildUserInfoClaims(
 	user: UserInfoClaimsUser,
-	grantedScopes: Iterable<string>,
-	env: Record<string, unknown>
+	grantedScopes: Iterable<string>
 ): Record<string, unknown> {
 	const scopes = new Set(grantedScopes);
 	const claims: Record<string, unknown> = { sub: user.id };
 	if (scopes.has("profile")) {
 		claims.name = user.name ?? user.username;
 		claims.preferred_username = user.username;
-		claims.picture = getAvatarUrl(user.avatarKey, env);
+		claims.picture = user.avatarUrl ?? null;
 	}
 	if (scopes.has("email")) {
 		claims.email = user.email;

@@ -23,11 +23,25 @@ export async function getAdminPasswordPolicy() {
 	});
 }
 
-export async function updateDisplayName(name: string) {
+/**
+ * Saves the signed-in user's own profile.
+ *
+ * `avatarStagedKey` comes from `POST /api/users/avatar/stage`: the picture is
+ * only promoted here, on save, so choosing one and navigating away leaves the
+ * current avatar in place.
+ */
+export async function updateProfile(input: { name: string; avatarStagedKey?: string | null }) {
 	const userId = await requireSession();
 	return onServerAction(async (_ctx, getServices) => {
 		const { userService } = getServices();
-		return userService.updateUser(userId, { name: name.trim() || null }, userId);
+		return userService.updateUser(
+			userId,
+			{
+				name: input.name.trim() || null,
+				...(input.avatarStagedKey ? { avatarStagedKey: input.avatarStagedKey } : {}),
+			},
+			userId
+		);
 	});
 }
 

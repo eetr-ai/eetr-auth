@@ -12,10 +12,10 @@ export interface ClientListItem {
 }
 
 export type SetupTabId =
+	/** Environments + scopes, side by side. The landing tab. */
+	| "basic"
 	| "site"
 	| "admin-api"
-	| "environments"
-	| "scopes"
 	| "password-policies";
 
 export enum SetupPageActionType {
@@ -30,7 +30,9 @@ export enum SetupPageActionType {
 	SET_EDITING_ENV_ID = "SET_EDITING_ENV_ID",
 	SET_EDITING_ENV_NAME = "SET_EDITING_ENV_NAME",
 	SET_ENV_ERROR = "SET_ENV_ERROR",
+	SET_ENV_SAVING = "SET_ENV_SAVING",
 	SET_SCOPE_ERROR = "SET_SCOPE_ERROR",
+	SET_SCOPE_SAVING = "SET_SCOPE_SAVING",
 	SET_SITE_SETTINGS = "SET_SITE_SETTINGS",
 	SET_SITE_TITLE_INPUT = "SET_SITE_TITLE_INPUT",
 	SET_SITE_URL_INPUT = "SET_SITE_URL_INPUT",
@@ -42,6 +44,7 @@ export enum SetupPageActionType {
 	SET_ADMIN_CLIENTS_ERROR = "SET_ADMIN_CLIENTS_ERROR",
 	SET_SITE_SAVING = "SET_SITE_SAVING",
 	SET_LOGO_UPLOADING = "SET_LOGO_UPLOADING",
+	SET_STAGED_LOGO = "SET_STAGED_LOGO",
 	SET_ADMIN_CLIENTS_SAVING = "SET_ADMIN_CLIENTS_SAVING",
 }
 
@@ -57,7 +60,11 @@ export interface SetupPageState {
 	editingEnvId: string | null;
 	editingEnvName: string;
 	envError: string | null;
+	/** In flight for an environment create/update/delete, to block double submits. */
+	envSaving: boolean;
 	scopeError: string | null;
+	/** In flight for a scope create/delete, to block double submits. */
+	scopeSaving: boolean;
 	siteSettings: SiteSettingsDto | null;
 	siteTitleInput: string;
 	siteUrlInput: string;
@@ -69,11 +76,15 @@ export interface SetupPageState {
 	adminClientsError: string | null;
 	siteSaving: boolean;
 	logoUploading: boolean;
+	/** A `staging/` key for a picked-but-unsaved logo, promoted when the form saves. */
+	logoStagedKey: string | null;
+	/** Local object URL previewing that file before it is saved. */
+	logoPreviewUrl: string | null;
 	adminClientsSaving: boolean;
 }
 
 export const initialState: SetupPageState = {
-	activeTab: "site",
+	activeTab: "basic",
 	environments: [],
 	scopes: [],
 	passwordPolicies: [],
@@ -84,7 +95,9 @@ export const initialState: SetupPageState = {
 	editingEnvId: null,
 	editingEnvName: "",
 	envError: null,
+	envSaving: false,
 	scopeError: null,
+	scopeSaving: false,
 	siteSettings: null,
 	siteTitleInput: "",
 	siteUrlInput: "",
@@ -96,6 +109,8 @@ export const initialState: SetupPageState = {
 	adminClientsError: null,
 	siteSaving: false,
 	logoUploading: false,
+	logoStagedKey: null,
+	logoPreviewUrl: null,
 	adminClientsSaving: false,
 };
 
@@ -105,7 +120,7 @@ export function reducer(
 ): SetupPageState {
 	switch (action.type) {
 		case SetupPageActionType.SET_ACTIVE_TAB:
-			return { ...state, activeTab: (action.data as SetupTabId) ?? "site" };
+			return { ...state, activeTab: (action.data as SetupTabId) ?? "basic" };
 		case SetupPageActionType.SET_ENVIRONMENTS:
 			return { ...state, environments: (action.data as Environment[]) ?? [] };
 		case SetupPageActionType.SET_SCOPES:
@@ -129,8 +144,12 @@ export function reducer(
 			return { ...state, editingEnvName: (action.data as string) ?? "" };
 		case SetupPageActionType.SET_ENV_ERROR:
 			return { ...state, envError: (action.data as string | null) ?? null };
+		case SetupPageActionType.SET_ENV_SAVING:
+			return { ...state, envSaving: (action.data as boolean | undefined) ?? false };
 		case SetupPageActionType.SET_SCOPE_ERROR:
 			return { ...state, scopeError: (action.data as string | null) ?? null };
+		case SetupPageActionType.SET_SCOPE_SAVING:
+			return { ...state, scopeSaving: (action.data as boolean | undefined) ?? false };
 		case SetupPageActionType.SET_SITE_SETTINGS: {
 			const dto = action.data as SiteSettingsDto | null;
 			return {
@@ -160,6 +179,10 @@ export function reducer(
 			return { ...state, adminClientsError: (action.data as string | null) ?? null };
 		case SetupPageActionType.SET_SITE_SAVING:
 			return { ...state, siteSaving: (action.data as boolean | undefined) ?? false };
+		case SetupPageActionType.SET_STAGED_LOGO: {
+			const data = action.data as { key: string | null; previewUrl: string | null } | undefined;
+			return { ...state, logoStagedKey: data?.key ?? null, logoPreviewUrl: data?.previewUrl ?? null };
+		}
 		case SetupPageActionType.SET_LOGO_UPLOADING:
 			return { ...state, logoUploading: (action.data as boolean | undefined) ?? false };
 		case SetupPageActionType.SET_ADMIN_CLIENTS_SAVING:

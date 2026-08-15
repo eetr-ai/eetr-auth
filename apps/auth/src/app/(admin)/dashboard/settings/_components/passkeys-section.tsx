@@ -59,7 +59,7 @@ export function PasskeysSection({
 					{passkeys.length === 0 ? (
 						<p className="text-sm text-muted-foreground">No passkeys yet.</p>
 					) : (
-						<ul className="divide-y divide-brand-muted/40 overflow-hidden rounded-xl border border-brand-muted">
+						<ul className="divide-y divide-border overflow-hidden rounded-card border border-border">
 							{passkeys.map((pk) => (
 								<PasskeyListItem
 									key={pk.id}

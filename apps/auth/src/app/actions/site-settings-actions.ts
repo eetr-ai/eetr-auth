@@ -16,12 +16,21 @@ export async function updateSiteSettings(input: {
 	cdnUrl?: string | null;
 	mfaEnabled?: boolean;
 	adminPasswordPolicyId?: string | null;
+	/** A `staging/` key from the logo upload endpoint, promoted as part of this save. */
+	logoStagedKey?: string | null;
 }) {
 	const session = await auth();
 	const actorUserId = session?.user?.id ?? null;
 	return onAdminServerAction(async (_ctx, getServices) => {
 		const { siteSettingsService } = getServices();
-		return siteSettingsService.updateSiteFields(input, actorUserId);
+		const { logoStagedKey, ...fields } = input;
+		const dto = await siteSettingsService.updateSiteFields(fields, actorUserId);
+		// Promotion runs after the field save so a rejected logo cannot silently
+		// discard the rest of the form's changes.
+		if (logoStagedKey) {
+			return siteSettingsService.promoteStagedLogo(logoStagedKey, actorUserId);
+		}
+		return dto;
 	});
 }
 

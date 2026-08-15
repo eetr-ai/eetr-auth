@@ -1,174 +1,459 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { KeyRound, Plus } from "lucide-react";
-import { Button, FullPageSpinner } from "@/components/ui";
-import { listClients, createClient } from "@/app/actions/client-actions";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { KeyRound, Pencil, Plus, RotateCcw } from "lucide-react";
+import {
+	Banner,
+	Button,
+	ConfirmDialog,
+	EmptyState,
+	FullPageSpinner,
+	PageHeader,
+	Select,
+	SidePanel,
+} from "@/components/ui";
+import {
+	createClient,
+	deleteClient,
+	getClientWithDetails,
+	listClients,
+	rotateClientSecret,
+	updateClientName,
+	updateClientRedirectUris,
+	updateClientScopes,
+} from "@/app/actions/client-actions";
 import { listEnvironments } from "@/app/actions/environment-actions";
 import { listScopes } from "@/app/actions/scope-actions";
+import type { Client } from "@/lib/repositories/client.repository";
 import type { Environment } from "@/lib/repositories/environment.repository";
 import type { Scope } from "@/lib/repositories/scope.repository";
-import type { Client } from "@/lib/repositories/client.repository";
-import { CreatedSecretPanel } from "./_components/created-secret-panel";
-import { CreateClientForm } from "./_components/create-client-form";
+import {
+	cleanRedirectUris,
+	draftFromClient,
+	emptyDraft,
+	isClientDraftDirty,
+	type ClientDraft,
+} from "./_components/client-draft";
+import { ClientForm } from "./_components/client-form";
 import { ClientsTable, type ClientTypeFilter } from "./_components/clients-table";
+import { ClientTokens } from "./_components/client-tokens";
+import { SecretReveal } from "./_components/secret-reveal";
+
+/** The form lives in the panel body; its submit button lives in the panel footer. */
+const FORM_ID = "client-form";
 
 export default function ClientsPage() {
+	const router = useRouter();
+	const searchParams = useSearchParams();
+
 	const [clients, setClients] = useState<Client[]>([]);
 	const [environments, setEnvironments] = useState<Environment[]>([]);
 	const [scopes, setScopes] = useState<Scope[]>([]);
-	const [loading, setLoading] = useState(true);
-	const [envFilter, setEnvFilter] = useState<string>("");
+	const [initialLoading, setInitialLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+
+	const [envFilter, setEnvFilter] = useState("");
 	const [typeFilter, setTypeFilter] = useState<ClientTypeFilter>("");
-	const [showCreate, setShowCreate] = useState(false);
-	const [createName, setCreateName] = useState("");
-	const [createEnvId, setCreateEnvId] = useState("");
-	const [redirectUris, setRedirectUris] = useState<string[]>([""]);
-	const [selectedScopeIds, setSelectedScopeIds] = useState<string[]>([]);
-	const [expiresAt, setExpiresAt] = useState("");
-	const [creating, setCreating] = useState(false);
-	const [createError, setCreateError] = useState<string | null>(null);
-	const [createdSecret, setCreatedSecret] = useState<{
+
+	const [panelOpen, setPanelOpen] = useState(false);
+	const [editingId, setEditingId] = useState<string | null>(null);
+	const [draft, setDraft] = useState<ClientDraft>(emptyDraft);
+	const [baseline, setBaseline] = useState<ClientDraft>(emptyDraft);
+	const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+	const [saving, setSaving] = useState(false);
+	const [loadingDetails, setLoadingDetails] = useState(false);
+	/** The OAuth client_id of the client being edited. Distinct from `editingId`,
+	 *  which is the row id — the tokens list keys off the OAuth id. */
+	const [editingOauthClientId, setEditingOauthClientId] = useState<string | null>(null);
+	/** Dynamically registered (RFC 7591) clients are managed by their own software,
+	 *  so the panel shows them read-only: no edits, and no secret to rotate. */
+	const [editingIsDynamic, setEditingIsDynamic] = useState(false);
+
+	/** A one-time secret, from creation or rotation. Must be read before dismissal. */
+	const [revealedSecret, setRevealedSecret] = useState<{
 		clientId: string;
 		clientSecret: string;
+		reason: "created" | "rotated";
 	} | null>(null);
-	const [copied, setCopied] = useState<"id" | "secret" | null>(null);
+	const [rotating, setRotating] = useState(false);
 
-	const load = async () => {
-		setLoading(true);
-		try {
-			const [clientsList, envs, scopesList] = await Promise.all([
-				listClients(envFilter || undefined),
-				listEnvironments(),
-				listScopes(),
-			]);
-			setClients(clientsList);
-			setEnvironments(envs);
-			setScopes(scopesList);
-		} finally {
-			setLoading(false);
-		}
-	};
+	const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+	const [deletingId, setDeletingId] = useState<string | null>(null);
+
+	const dirty = isClientDraftDirty(draft, baseline);
+
+	const load = useCallback(
+		async ({ silent = false }: { silent?: boolean } = {}) => {
+			try {
+				const [clientsList, envs, scopesList] = await Promise.all([
+					listClients(envFilter || undefined),
+					listEnvironments(),
+					listScopes(),
+				]);
+				setClients(clientsList);
+				setEnvironments(envs);
+				setScopes(scopesList);
+			} catch (err) {
+				setError(err instanceof Error ? err.message : "Failed to load clients");
+			} finally {
+				if (!silent) setInitialLoading(false);
+			}
+		},
+		[envFilter],
+	);
 
 	useEffect(() => {
 		load();
-	}, [envFilter]);
+	}, [load]);
 
-	const handleCreate = async (e: React.FormEvent) => {
-		e.preventDefault();
-		setCreateError(null);
-		if (!createEnvId.trim()) {
-			setCreateError("Select an environment");
-			return;
-		}
-		setCreating(true);
-		try {
-			const result = await createClient({
-				environmentId: createEnvId,
-				name: createName.trim() || undefined,
-				redirectUris: redirectUris.filter((u) => u?.trim()),
-				scopeIds: selectedScopeIds.length > 0 ? selectedScopeIds : undefined,
-				expiresAt: expiresAt.trim() || undefined,
+	// Panel state is mirrored in the URL so a client stays linkable now that
+	// /dashboard/clients/[id] is gone; that route redirects here.
+	const setPanelParam = useCallback(
+		(value: string | null) => {
+			const params = new URLSearchParams(Array.from(searchParams.entries()));
+			params.delete("new");
+			params.delete("client");
+			if (value === "new") params.set("new", "1");
+			else if (value) params.set("client", value);
+			const query = params.toString();
+			router.replace(query ? `/dashboard/clients?${query}` : "/dashboard/clients", {
+				scroll: false,
 			});
-			setCreatedSecret({
+		},
+		[router, searchParams],
+	);
+
+	const openCreate = useCallback(() => {
+		setError(null);
+		// Cleared on open, not on close: clearing during the exit animation would
+		// flash the empty form as the panel slides away. Opening is the point at
+		// which showing a previous client's secret would be a real leak.
+		setRevealedSecret(null);
+		setEditingId(null);
+		setDraft(emptyDraft);
+		setBaseline(emptyDraft);
+		setPanelOpen(true);
+	}, []);
+
+	const startEdit = useCallback(async (clientId: string) => {
+		setError(null);
+		setRevealedSecret(null);
+		setEditingId(clientId);
+		setEditingOauthClientId(null);
+		setEditingIsDynamic(false);
+		setDraft(emptyDraft);
+		setBaseline(emptyDraft);
+		setPanelOpen(true);
+		setLoadingDetails(true);
+		try {
+			const details = await getClientWithDetails(clientId);
+			if (!details) {
+				setError("That client no longer exists");
+				return;
+			}
+			const next = draftFromClient(details);
+			setDraft(next);
+			setBaseline(next);
+			setEditingOauthClientId(details.clientId);
+			setEditingIsDynamic(details.isDynamic);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Failed to load client");
+		} finally {
+			setLoadingDetails(false);
+		}
+	}, []);
+
+	// Open from ?client=/?new= on first paint, so a pasted link lands on the panel.
+	const requestedClient = searchParams.get("client");
+	const requestedNew = searchParams.get("new");
+	useEffect(() => {
+		if (panelOpen || initialLoading) return;
+		if (requestedNew) openCreate();
+		else if (requestedClient) void startEdit(requestedClient);
+		// Only re-run when the requested target changes, not on every panel toggle.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [requestedClient, requestedNew, initialLoading]);
+
+	useEffect(() => {
+		if (!panelOpen) return;
+		setPanelParam(editingId ?? "new");
+		// setPanelParam identity changes with searchParams, which this effect edits.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [panelOpen, editingId]);
+
+	// Deliberately does not reset draft/editingId: the panel keeps rendering its
+	// children while it animates out. Every open path re-initialises both.
+	const closePanel = () => {
+		setConfirmingDiscard(false);
+		setPanelOpen(false);
+		setError(null);
+		setPanelParam(null);
+	};
+
+	const requestClose = () => {
+		// The panel stays mounted for its exit animation, so without this a second
+		// Escape would re-open the discard dialog over an already-closing panel.
+		if (!panelOpen || saving) return;
+		// A freshly revealed secret is shown once and nowhere else.
+		if (revealedSecret) return;
+		if (dirty) setConfirmingDiscard(true);
+		else closePanel();
+	};
+
+	const handleSubmit = async (e: React.FormEvent) => {
+		e.preventDefault();
+		setSaving(true);
+		setError(null);
+		try {
+			const uris = cleanRedirectUris(draft.redirectUris);
+			if (editingId) {
+				await updateClientName(editingId, draft.name.trim() || null);
+				await updateClientRedirectUris(editingId, uris);
+				await updateClientScopes(editingId, draft.scopeIds);
+				await load({ silent: true });
+				closePanel();
+			} else {
+				if (!draft.environmentId.trim()) {
+					setError("Select an environment");
+					return;
+				}
+				const result = await createClient({
+					environmentId: draft.environmentId,
+					name: draft.name.trim() || undefined,
+					redirectUris: uris,
+					scopeIds: draft.scopeIds.length > 0 ? draft.scopeIds : undefined,
+					expiresAt: draft.expiresAt.trim() || undefined,
+				});
+				await load({ silent: true });
+				// Keep the panel open: the secret is shown exactly once.
+				setBaseline(draft);
+				setRevealedSecret({
+					clientId: result.client.clientId,
+					clientSecret: result.clientSecret,
+					reason: "created",
+				});
+			}
+		} catch (err) {
+			setError(
+				err instanceof Error ? err.message : `Failed to ${editingId ? "update" : "create"} client`,
+			);
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	const handleRotate = async () => {
+		if (!editingId) return;
+		setError(null);
+		setRotating(true);
+		try {
+			const result = await rotateClientSecret(editingId);
+			if (!result) {
+				setError("That client no longer exists");
+				return;
+			}
+			setRevealedSecret({
 				clientId: result.client.clientId,
 				clientSecret: result.clientSecret,
+				reason: "rotated",
 			});
-			setShowCreate(false);
-			setCreateName("");
-			setCreateEnvId("");
-			setRedirectUris([""]);
-			setSelectedScopeIds([]);
-			setExpiresAt("");
-			await load();
 		} catch (err) {
-			setCreateError(err instanceof Error ? err.message : "Failed to create client");
+			setError(err instanceof Error ? err.message : "Failed to rotate the secret");
 		} finally {
-			setCreating(false);
+			setRotating(false);
 		}
 	};
 
-	const copyToClipboard = async (text: string, which: "id" | "secret") => {
-		await navigator.clipboard.writeText(text);
-		setCopied(which);
-		setTimeout(() => setCopied(null), 2000);
+	const confirmDelete = async (client: Client) => {
+		setError(null);
+		setDeletingId(client.id);
+		try {
+			await deleteClient(client.id);
+			setConfirmingDeleteId(null);
+			if (editingId === client.id) closePanel();
+			await load({ silent: true });
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Failed to delete client");
+		} finally {
+			setDeletingId(null);
+		}
 	};
 
-	const addRedirectUri = () => setRedirectUris((prev) => [...prev, ""]);
-	const setRedirectUriAt = (i: number, v: string) => {
-		setRedirectUris((prev) => {
-			const next = [...prev];
-			next[i] = v;
-			return next;
-		});
-	};
-	const removeRedirectUri = (i: number) => {
-		setRedirectUris((prev) => prev.filter((_, j) => j !== i));
-	};
-
-	const toggleScope = (scopeId: string) => {
-		setSelectedScopeIds((prev) =>
-			prev.includes(scopeId) ? prev.filter((id) => id !== scopeId) : [...prev, scopeId]
-		);
-	};
-
-	if (loading && clients.length === 0) {
+	if (initialLoading) {
 		return <FullPageSpinner />;
 	}
 
+	const visibleClients = clients.filter((client) =>
+		typeFilter === "dynamic" ? client.isDynamic : typeFilter === "manual" ? !client.isDynamic : true,
+	);
+
+	const newClientButton = (
+		<Button type="button" icon={Plus} onClick={openCreate}>
+			New client
+		</Button>
+	);
+
 	return (
-		<main className="min-h-screen p-6 bg-background text-foreground">
-			<div className="flex items-center justify-between">
-				<div className="flex items-center gap-2 text-xl font-semibold">
-					<KeyRound className="h-6 w-6" />
-					Clients
+		<main className="min-h-screen bg-background p-6 text-foreground">
+			<PageHeader icon={KeyRound} title="Clients" action={newClientButton} />
+
+			{/* Save errors surface inside the panel; list-level errors here. */}
+			<Banner variant="error" message={panelOpen ? null : error} />
+
+			<div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+				<div className="flex items-center gap-2">
+					<label className="text-sm font-medium" htmlFor="client-env-filter">
+						Filter by environment
+					</label>
+					<Select
+						id="client-env-filter"
+						value={envFilter}
+						onChange={(e) => setEnvFilter(e.target.value)}
+					>
+						<option value="">All</option>
+						{environments.map((env) => (
+							<option key={env.id} value={env.id}>
+								{env.name}
+							</option>
+						))}
+					</Select>
 				</div>
-				<Button type="button" icon={Plus} onClick={() => setShowCreate((v) => !v)}>
-					Create client
-				</Button>
+				<div className="flex items-center gap-2">
+					<label className="text-sm font-medium" htmlFor="client-type-filter">
+						Registration
+					</label>
+					<Select
+						id="client-type-filter"
+						value={typeFilter}
+						onChange={(e) => setTypeFilter(e.target.value as ClientTypeFilter)}
+					>
+						<option value="">All</option>
+						<option value="dynamic">Dynamic (DCR)</option>
+						<option value="manual">Manual</option>
+					</Select>
+				</div>
 			</div>
 
-			{createdSecret && (
-				<CreatedSecretPanel
-					clientId={createdSecret.clientId}
-					clientSecret={createdSecret.clientSecret}
-					copied={copied}
-					onCopy={copyToClipboard}
-					onDismiss={() => setCreatedSecret(null)}
+			{clients.length === 0 && !envFilter ? (
+				<EmptyState
+					icon={KeyRound}
+					title="No clients yet"
+					description="A client is an application that can request tokens from this tenant."
+					action={newClientButton}
 				/>
-			)}
-
-			{showCreate && (
-				<CreateClientForm
+			) : visibleClients.length === 0 ? (
+				<p className="rounded-card border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground">
+					No clients match the current filters.
+				</p>
+			) : (
+				<ClientsTable
+					clients={visibleClients}
 					environments={environments}
-					scopes={scopes}
-					createName={createName}
-					onCreateNameChange={setCreateName}
-					createEnvId={createEnvId}
-					onCreateEnvIdChange={setCreateEnvId}
-					redirectUris={redirectUris}
-					onAddRedirectUri={addRedirectUri}
-					onRedirectUriChange={setRedirectUriAt}
-					onRemoveRedirectUri={removeRedirectUri}
-					selectedScopeIds={selectedScopeIds}
-					onToggleScope={toggleScope}
-					expiresAt={expiresAt}
-					onExpiresAtChange={setExpiresAt}
-					creating={creating}
-					error={createError}
-					onSubmit={handleCreate}
-					onCancel={() => setShowCreate(false)}
+					onStartEdit={(client) => void startEdit(client.id)}
+					confirmingDeleteId={confirmingDeleteId}
+					deletingId={deletingId}
+					onRequestDelete={(client) => {
+						setError(null);
+						setConfirmingDeleteId(client.id);
+					}}
+					onConfirmDelete={confirmDelete}
+					onCancelDelete={() => setConfirmingDeleteId(null)}
 				/>
 			)}
 
-			<ClientsTable
-				clients={clients}
-				environments={environments}
-				envFilter={envFilter}
-				onEnvFilterChange={setEnvFilter}
-				typeFilter={typeFilter}
-				onTypeFilterChange={setTypeFilter}
-				onClientDeleted={load}
+			<SidePanel
+				open={panelOpen}
+				onRequestClose={requestClose}
+				icon={KeyRound}
+				width="lg"
+				title={editingIsDynamic ? "Client" : editingId ? "Edit client" : "New client"}
+				description={
+					editingIsDynamic
+						? "Registered dynamically (RFC 7591), so it is managed by the client software itself and cannot be edited here."
+						: editingId
+							? "The environment is fixed at creation, because changing it would invalidate issued tokens."
+							: "The client secret is shown once, immediately after creation."
+				}
+				footer={
+					revealedSecret ? (
+						<Button type="button" onClick={closePanel}>
+							Done
+						</Button>
+					) : editingIsDynamic ? (
+						// Nothing here is editable, so the only action is to leave.
+						<Button type="button" variant="secondary" onClick={requestClose}>
+							Close
+						</Button>
+					) : (
+						<div className="flex flex-wrap items-center gap-2">
+							<Button
+								type="submit"
+								form={FORM_ID}
+								icon={editingId ? Pencil : Plus}
+								loading={saving}
+								disabled={loadingDetails}
+							>
+								{editingId ? "Save client" : "Add client"}
+							</Button>
+							<Button type="button" variant="secondary" onClick={requestClose} disabled={saving}>
+								Cancel
+							</Button>
+							{editingId ? (
+								<Button
+									type="button"
+									variant="secondary"
+									icon={RotateCcw}
+									loading={rotating}
+									onClick={handleRotate}
+									className="ml-auto"
+								>
+									Rotate secret
+								</Button>
+							) : null}
+						</div>
+					)
+				}
+			>
+				{revealedSecret ? (
+					<SecretReveal
+						clientId={revealedSecret.clientId}
+						clientSecret={revealedSecret.clientSecret}
+						reason={revealedSecret.reason}
+					/>
+				) : loadingDetails ? (
+					<p className="text-sm text-muted-foreground">Loading client…</p>
+				) : (
+					<>
+						<ClientForm
+							formId={FORM_ID}
+							draft={draft}
+							onChange={(patch) => setDraft((prev) => ({ ...prev, ...patch }))}
+							environments={environments}
+							scopes={scopes}
+							editingId={editingId}
+							readOnly={editingIsDynamic}
+							error={error}
+							onSubmit={handleSubmit}
+						/>
+						<ClientTokens
+							clientId={editingId}
+							oauthClientId={editingOauthClientId}
+							environments={environments}
+						/>
+					</>
+				)}
+			</SidePanel>
+
+			<ConfirmDialog
+				open={confirmingDiscard}
+				title="Discard changes?"
+				description="This client has unsaved edits. Closing the panel will lose them."
+				confirmLabel="Discard changes"
+				cancelLabel="Keep editing"
+				emphasis="cancel"
+				onConfirm={closePanel}
+				onCancel={() => setConfirmingDiscard(false)}
 			/>
 		</main>
 	);

@@ -25,7 +25,7 @@ export function DetailsCell({ raw }: { raw: string | null }) {
 				{open ? "Hide" : "Show"}
 			</button>
 			{open && (
-				<pre className="max-w-md overflow-x-auto rounded-lg border border-brand-muted bg-brand-muted/10 p-2 font-mono text-xs">
+				<pre className="max-w-md overflow-x-auto rounded-lg border border-border bg-surface-sunken p-2 font-mono text-xs">
 					{pretty}
 				</pre>
 			)}

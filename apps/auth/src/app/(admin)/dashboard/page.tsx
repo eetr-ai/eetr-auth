@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import {
 	LayoutDashboard,
 	User as UserIcon,
-	Loader2,
 	Clock,
 	Zap,
 	CheckCircle,
@@ -14,6 +13,7 @@ import { getCurrentUser } from "@/app/actions/user-actions";
 import { getTokenActivityMetrics } from "@/app/actions/token-activity-actions";
 import type { Session } from "next-auth";
 import type { TokenActivityMetrics } from "@/lib/repositories/token-activity-log.repository";
+import { Banner, PageHeader } from "@/components/ui";
 
 const SINCE_DAYS = 7;
 
@@ -45,10 +45,7 @@ export default function AdminDashboardPage() {
 
 	return (
 		<main className="min-h-screen p-6 bg-background text-foreground">
-			<div className="flex items-center gap-2 text-xl font-semibold">
-				<LayoutDashboard className="h-6 w-6" />
-				Admin Dashboard
-			</div>
+			<PageHeader icon={LayoutDashboard} title="Admin Dashboard" />
 
 			<div className="mt-6 flex flex-col gap-6">
 				{state.loading ? (
@@ -63,11 +60,7 @@ export default function AdminDashboardPage() {
 				)}
 			</div>
 
-			{metricsError && (
-				<p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
-					{metricsError}
-				</p>
-			)}
+			<Banner variant="error" message={metricsError} className="mt-4" />
 
 			{metrics && (
 				<>
@@ -77,25 +70,25 @@ export default function AdminDashboardPage() {
 							Latency (last {SINCE_DAYS} days)
 						</h2>
 						<div className="flex flex-wrap gap-4">
-							<div className="min-w-[180px] rounded-xl border border-brand-muted bg-brand-muted/10 px-4 py-3">
+							<div className="min-w-[180px] rounded-card border border-border bg-surface-sunken px-4 py-3">
 								<p className="text-xs text-muted-foreground">Average (overall)</p>
 								<p className="text-2xl font-semibold">
 									{formatMs(metrics.overallAvgDurationMs)}
 								</p>
 							</div>
-							<div className="min-w-[180px] rounded-xl border border-brand-muted bg-brand-muted/10 px-4 py-3">
+							<div className="min-w-[180px] rounded-card border border-border bg-surface-sunken px-4 py-3">
 								<p className="text-xs text-muted-foreground">Authorize</p>
 								<p className="text-2xl font-semibold">
 									{formatMs(metrics.avgDurationMsByType.authorize)}
 								</p>
 							</div>
-							<div className="min-w-[180px] rounded-xl border border-brand-muted bg-brand-muted/10 px-4 py-3">
+							<div className="min-w-[180px] rounded-card border border-border bg-surface-sunken px-4 py-3">
 								<p className="text-xs text-muted-foreground">Token exchange</p>
 								<p className="text-2xl font-semibold">
 									{formatMs(metrics.avgDurationMsByType.token)}
 								</p>
 							</div>
-							<div className="min-w-[180px] rounded-xl border border-brand-muted bg-brand-muted/10 px-4 py-3">
+							<div className="min-w-[180px] rounded-card border border-border bg-surface-sunken px-4 py-3">
 								<p className="text-xs text-muted-foreground">Validate</p>
 								<p className="text-2xl font-semibold">
 									{formatMs(metrics.avgDurationMsByType.validate)}
@@ -109,10 +102,10 @@ export default function AdminDashboardPage() {
 							<Zap className="h-4 w-4" />
 							By environment
 						</h2>
-						<div className="overflow-x-auto rounded-xl border border-brand-muted">
+						<div className="overflow-x-auto rounded-card border border-border">
 							<table className="w-full min-w-[500px] text-left text-sm">
 								<thead>
-									<tr className="border-b border-brand-muted bg-brand-muted/20">
+									<tr className="border-b border-border bg-surface-sunken">
 										<th className="px-4 py-3 font-medium">Environment</th>
 										<th className="px-4 py-3 font-medium">Authorize</th>
 										<th className="px-4 py-3 font-medium">Token</th>
@@ -136,7 +129,7 @@ export default function AdminDashboardPage() {
 											.map(([env, data]) => (
 												<tr
 													key={env}
-													className="border-b border-brand-muted/50"
+													className="border-b border-border"
 												>
 													<td className="px-4 py-3 font-medium">
 														{env || "(unknown)"}
@@ -165,10 +158,10 @@ export default function AdminDashboardPage() {
 								<CheckCircle className="h-4 w-4" />
 								By day
 							</h2>
-							<div className="overflow-x-auto rounded-xl border border-brand-muted">
+							<div className="overflow-x-auto rounded-card border border-border">
 								<table className="w-full min-w-[400px] text-left text-sm">
 									<thead>
-										<tr className="border-b border-brand-muted bg-brand-muted/20">
+										<tr className="border-b border-border bg-surface-sunken">
 											<th className="px-4 py-3 font-medium">Date</th>
 											<th className="px-4 py-3 font-medium">Environment</th>
 											<th className="px-4 py-3 font-medium">Authorize</th>
@@ -181,7 +174,7 @@ export default function AdminDashboardPage() {
 											Object.entries(byEnvironment).map(([env, counts]) => (
 												<tr
 													key={`${date}-${env}`}
-													className="border-b border-brand-muted/50"
+													className="border-b border-border"
 												>
 													<td className="px-4 py-2">{date}</td>
 													<td className="px-4 py-2">

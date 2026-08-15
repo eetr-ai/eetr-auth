@@ -4,6 +4,13 @@ import type { SiteAdminApiClientsRepository } from "@/lib/repositories/site-admi
 import type { SiteSettingsRepository } from "@/lib/repositories/site-settings.repository";
 import type { AdminAuditLogService } from "./admin-audit-log.service";
 import { AUDIT_ACTION, AUDIT_RESOURCE } from "./audit-actions";
+import {
+	StagedUploadError,
+	extensionOfStagedKey,
+	promoteStagedUpload,
+	type AssetBucket,
+} from "@/lib/uploads/staged-upload";
+import { buildAssetUrl, pickAssetCdnBaseUrl } from "@/lib/users/profile";
 
 export const DEFAULT_SITE_TITLE = "Eetr Auth";
 export const DEFAULT_LOGO_PATH = "/eetr-auth-logo.png";
@@ -50,6 +57,8 @@ export interface SiteSettingsServiceDependencies {
 	passwordPolicyRepo: PasswordPolicyRepository;
 	adminAuditLogService: AdminAuditLogService;
 	avatarCdnBaseUrl: string;
+	/** R2 bucket holding the site logo. */
+	assetBucket?: AssetBucket;
 	resendApiKey: string | null;
 	authUrl: string;
 }
@@ -60,6 +69,7 @@ export class SiteSettingsService {
 	private readonly clientRepo: ClientRepository;
 	private readonly passwordPolicyRepo: PasswordPolicyRepository;
 	private readonly adminAuditLogService: AdminAuditLogService;
+	private readonly assetBucket?: AssetBucket;
 	private readonly avatarCdnBaseUrl: string;
 	private readonly resendApiKey: string | null;
 	private readonly authUrl: string;
@@ -71,6 +81,7 @@ export class SiteSettingsService {
 		passwordPolicyRepo,
 		adminAuditLogService,
 		avatarCdnBaseUrl,
+		assetBucket,
 		resendApiKey,
 		authUrl,
 	}: SiteSettingsServiceDependencies) {
@@ -79,16 +90,14 @@ export class SiteSettingsService {
 		this.clientRepo = clientRepo;
 		this.passwordPolicyRepo = passwordPolicyRepo;
 		this.adminAuditLogService = adminAuditLogService;
+		this.assetBucket = assetBucket;
 		this.avatarCdnBaseUrl = avatarCdnBaseUrl.replace(/\/+$/, "");
 		this.resendApiKey = resendApiKey;
 		this.authUrl = authUrl.trim().replace(/\/+$/, "");
 	}
 
 	getLogoPublicUrlForKey(logoKey: string, cdnUrlOverride: string | null): string {
-		const baseSource = normalizeOptional(cdnUrlOverride) ?? this.avatarCdnBaseUrl;
-		const base = baseSource.replace(/\/+$/, "");
-		const key = logoKey.replace(/^\/+/, "");
-		return `${base}/${key}`;
+		return buildAssetUrl(logoKey, pickAssetCdnBaseUrl(cdnUrlOverride, this.avatarCdnBaseUrl));
 	}
 
 	getDisplaySiteTitle(siteTitle: string | null | undefined): string {
@@ -218,6 +227,22 @@ export class SiteSettingsService {
 			});
 		}
 		return this.get();
+	}
+
+	/**
+	 * Promotes a staged logo and records it. Called when the Setup form saves,
+	 * not when the file is picked, so cancelling leaves the live logo alone.
+	 */
+	async promoteStagedLogo(
+		stagedKey: string,
+		actorUserId: string | null = null
+	): Promise<SiteSettingsDto> {
+		if (!this.assetBucket) {
+			throw new StagedUploadError("Logo storage is not configured.");
+		}
+		const finalKey = `site/logo.${extensionOfStagedKey(stagedKey)}`;
+		await promoteStagedUpload(this.assetBucket, stagedKey, finalKey);
+		return this.setLogoKey(finalKey, actorUserId);
 	}
 
 	async setLogoKey(logoKey: string | null, actorUserId: string | null = null): Promise<SiteSettingsDto> {

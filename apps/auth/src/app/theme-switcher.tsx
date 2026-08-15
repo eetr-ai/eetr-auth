@@ -56,7 +56,7 @@ export function ThemeSwitcher() {
 		<div
 			role="group"
 			aria-label="Theme"
-			className="inline-flex items-center gap-0.5 rounded-full border border-brand-muted p-0.5"
+			className="inline-flex items-center gap-0.5 rounded-full border border-border p-0.5"
 		>
 			{options.map(({ value, label, icon: Icon }) => {
 				const isActive = mounted && theme === value;
@@ -70,8 +70,8 @@ export function ThemeSwitcher() {
 						title={label}
 						className={`inline-flex items-center justify-center rounded-full p-1.5 transition-colors ${
 							isActive
-								? "bg-brand-muted/50 text-foreground"
-								: "text-muted-foreground hover:bg-brand-muted/30 hover:text-foreground"
+								? "bg-surface-sunken text-foreground"
+								: "text-muted-foreground hover:bg-surface-hover hover:text-foreground"
 						}`}
 					>
 						<Icon className="h-4 w-4" />

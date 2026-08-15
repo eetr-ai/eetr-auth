@@ -70,7 +70,7 @@ export default function PasskeyPrompt() {
 
 	if (status === "enrolled") {
 		return (
-			<div className="mt-6 flex items-center gap-2 rounded-xl border border-brand-muted bg-green-50 p-4 text-sm text-green-700 dark:bg-green-950/30 dark:text-green-300">
+			<div className="mt-6 flex items-center gap-2 rounded-card border border-border bg-success-bg p-4 text-sm text-success-fg">
 				<Fingerprint className="h-4 w-4" />
 				Passkey enrolled. You can use it next time to sign in faster.
 			</div>
@@ -78,7 +78,7 @@ export default function PasskeyPrompt() {
 	}
 
 	return (
-		<div className="mt-6 rounded-xl border border-brand-muted p-4">
+		<div className="mt-6 rounded-card border border-border p-4">
 			<div className="flex items-start gap-3">
 				<Fingerprint className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
 				<div className="flex-1">
@@ -87,14 +87,14 @@ export default function PasskeyPrompt() {
 						Create a passkey on this device to sign in without a password.
 					</p>
 					{error && (
-						<p className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">{error}</p>
+						<p className="mt-2 rounded-card bg-danger-bg px-3 py-2 text-sm text-danger-fg">{error}</p>
 					)}
 					<div className="mt-3 flex items-center gap-3">
 						<button
 							type="button"
 							disabled={status === "enrolling"}
 							onClick={handleEnroll}
-							className="flex items-center gap-2 rounded-full border border-brand-muted px-4 py-2 text-sm font-medium hover:bg-brand-muted/20 disabled:opacity-50"
+							className="flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-medium hover:bg-surface-sunken disabled:opacity-50"
 						>
 							{status === "enrolling" ? (
 								<>

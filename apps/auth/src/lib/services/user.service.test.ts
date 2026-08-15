@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UserRecord, UserRepository } from "@/lib/repositories/admin.repository";
 import type { AdminAuditLogRepository } from "@/lib/repositories/admin-audit-log.repository";
 import type { UserChallengeRepository } from "@/lib/repositories/user-challenge.repository";
+import type { SiteSettingsRepository } from "@/lib/repositories/site-settings.repository";
 import { UserService } from "@/lib/services/user.service";
 import { AdminAuditLogService } from "@/lib/services/admin-audit-log.service";
 
@@ -10,13 +11,8 @@ vi.mock("@/lib/auth/password-hash", () => ({
 	hashPassword: vi.fn().mockResolvedValue("hashed-password"),
 }));
 
-vi.mock("@/lib/users/profile", () => ({
-	normalizeOptionalProfileField: vi.fn().mockImplementation((v: string | null | undefined) => {
-		if (v == null) return null;
-		const t = v.trim();
-		return t.length > 0 ? t : null;
-	}),
-}));
+// @/lib/users/profile is deliberately not mocked: it is pure, and a partial mock
+// of it is how the avatar-URL helpers went missing here in the first place.
 
 function createUserRepoMock(): UserRepository {
 	return {
@@ -53,14 +49,30 @@ function createAuditLogService(insert = vi.fn()): AdminAuditLogService {
 	return new AdminAuditLogService({ logRepo });
 }
 
+function createSiteSettingsRepo(cdnUrl: string | null): SiteSettingsRepository {
+	return {
+		get: vi.fn().mockResolvedValue({
+			siteTitle: null,
+			siteUrl: null,
+			cdnUrl,
+			logoKey: null,
+			mfaEnabled: false,
+			adminPasswordPolicyId: null,
+		}),
+		update: vi.fn(),
+	};
+}
+
 function createService(
 	userRepository: UserRepository,
-	adminAuditLogService: AdminAuditLogService = createAuditLogService()
+	adminAuditLogService: AdminAuditLogService = createAuditLogService(),
+	siteSettingsRepository?: SiteSettingsRepository
 ): UserService {
 	return new UserService({
 		userRepository,
 		adminAuditLogService,
 		avatarCdnBaseUrl: "https://cdn.example.com",
+		siteSettingsRepository,
 		argonHasher: { fetch: vi.fn() } as unknown as Fetcher,
 		hashMethod: "argon",
 	});
@@ -107,6 +119,43 @@ describe("UserService", () => {
 			const result = await service.listUsers();
 			expect(result[0].avatarUrl).toBe("https://cdn.example.com/avatar.png");
 			expect(result[1].avatarUrl).toBeNull();
+		});
+
+		it("prefers the CDN URL from site settings over the environment default", async () => {
+			// Avatars used to resolve from the environment alone, so the CDN URL in
+			// Setup → Site identity moved the logo but not the pictures.
+			vi.mocked(mockRepo.list).mockResolvedValue([makeUserRecord({ avatarKey: "avatar.png" })]);
+			const siteSettingsRepository = createSiteSettingsRepo("https://cdn.site.example");
+			const service = createService(mockRepo, undefined, siteSettingsRepository);
+
+			const result = await service.listUsers();
+
+			expect(result[0].avatarUrl).toBe("https://cdn.site.example/avatar.png");
+		});
+
+		it("falls back to the environment default when no CDN URL is configured", async () => {
+			vi.mocked(mockRepo.list).mockResolvedValue([makeUserRecord({ avatarKey: "avatar.png" })]);
+			const service = createService(mockRepo, undefined, createSiteSettingsRepo(null));
+
+			const result = await service.listUsers();
+
+			expect(result[0].avatarUrl).toBe("https://cdn.example.com/avatar.png");
+		});
+
+		it("reads site settings once per instance, not once per avatar", async () => {
+			// Services are built per request, so the memoised read keeps a listing at
+			// one query no matter how many users have a picture.
+			vi.mocked(mockRepo.list).mockResolvedValue([
+				makeUserRecord({ avatarKey: "a.png" }),
+				makeUserRecord({ id: "user-2", username: "bob", avatarKey: "b.png" }),
+				makeUserRecord({ id: "user-3", username: "carol", avatarKey: "c.png" }),
+			]);
+			const siteSettingsRepository = createSiteSettingsRepo("https://cdn.site.example");
+			const service = createService(mockRepo, undefined, siteSettingsRepository);
+
+			await service.listUsers();
+
+			expect(siteSettingsRepository.get).toHaveBeenCalledTimes(1);
 		});
 	});
 

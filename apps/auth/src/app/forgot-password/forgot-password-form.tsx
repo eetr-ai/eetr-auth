@@ -24,7 +24,7 @@ export function ForgotPasswordForm() {
 
 	if (done) {
 		return (
-			<p className="rounded-xl bg-brand-muted/30 px-3 py-2 text-sm text-foreground">
+			<p className="rounded-card bg-surface-sunken px-3 py-2 text-sm text-foreground">
 				If an account exists for that email, you will receive a password reset link shortly.
 			</p>
 		);
@@ -43,17 +43,17 @@ export function ForgotPasswordForm() {
 					autoComplete="email"
 					value={email}
 					onChange={(e) => setEmail(e.target.value)}
-					className="w-full rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+					className="w-full rounded-card border border-border bg-background px-3 py-2 text-foreground focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
 					placeholder="you@example.com"
 				/>
 			</div>
 			{error ? (
-				<p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">{error}</p>
+				<p className="rounded-card bg-danger-bg px-3 py-2 text-sm text-danger-fg">{error}</p>
 			) : null}
 			<button
 				type="submit"
 				disabled={pending}
-				className="w-full rounded-full bg-brand px-4 py-2 font-medium text-white hover:bg-brand-muted disabled:opacity-50"
+				className="w-full rounded-full bg-brand px-4 py-2 font-medium text-white hover:bg-brand-hover disabled:opacity-50"
 			>
 				{pending ? "Sending…" : "Send reset link"}
 			</button>

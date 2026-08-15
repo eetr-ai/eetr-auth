@@ -90,7 +90,7 @@ export function PasskeyListItem({
 							<span className="truncate text-sm font-medium">
 								{pk.name ?? "Unnamed passkey"}
 							</span>
-							<span className="shrink-0 rounded-full border border-brand-muted px-2 py-0.5 text-xs text-muted-foreground">
+							<span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
 								{pk.synced ? "Synced" : "This device"}
 							</span>
 						</div>

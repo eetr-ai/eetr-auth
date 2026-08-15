@@ -34,6 +34,7 @@ import { PasskeyService } from "./passkey.service";
 import { TransactionalEmailService } from "./transactional-email.service";
 import { DcrService } from "./dcr.service";
 import { DcrRateLimitService } from "./dcr-rate-limit.service";
+import type { AssetBucket } from "@/lib/uploads/staged-upload";
 
 export interface Services {
 	userService: UserService;
@@ -96,6 +97,7 @@ export function getServices(ctx: RequestContext): Services {
 	const avatarCdnBaseUrl = getAvatarCdnBaseUrl(resolvedEnv);
 	const hashMethod = resolveHashMethod(resolvedEnv);
 	const adminAuditLogService = new AdminAuditLogService({ logRepo: adminAuditLogRepo });
+	const assetBucket = (ctx.env as unknown as { AUTH_ASSETS?: AssetBucket }).AUTH_ASSETS;
 	const siteSettingsService = new SiteSettingsService({
 		siteRepo,
 		adminClientsRepo,
@@ -103,6 +105,7 @@ export function getServices(ctx: RequestContext): Services {
 		passwordPolicyRepo,
 		adminAuditLogService,
 		avatarCdnBaseUrl,
+		assetBucket,
 		resendApiKey: resolveOptionalEnvString(resolvedEnv, "RESEND_API_KEY"),
 		authUrl: resolveOptionalEnvString(resolvedEnv, "AUTH_URL") ?? "",
 	});
@@ -118,6 +121,8 @@ export function getServices(ctx: RequestContext): Services {
 			userRepository: userRepo,
 			adminAuditLogService,
 			avatarCdnBaseUrl,
+			siteSettingsRepository: siteRepo,
+			assetBucket,
 			argonHasher: ctx.env.ARGON_HASHER,
 			hashMethod,
 			userChallengeRepository: challengeRepo,
@@ -143,6 +148,7 @@ export function getServices(ctx: RequestContext): Services {
 			refreshTokenRepo,
 			envRepo,
 			userRepo,
+			siteRepo,
 			env: ctx.env,
 		}),
 		tokenActivityLogService: new TokenActivityLogService({

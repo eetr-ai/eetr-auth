@@ -7,11 +7,11 @@ export type ButtonVariant = "primary" | "secondary" | "destructiveConfirm";
 /** Variant → class strings, taken verbatim from apps/docs/content/docs/contributing/ux-guidelines.mdx. */
 export const buttonVariants: Record<ButtonVariant, string> = {
 	primary:
-		"rounded-full bg-brand px-5 py-2 text-sm font-medium text-white hover:bg-brand-muted disabled:opacity-50",
+		"rounded-full bg-brand px-5 py-2 text-sm font-medium text-brand-fg hover:bg-brand-hover disabled:opacity-50",
 	secondary:
-		"rounded-full border border-brand-muted px-4 py-2 text-sm font-medium hover:bg-brand-muted/30 disabled:opacity-50",
+		"rounded-full border border-border-strong px-4 py-2 text-sm font-medium hover:bg-surface-hover disabled:opacity-50",
 	destructiveConfirm:
-		"inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200 dark:hover:bg-red-900/60",
+		"inline-flex items-center gap-1 rounded-full border border-danger-border bg-danger-bg px-3 py-1 text-xs font-medium text-danger-fg hover:bg-danger-bg-hover disabled:opacity-50",
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

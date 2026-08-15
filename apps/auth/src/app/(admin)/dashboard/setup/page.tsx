@@ -3,7 +3,7 @@
 import { ReducerAction, bootstrapProvider } from "@eetr/react-reducer-utils";
 import { useEffect, useRef } from "react";
 import { Settings } from "lucide-react";
-import { FullPageSpinner } from "@/components/ui";
+import { FullPageSpinner, PageHeader } from "@/components/ui";
 import {
 	listEnvironments,
 	createEnvironment,
@@ -41,6 +41,7 @@ import {
 import { SetupTabs } from "./_components/setup-tabs";
 import { SiteIdentitySection } from "./_components/site-identity-section";
 import { AdminApiSection } from "./_components/admin-api-section";
+import { BasicSection } from "./_components/basic-section";
 import { EnvironmentsSection } from "./_components/environments-section";
 import { ScopesSection } from "./_components/scopes-section";
 import { PasswordPoliciesSection } from "./_components/password-policies-section";
@@ -73,7 +74,9 @@ function SetupPageContent() {
 		editingEnvId,
 		editingEnvName,
 		envError,
+		envSaving,
 		scopeError,
+		scopeSaving,
 		siteSettings,
 		siteTitleInput,
 		siteUrlInput,
@@ -85,6 +88,8 @@ function SetupPageContent() {
 		adminClientsError,
 		siteSaving,
 		logoUploading,
+		logoStagedKey,
+		logoPreviewUrl,
 		adminClientsSaving,
 	} = state;
 
@@ -92,8 +97,14 @@ function SetupPageContent() {
 
 	const envById = new Map(environments.map((e) => [e.id, e.name]));
 
-	const load = async () => {
-		dispatch({ type: SetupPageActionType.SET_LOADING, data: true });
+	/**
+	 * `silent` skips the full-page spinner. Post-mutation refreshes must be
+	 * silent: swapping the whole page for a spinner would unmount any open side
+	 * panel mid-animation, and the control that triggered the mutation already
+	 * shows its own in-flight state.
+	 */
+	const load = async ({ silent = false }: { silent?: boolean } = {}) => {
+		if (!silent) dispatch({ type: SetupPageActionType.SET_LOADING, data: true });
 		try {
 			const [envs, scopesList, policiesList, settings, clientsRaw, adminIds] = await Promise.all([
 				listEnvironments(),
@@ -121,7 +132,7 @@ function SetupPageContent() {
 			dispatch({ type: SetupPageActionType.SET_CLIENTS, data: clientItems });
 			dispatch({ type: SetupPageActionType.SET_SELECTED_ADMIN_CLIENT_IDS, data: adminIds });
 		} finally {
-			dispatch({ type: SetupPageActionType.SET_LOADING, data: false });
+			if (!silent) dispatch({ type: SetupPageActionType.SET_LOADING, data: false });
 		}
 	};
 
@@ -129,20 +140,34 @@ function SetupPageContent() {
 		load();
 	}, [dispatch]);
 
+	// The save, clear and replace paths each revoke the previous preview, but
+	// leaving the page with one staged unmounts without passing through them.
+	const logoPreviewUrlRef = useRef<string | null>(null);
+	logoPreviewUrlRef.current = logoPreviewUrl;
+	useEffect(
+		() => () => {
+			if (logoPreviewUrlRef.current) URL.revokeObjectURL(logoPreviewUrlRef.current);
+		},
+		[],
+	);
+
 	const handleCreateEnv = async (e: React.FormEvent) => {
 		e.preventDefault();
 		dispatch({ type: SetupPageActionType.SET_ENV_ERROR, data: null });
 		const name = envName.trim();
 		if (!name) return;
+		dispatch({ type: SetupPageActionType.SET_ENV_SAVING, data: true });
 		try {
 			await createEnvironment(name);
 			dispatch({ type: SetupPageActionType.SET_ENV_NAME, data: "" });
-			await load();
+			await load({ silent: true });
 		} catch (err) {
 			dispatch({
 				type: SetupPageActionType.SET_ENV_ERROR,
 				data: err instanceof Error ? err.message : "Failed to create environment",
 			});
+		} finally {
+			dispatch({ type: SetupPageActionType.SET_ENV_SAVING, data: false });
 		}
 	};
 
@@ -150,27 +175,38 @@ function SetupPageContent() {
 		e.preventDefault();
 		if (!editingEnvId) return;
 		dispatch({ type: SetupPageActionType.SET_ENV_ERROR, data: null });
+		dispatch({ type: SetupPageActionType.SET_ENV_SAVING, data: true });
 		try {
+			// The action resolves to the updated Environment, or null when the id no
+			// longer exists — say so rather than leaving the row silently in edit mode.
 			const result = await updateEnvironment(editingEnvId, editingEnvName.trim());
 			if (result) {
 				dispatch({ type: SetupPageActionType.SET_EDITING_ENV_ID, data: null });
 				dispatch({ type: SetupPageActionType.SET_EDITING_ENV_NAME, data: "" });
-				await load();
+				await load({ silent: true });
+			} else {
+				dispatch({
+					type: SetupPageActionType.SET_ENV_ERROR,
+					data: "Environment no longer exists",
+				});
 			}
 		} catch (err) {
 			dispatch({
 				type: SetupPageActionType.SET_ENV_ERROR,
 				data: err instanceof Error ? err.message : "Failed to update environment",
 			});
+		} finally {
+			dispatch({ type: SetupPageActionType.SET_ENV_SAVING, data: false });
 		}
 	};
 
 	const handleDeleteEnv = async (id: string) => {
 		dispatch({ type: SetupPageActionType.SET_ENV_ERROR, data: null });
+		dispatch({ type: SetupPageActionType.SET_ENV_SAVING, data: true });
 		try {
 			const result = await deleteEnvironment(id);
 			if (result.ok) {
-				await load();
+				await load({ silent: true });
 			} else {
 				dispatch({
 					type: SetupPageActionType.SET_ENV_ERROR,
@@ -182,6 +218,8 @@ function SetupPageContent() {
 				type: SetupPageActionType.SET_ENV_ERROR,
 				data: err instanceof Error ? err.message : "Failed to delete environment",
 			});
+		} finally {
+			dispatch({ type: SetupPageActionType.SET_ENV_SAVING, data: false });
 		}
 	};
 
@@ -190,24 +228,28 @@ function SetupPageContent() {
 		dispatch({ type: SetupPageActionType.SET_SCOPE_ERROR, data: null });
 		const name = scopeName.trim();
 		if (!name) return;
+		dispatch({ type: SetupPageActionType.SET_SCOPE_SAVING, data: true });
 		try {
 			await createScope(name);
 			dispatch({ type: SetupPageActionType.SET_SCOPE_NAME, data: "" });
-			await load();
+			await load({ silent: true });
 		} catch (err) {
 			dispatch({
 				type: SetupPageActionType.SET_SCOPE_ERROR,
 				data: err instanceof Error ? err.message : "Failed to create scope",
 			});
+		} finally {
+			dispatch({ type: SetupPageActionType.SET_SCOPE_SAVING, data: false });
 		}
 	};
 
 	const handleDeleteScope = async (id: string) => {
 		dispatch({ type: SetupPageActionType.SET_SCOPE_ERROR, data: null });
+		dispatch({ type: SetupPageActionType.SET_SCOPE_SAVING, data: true });
 		try {
 			const result = await deleteScope(id);
 			if (result.ok) {
-				await load();
+				await load({ silent: true });
 			} else {
 				dispatch({
 					type: SetupPageActionType.SET_SCOPE_ERROR,
@@ -219,6 +261,8 @@ function SetupPageContent() {
 				type: SetupPageActionType.SET_SCOPE_ERROR,
 				data: err instanceof Error ? err.message : "Failed to delete scope",
 			});
+		} finally {
+			dispatch({ type: SetupPageActionType.SET_SCOPE_SAVING, data: false });
 		}
 	};
 
@@ -236,7 +280,7 @@ function SetupPageContent() {
 				});
 				return false;
 			}
-			await load();
+			await load({ silent: true });
 			return true;
 		} catch (err) {
 			dispatch({
@@ -262,7 +306,7 @@ function SetupPageContent() {
 				});
 				return false;
 			}
-			await load();
+			await load({ silent: true });
 			return true;
 		} catch (err) {
 			dispatch({
@@ -284,7 +328,7 @@ function SetupPageContent() {
 				});
 				return false;
 			}
-			await load();
+			await load({ silent: true });
 			return true;
 		} catch (err) {
 			dispatch({
@@ -312,6 +356,9 @@ function SetupPageContent() {
 
 	const handleSaveSite = async (e: React.FormEvent) => {
 		e.preventDefault();
+		// A staged logo is not on the wire yet, so saving mid-upload would persist
+		// the rest of the form and silently drop the picture.
+		if (logoUploading) return;
 		dispatch({ type: SetupPageActionType.SET_SITE_ERROR, data: null });
 		dispatch({ type: SetupPageActionType.SET_SITE_SAVING, data: true });
 		try {
@@ -320,8 +367,14 @@ function SetupPageContent() {
 				siteUrl: siteUrlInput.trim() || null,
 				cdnUrl: cdnUrlInput.trim() || null,
 				mfaEnabled: mfaEnabledInput,
+				...(logoStagedKey ? { logoStagedKey } : {}),
 			});
 			dispatch({ type: SetupPageActionType.SET_SITE_SETTINGS, data: dto });
+			if (logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl);
+			dispatch({
+				type: SetupPageActionType.SET_STAGED_LOGO,
+				data: { key: null, previewUrl: null },
+			});
 		} catch (err) {
 			dispatch({
 				type: SetupPageActionType.SET_SITE_ERROR,
@@ -332,6 +385,10 @@ function SetupPageContent() {
 		}
 	};
 
+	/**
+	 * Uploads to staging and records the key. The live logo is only replaced when
+	 * the Site identity form is saved.
+	 */
 	const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
 		const file = e.target.files?.[0];
 		e.target.value = "";
@@ -341,22 +398,18 @@ function SetupPageContent() {
 		try {
 			const body = new FormData();
 			body.set("file", file);
-			const res = await fetch("/api/admin/site-logo", {
-				method: "POST",
-				body,
+			const res = await fetch("/api/admin/site-logo", { method: "POST", body });
+			const json = (await res.json().catch(() => null)) as
+				| { stagedKey?: string; error_description?: string; error?: string }
+				| null;
+			if (!res.ok || !json?.stagedKey) {
+				throw new Error(json?.error_description ?? json?.error ?? "Upload failed");
+			}
+			if (logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl);
+			dispatch({
+				type: SetupPageActionType.SET_STAGED_LOGO,
+				data: { key: json.stagedKey, previewUrl: URL.createObjectURL(file) },
 			});
-			const json = (await res.json()) as { settings?: SiteSettingsDto; error?: string };
-			if (!res.ok) {
-				throw new Error(
-					(json as { error_description?: string }).error_description ?? json.error ?? "Upload failed"
-				);
-			}
-			if (json.settings) {
-				dispatch({ type: SetupPageActionType.SET_SITE_SETTINGS, data: json.settings });
-			} else {
-				const dto = await getSiteSettings();
-				dispatch({ type: SetupPageActionType.SET_SITE_SETTINGS, data: dto });
-			}
 		} catch (err) {
 			dispatch({
 				type: SetupPageActionType.SET_SITE_ERROR,
@@ -373,6 +426,13 @@ function SetupPageContent() {
 		try {
 			const dto = await clearSiteLogo();
 			dispatch({ type: SetupPageActionType.SET_SITE_SETTINGS, data: dto });
+			// Drop any staged logo too, or the next save would promote it and undo
+			// the clear the admin just asked for.
+			if (logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl);
+			dispatch({
+				type: SetupPageActionType.SET_STAGED_LOGO,
+				data: { key: null, previewUrl: null },
+			});
 		} catch (err) {
 			dispatch({
 				type: SetupPageActionType.SET_SITE_ERROR,
@@ -414,10 +474,7 @@ function SetupPageContent() {
 
 	return (
 		<main className="min-h-screen bg-background p-6 text-foreground">
-			<div className="flex items-center gap-2 text-xl font-semibold">
-				<Settings className="h-6 w-6" />
-				Setup
-			</div>
+			<PageHeader icon={Settings} title="Setup" />
 
 			<SetupTabs activeTab={activeTab} dispatch={dispatch} />
 
@@ -431,6 +488,7 @@ function SetupPageContent() {
 				siteError={siteError}
 				siteSaving={siteSaving}
 				logoUploading={logoUploading}
+				logoPreviewUrl={logoPreviewUrl}
 				logoInputRef={logoInputRef}
 				dispatch={dispatch}
 				onSubmit={handleSaveSite}
@@ -449,27 +507,33 @@ function SetupPageContent() {
 				onSave={handleSaveAdminClients}
 			/>
 
-			<EnvironmentsSection
+			<BasicSection
 				activeTab={activeTab}
-				environments={environments}
-				envName={envName}
-				editingEnvId={editingEnvId}
-				editingEnvName={editingEnvName}
-				envError={envError}
-				dispatch={dispatch}
-				onCreate={handleCreateEnv}
-				onUpdate={handleUpdateEnv}
-				onDelete={handleDeleteEnv}
-			/>
-
-			<ScopesSection
-				activeTab={activeTab}
-				scopes={scopes}
-				scopeName={scopeName}
-				scopeError={scopeError}
-				dispatch={dispatch}
-				onCreate={handleCreateScope}
-				onDelete={handleDeleteScope}
+				environments={
+					<EnvironmentsSection
+						saving={envSaving}
+						environments={environments}
+						envName={envName}
+						editingEnvId={editingEnvId}
+						editingEnvName={editingEnvName}
+						envError={envError}
+						dispatch={dispatch}
+						onCreate={handleCreateEnv}
+						onUpdate={handleUpdateEnv}
+						onDelete={handleDeleteEnv}
+					/>
+				}
+				scopes={
+					<ScopesSection
+						saving={scopeSaving}
+						scopes={scopes}
+						scopeName={scopeName}
+						scopeError={scopeError}
+						dispatch={dispatch}
+						onCreate={handleCreateScope}
+						onDelete={handleDeleteScope}
+					/>
+				}
 			/>
 
 			<PasswordPoliciesSection

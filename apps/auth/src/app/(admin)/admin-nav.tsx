@@ -35,9 +35,9 @@ export function AdminNav({
 	const pathname = usePathname();
 
 	return (
-		<aside className="sticky top-0 flex h-screen max-h-dvh w-56 shrink-0 flex-col self-start overflow-hidden border-r border-brand-muted bg-background">
-			<div className="shrink-0 border-b border-brand-muted p-4">
-				<Link href="/dashboard" className="flex items-center gap-3 rounded-xl outline-none ring-brand focus-visible:ring-2">
+		<aside className="sticky top-0 flex h-screen max-h-dvh w-56 shrink-0 flex-col self-start overflow-hidden border-r border-border bg-background">
+			<div className="shrink-0 border-b border-border p-4">
+				<Link href="/dashboard" className="flex items-center gap-3 rounded-card outline-none ring-brand focus-visible:ring-2">
 					{/* eslint-disable-next-line @next/next/no-img-element -- dynamic CDN or local paths */}
 					<img
 						src={displayLogoUrl}
@@ -57,10 +57,10 @@ export function AdminNav({
 						<Link
 							key={href}
 							href={href}
-							className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+							className={`flex items-center gap-2 rounded-card px-3 py-2 text-sm font-medium transition-colors ${
 								isActive
-									? "bg-brand-muted/50 text-foreground"
-									: "text-muted-foreground hover:bg-brand-muted/30 hover:text-foreground"
+									? "bg-surface-sunken text-foreground"
+									: "text-muted-foreground hover:bg-surface-hover hover:text-foreground"
 							}`}
 						>
 							<Icon className="h-4 w-4" />
@@ -69,7 +69,7 @@ export function AdminNav({
 					);
 				})}
 			</nav>
-			<div className="shrink-0 border-t border-brand-muted p-4 space-y-2">
+			<div className="shrink-0 border-t border-border p-4 space-y-2">
 				<div className="flex justify-center pb-1">
 					<ThemeSwitcher />
 				</div>
@@ -79,10 +79,10 @@ export function AdminNav({
 					return (
 						<Link
 							href={href}
-							className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+							className={`flex items-center gap-2 rounded-card px-3 py-2 text-sm font-medium transition-colors ${
 								isActive
-									? "bg-brand-muted/50 text-foreground"
-									: "text-muted-foreground hover:bg-brand-muted/30 hover:text-foreground"
+									? "bg-surface-sunken text-foreground"
+									: "text-muted-foreground hover:bg-surface-hover hover:text-foreground"
 							}`}
 						>
 							<Settings className="h-4 w-4" />
@@ -93,7 +93,7 @@ export function AdminNav({
 				<form action={logout}>
 					<button
 						type="submit"
-						className="flex w-full items-center gap-2 rounded-full border border-brand-muted px-3 py-2 text-sm font-medium text-foreground hover:bg-brand-muted/30"
+						className="flex w-full items-center gap-2 rounded-full border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-surface-hover"
 					>
 						<LogOut className="h-4 w-4" />
 						Sign out

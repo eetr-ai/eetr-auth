@@ -47,7 +47,7 @@ export function ResetPasswordForm({ token }: Props) {
 					autoComplete="new-password"
 					value={password}
 					onChange={(e) => setPassword(e.target.value)}
-					className="w-full rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+					className="w-full rounded-card border border-border bg-background px-3 py-2 text-foreground focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
 				/>
 			</div>
 			<div>
@@ -61,16 +61,16 @@ export function ResetPasswordForm({ token }: Props) {
 					autoComplete="new-password"
 					value={confirm}
 					onChange={(e) => setConfirm(e.target.value)}
-					className="w-full rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+					className="w-full rounded-card border border-border bg-background px-3 py-2 text-foreground focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
 				/>
 			</div>
 			{error ? (
-				<p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">{error}</p>
+				<p className="rounded-card bg-danger-bg px-3 py-2 text-sm text-danger-fg">{error}</p>
 			) : null}
 			<button
 				type="submit"
 				disabled={pending}
-				className="w-full rounded-full bg-brand px-4 py-2 font-medium text-white hover:bg-brand-muted disabled:opacity-50"
+				className="w-full rounded-full bg-brand px-4 py-2 font-medium text-white hover:bg-brand-hover disabled:opacity-50"
 			>
 				{pending ? "Saving…" : "Set password"}
 			</button>

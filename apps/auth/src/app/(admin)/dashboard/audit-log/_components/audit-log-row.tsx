@@ -7,7 +7,7 @@ function formatDate(iso: string): string {
 
 export function AuditLogRow({ row }: { row: AdminAuditLogListEntry }) {
 	return (
-		<tr className="border-b border-brand-muted/50 align-top">
+		<tr className="border-b border-border align-top">
 			<td className="px-4 py-2 font-mono text-xs">{formatDate(row.created_at)}</td>
 			<td className="px-4 py-2">
 				{row.actor_username ? (

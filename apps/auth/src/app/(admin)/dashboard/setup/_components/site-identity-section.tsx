@@ -15,6 +15,8 @@ interface SiteIdentitySectionProps {
 	siteError: string | null;
 	siteSaving: boolean;
 	logoUploading: boolean;
+	/** Local object URL for a picked-but-unsaved logo, shown instead of the live one. */
+	logoPreviewUrl: string | null;
 	logoInputRef: RefObject<HTMLInputElement | null>;
 	dispatch: (action: ReducerAction<SetupPageActionType>) => void;
 	onSubmit: (e: FormEvent) => void;
@@ -32,17 +34,19 @@ export function SiteIdentitySection({
 	siteError,
 	siteSaving,
 	logoUploading,
+	logoPreviewUrl,
 	logoInputRef,
 	dispatch,
 	onSubmit,
 	onLogoChange,
 	onClearLogo,
 }: SiteIdentitySectionProps) {
-	const previewLogoUrl = siteSettings?.displayLogoUrl ?? null;
+	// The picked file wins over the stored logo until the form is saved.
+	const previewLogoUrl = logoPreviewUrl ?? siteSettings?.displayLogoUrl ?? null;
 
 	return (
 		<section
-			className={`mt-6 rounded-xl border border-brand-muted p-6 ${activeTab !== "site" ? "hidden" : ""}`}
+			className={`mt-6 rounded-card border border-border p-6 ${activeTab !== "site" ? "hidden" : ""}`}
 			role="tabpanel"
 			id="setup-panel-site"
 			aria-labelledby="setup-tab-site"
@@ -110,7 +114,7 @@ export function SiteIdentitySection({
 										data: e.target.checked,
 									})
 								}
-								className="mt-1 rounded border-brand-muted"
+								className="mt-1 rounded border-border"
 							/>
 							<span>
 								<span className="font-medium">Require email verification (MFA) at sign-in</span>
@@ -133,10 +137,10 @@ export function SiteIdentitySection({
 								<img
 									src={previewLogoUrl}
 									alt=""
-									className="h-14 w-14 rounded-lg border border-brand-muted object-contain"
+									className="h-14 w-14 rounded-lg border border-border object-contain"
 								/>
 							) : (
-								<div className="flex h-14 w-14 items-center justify-center rounded-lg border border-dashed border-brand-muted">
+								<div className="flex h-14 w-14 items-center justify-center rounded-lg border border-dashed border-border">
 									<ImageIcon className="h-6 w-6 text-muted-foreground" />
 								</div>
 							)}

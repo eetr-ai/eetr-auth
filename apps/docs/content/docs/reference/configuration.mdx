@@ -13,7 +13,8 @@ Configuration splits into non-secret **Wrangler vars** (rendered into `wrangler.
 |---|---|
 | `AUTH_URL` | Full Auth.js session endpoint (`https://auth.yourdomain.com/api/auth/session`) — the session URL, **not** the issuer. |
 | `ISSUER_BASE_URL` | OAuth/OIDC issuer base URL — the public auth host (e.g. `https://auth.yourdomain.com`). |
-| `JWKS_CDN_BASE_URL` | Base URL for the public JWKS endpoint (can be an R2 public URL). |
+| `JWKS_CDN_BASE_URL` | Base URL for the public JWKS endpoint (can be an R2 public URL). Also the default asset base when `AVATAR_CDN_BASE_URL` is unset. |
+| `AVATAR_CDN_BASE_URL` | Default base URL for assets served from the bucket (avatars and the site logo). **Setup → Site identity → CDN URL** overrides it at runtime; this is only the deploy-time default. |
 | `JWKS_R2_KEY` | R2 key for `jwks.json` (default `jwks.json`). |
 | `JWT_KID` | Key ID for the active JWT signing key. Rendered by `infra:render-wrangler` / `setup:remote` — you don't normally set it by hand. |
 | `EMAIL_FROM_ADDRESS` | Optional transactional email sender. If unset, falls back to `no-reply@<site hostname>`. |

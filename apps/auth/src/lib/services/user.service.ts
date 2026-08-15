@@ -2,7 +2,18 @@ import type { HashMethod } from "@/lib/config/hash-method";
 import type { UserRecord, UserRepository } from "@/lib/repositories/admin.repository";
 import type { UserChallengeRepository } from "@/lib/repositories/user-challenge.repository";
 import { hashPassword } from "@/lib/auth/password-hash";
-import { normalizeOptionalProfileField } from "@/lib/users/profile";
+import type { SiteSettingsRepository } from "@/lib/repositories/site-settings.repository";
+import {
+	buildAssetUrl,
+	normalizeOptionalProfileField,
+	pickAssetCdnBaseUrl,
+} from "@/lib/users/profile";
+import {
+	StagedUploadError,
+	extensionOfStagedKey,
+	promoteStagedUpload,
+	type AssetBucket,
+} from "@/lib/uploads/staged-upload";
 import type { AdminAuditLogService } from "./admin-audit-log.service";
 import { AUDIT_ACTION, AUDIT_RESOURCE } from "./audit-actions";
 
@@ -13,6 +24,8 @@ interface UpdateUserInput {
 	password?: string;
 	isAdmin?: boolean;
 	avatarKey?: string | null;
+	/** A `staging/` key from the upload endpoint, promoted to the final avatar on save. */
+	avatarStagedKey?: string | null;
 	emailVerifiedAt?: string | null;
 	/** When provided, replaces the user's full set of environment grants. */
 	environmentIds?: string[];
@@ -21,7 +34,15 @@ interface UpdateUserInput {
 export interface UserServiceDependencies {
 	userRepository: UserRepository;
 	adminAuditLogService: AdminAuditLogService;
+	/** Deploy-time default, used when Setup → Site identity has no CDN URL. */
 	avatarCdnBaseUrl: string;
+	/**
+	 * Optional: when provided, the CDN URL configured in site settings takes
+	 * precedence over `avatarCdnBaseUrl` when building avatar URLs.
+	 */
+	siteSettingsRepository?: SiteSettingsRepository;
+	/** R2 bucket holding avatars. Absent in contexts that never write one. */
+	assetBucket?: AssetBucket;
 	argonHasher?: Fetcher;
 	hashMethod: HashMethod;
 	/**
@@ -35,6 +56,9 @@ export class UserService {
 	private readonly userRepository: UserRepository;
 	private readonly adminAuditLogService: AdminAuditLogService;
 	private readonly avatarCdnBaseUrl: string;
+	private readonly siteSettingsRepository?: SiteSettingsRepository;
+	private cdnBaseUrl?: Promise<string>;
+	private readonly assetBucket?: AssetBucket;
 	private readonly argonHasher?: Fetcher;
 	private readonly hashMethod: HashMethod;
 	private readonly userChallengeRepository?: UserChallengeRepository;
@@ -43,6 +67,8 @@ export class UserService {
 		userRepository,
 		adminAuditLogService,
 		avatarCdnBaseUrl,
+		siteSettingsRepository,
+		assetBucket,
 		argonHasher,
 		hashMethod,
 		userChallengeRepository,
@@ -50,6 +76,8 @@ export class UserService {
 		this.userRepository = userRepository;
 		this.adminAuditLogService = adminAuditLogService;
 		this.avatarCdnBaseUrl = avatarCdnBaseUrl.replace(/\/+$/, "");
+		this.siteSettingsRepository = siteSettingsRepository;
+		this.assetBucket = assetBucket;
 		this.argonHasher = argonHasher;
 		this.hashMethod = hashMethod;
 		this.userChallengeRepository = userChallengeRepository;
@@ -71,20 +99,31 @@ export class UserService {
 		};
 	}
 
-	private withAvatarUrl(user: UserRecord): UserRecord {
-		const avatarUrl = user.avatarKey
-			? `${this.avatarCdnBaseUrl}/${user.avatarKey.replace(/^\/+/, "")}`
-			: null;
+	/**
+	 * The CDN base for avatars, preferring the site setting over the environment.
+	 *
+	 * Memoised because services are constructed per request: listing every user
+	 * resolves the base once, not once per avatar.
+	 */
+	private resolveCdnBaseUrl(): Promise<string> {
+		if (!this.siteSettingsRepository) return Promise.resolve(this.avatarCdnBaseUrl);
+		this.cdnBaseUrl ??= this.siteSettingsRepository
+			.get()
+			.then((row) => pickAssetCdnBaseUrl(row?.cdnUrl, this.avatarCdnBaseUrl));
+		return this.cdnBaseUrl;
+	}
 
+	private async withAvatarUrl(user: UserRecord): Promise<UserRecord> {
+		if (!user.avatarKey) return { ...user, avatarUrl: null };
 		return {
 			...user,
-			avatarUrl,
+			avatarUrl: buildAssetUrl(user.avatarKey, await this.resolveCdnBaseUrl()),
 		};
 	}
 
 	async listUsers(): Promise<UserRecord[]> {
 		const users = await this.userRepository.list();
-		return users.map((user) => this.withAvatarUrl(user));
+		return Promise.all(users.map((user) => this.withAvatarUrl(user)));
 	}
 
 	async getById(id: string): Promise<UserRecord | null> {
@@ -207,7 +246,10 @@ export class UserService {
 			});
 			patch.passwordUpdatedAt = new Date().toISOString();
 		}
-		if (updates.avatarKey !== undefined) {
+		if (updates.avatarStagedKey && !this.assetBucket) {
+			throw new StagedUploadError("Avatar storage is not configured.");
+		}
+		if (!updates.avatarStagedKey && updates.avatarKey !== undefined) {
 			patch.avatarKey = updates.avatarKey;
 		}
 		if (updates.isAdmin !== undefined) {
@@ -222,6 +264,16 @@ export class UserService {
 				}
 			}
 			patch.isAdmin = updates.isAdmin;
+		}
+
+		// Promoted last, once nothing above can still reject: promotion overwrites
+		// the live avatar, and a validation error afterwards would leave the new
+		// picture in place on a save that never happened. The final key is derived
+		// from the user id, never from anything the caller supplied.
+		if (updates.avatarStagedKey && this.assetBucket) {
+			const finalKey = `avatars/${id}.${extensionOfStagedKey(updates.avatarStagedKey)}`;
+			await promoteStagedUpload(this.assetBucket, updates.avatarStagedKey, finalKey);
+			patch.avatarKey = finalKey;
 		}
 
 		await this.userRepository.update(id, patch);

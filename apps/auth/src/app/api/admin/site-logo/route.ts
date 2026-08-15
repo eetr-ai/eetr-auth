@@ -1,18 +1,16 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withApiContext } from "@/lib/context/with-api-context";
+import { newStagedKey, validateImageUpload } from "@/lib/uploads/staged-upload";
 
-const MAX_BYTES = 5 * 1024 * 1024;
-const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
-
-function extensionForMimeType(contentType: string): string {
-	if (contentType === "image/jpeg") return "jpg";
-	if (contentType === "image/png") return "png";
-	if (contentType === "image/webp") return "webp";
-	return "bin";
-}
-
-export const POST = withApiContext(async (req, ctx, getServices) => {
+/**
+ * Stages a site logo.
+ *
+ * This no longer replaces the live logo. The file lands under `staging/` and
+ * the returned key is held by the Setup form until it is saved, so cancelling
+ * leaves the current logo untouched.
+ */
+export const POST = withApiContext(async (req, ctx) => {
 	const session = await auth();
 	if (!session?.user?.id || !session.user.isAdmin) {
 		return NextResponse.json({ error: "forbidden" }, { status: 403 });
@@ -28,21 +26,11 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 			{ status: 400 }
 		);
 	}
-	if (!ALLOWED_MIME_TYPES.has(file.type)) {
+
+	const invalid = validateImageUpload(file);
+	if (invalid) {
 		return NextResponse.json(
-			{
-				error: "invalid_request",
-				error_description: "Unsupported image type. Use JPEG, PNG, or WEBP.",
-			},
-			{ status: 400 }
-		);
-	}
-	if (file.size > MAX_BYTES) {
-		return NextResponse.json(
-			{
-				error: "invalid_request",
-				error_description: "Image is too large. Maximum is 5MB.",
-			},
+			{ error: "invalid_request", error_description: invalid },
 			{ status: 400 }
 		);
 	}
@@ -59,23 +47,10 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 		);
 	}
 
-	const extension = extensionForMimeType(file.type);
-	const logoKey = `site/logo.${extension}`;
-	const buffer = await file.arrayBuffer();
-	await bucket.put(logoKey, buffer, {
+	const stagedKey = newStagedKey(file.type);
+	await bucket.put(stagedKey, await file.arrayBuffer(), {
 		httpMetadata: { contentType: file.type },
 	});
 
-	const { siteSettingsService } = getServices();
-	const dto = await siteSettingsService.setLogoKey(logoKey, session.user.id);
-
-	return NextResponse.json(
-		{
-			ok: true,
-			logoKey,
-			logoUrl: dto.displayLogoUrl,
-			settings: dto,
-		},
-		{ status: 200 }
-	);
+	return NextResponse.json({ ok: true, stagedKey, contentType: file.type }, { status: 200 });
 });

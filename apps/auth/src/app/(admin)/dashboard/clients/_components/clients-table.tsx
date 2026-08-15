@@ -1,128 +1,109 @@
-import Link from "next/link";
-import { Eye, Sparkles } from "lucide-react";
-import type { Environment } from "@/lib/repositories/environment.repository";
+import { Pencil, Sparkles, Trash2 } from "lucide-react";
+import { IconButton, InlineDeleteConfirm, TBody, THead, Table, Td, Th } from "@/components/ui";
 import type { Client } from "@/lib/repositories/client.repository";
-import { DeleteClientButton } from "./delete-client-button";
+import type { Environment } from "@/lib/repositories/environment.repository";
 
 export type ClientTypeFilter = "" | "dynamic" | "manual";
 
 interface ClientsTableProps {
 	clients: Client[];
 	environments: Environment[];
-	envFilter: string;
-	onEnvFilterChange: (v: string) => void;
-	typeFilter: ClientTypeFilter;
-	onTypeFilterChange: (v: ClientTypeFilter) => void;
-	onClientDeleted: () => void;
+	onStartEdit: (client: Client) => void;
+	confirmingDeleteId: string | null;
+	deletingId: string | null;
+	onRequestDelete: (client: Client) => void;
+	onConfirmDelete: (client: Client) => void;
+	onCancelDelete: () => void;
 }
 
 export function ClientsTable({
 	clients,
 	environments,
-	envFilter,
-	onEnvFilterChange,
-	typeFilter,
-	onTypeFilterChange,
-	onClientDeleted,
+	onStartEdit,
+	confirmingDeleteId,
+	deletingId,
+	onRequestDelete,
+	onConfirmDelete,
+	onCancelDelete,
 }: ClientsTableProps) {
-	const envById = Object.fromEntries(environments.map((e) => [e.id, e]));
-	const visibleClients = clients.filter((c) =>
-		typeFilter === "dynamic" ? c.isDynamic : typeFilter === "manual" ? !c.isDynamic : true
-	);
+	const envById = new Map(environments.map((env) => [env.id, env.name]));
 
 	return (
-		<div className="mt-6">
-			<div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-2">
-				<div className="flex items-center gap-2">
-					<label className="text-sm font-medium">Filter by environment</label>
-					<select
-						value={envFilter}
-						onChange={(e) => onEnvFilterChange(e.target.value)}
-						className="rounded-xl border border-brand-muted bg-background px-3 py-1.5 text-sm focus:border-brand focus:outline-none"
-					>
-						<option value="">All</option>
-						{environments.map((e) => (
-							<option key={e.id} value={e.id}>
-								{e.name}
-							</option>
-						))}
-					</select>
-				</div>
-				<div className="flex items-center gap-2">
-					<label className="text-sm font-medium">Registration</label>
-					<select
-						value={typeFilter}
-						onChange={(e) => onTypeFilterChange(e.target.value as ClientTypeFilter)}
-						className="rounded-xl border border-brand-muted bg-background px-3 py-1.5 text-sm focus:border-brand focus:outline-none"
-					>
-						<option value="">All</option>
-						<option value="dynamic">Dynamic (DCR)</option>
-						<option value="manual">Manual</option>
-					</select>
-				</div>
-			</div>
-			<div className="overflow-x-auto rounded-xl border border-brand-muted">
-				<table className="w-full min-w-[500px] text-left text-sm">
-					<thead>
-						<tr className="border-b border-brand-muted bg-brand-muted/20">
-							<th className="px-4 py-3 font-medium">Name</th>
-							<th className="px-4 py-3 font-medium">Client ID</th>
-							<th className="px-4 py-3 font-medium">Type</th>
-							<th className="px-4 py-3 font-medium">Environment</th>
-							<th className="px-4 py-3 font-medium">Created by</th>
-							<th className="px-4 py-3 font-medium">Actions</th>
-						</tr>
-					</thead>
-					<tbody>
-						{visibleClients.map((c) => (
-							<tr key={c.id} className="border-b border-brand-muted/50">
-								<td className="px-4 py-3">
-									<div className="flex items-center gap-2">
-										<span>{c.name ?? "—"}</span>
-										{c.isDynamic && (
-											<span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950/50 dark:text-blue-200">
-												<Sparkles className="h-3 w-3" />
-												Dynamic
-											</span>
-										)}
-									</div>
-								</td>
-								<td className="px-4 py-3 font-mono text-xs">{c.clientId}</td>
-								<td className="px-4 py-3 text-muted-foreground">
-									{c.tokenEndpointAuthMethod === "none" ? "Public (PKCE)" : "Confidential"}
-								</td>
-								<td className="px-4 py-3">
-									{envById[c.environmentId]?.name ?? c.environmentId}
-								</td>
-								<td className="px-4 py-3 text-muted-foreground">{c.createdBy}</td>
-								<td className="px-4 py-3">
-									<div className="flex gap-2">
-										<Link
-											href={`/dashboard/clients/${c.id}`}
-											className="flex items-center gap-1 rounded-full border border-brand-muted px-2 py-1 text-xs hover:bg-brand-muted/30"
-										>
-											<Eye className="h-3 w-3" />
-											View
-										</Link>
-										<DeleteClientButton
-											clientId={c.id}
-											clientDisplayId={c.name ?? c.clientId}
-											onDeleted={onClientDeleted}
+		<Table minWidth="min-w-[840px]">
+			<THead>
+				<Th>Name</Th>
+				<Th>Client ID</Th>
+				<Th>Type</Th>
+				<Th>Environment</Th>
+				<Th>Created by</Th>
+				<Th className="text-right">Actions</Th>
+			</THead>
+			<TBody>
+				{clients.map((client) => {
+					const label = client.name ?? client.clientId;
+					return (
+						// Row click is a convenience for pointer users. The pencil stays as the
+						// keyboard-reachable, screen-reader-labelled way to do the same thing —
+						// a <tr> cannot carry button semantics cleanly.
+						<tr
+							key={client.id}
+							onClick={() => onStartEdit(client)}
+							className="cursor-pointer transition-colors hover:bg-surface-hover"
+						>
+							<Td>
+								<div className="flex items-center gap-2">
+									<span className="truncate">{client.name ?? "—"}</span>
+									{client.isDynamic ? (
+										<span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-accent-bg px-2 py-0.5 text-xs font-medium text-accent-fg">
+											<Sparkles className="h-3 w-3" />
+											Dynamic
+										</span>
+									) : null}
+								</div>
+							</Td>
+							<Td className="font-mono text-xs">{client.clientId}</Td>
+							<Td className="text-muted-foreground">
+								{client.tokenEndpointAuthMethod === "none" ? "Public (PKCE)" : "Confidential"}
+							</Td>
+							<Td>{envById.get(client.environmentId) ?? client.environmentId}</Td>
+							<Td className="text-muted-foreground">{client.createdBy}</Td>
+							{/* Actions own their clicks, so hitting one never also opens the panel. */}
+							<Td onClick={(event) => event.stopPropagation()}>
+								<div className="flex items-center justify-end gap-1">
+									{confirmingDeleteId === client.id ? (
+										<InlineDeleteConfirm
+											label={`Delete ${label}?`}
+											busy={deletingId === client.id}
+											onConfirm={() => onConfirmDelete(client)}
+											onCancel={onCancelDelete}
 										/>
-									</div>
-								</td>
-							</tr>
-						))}
-					</tbody>
-				</table>
-			</div>
-			{visibleClients.length === 0 && (
-				<p className="mt-4 text-center text-sm text-muted-foreground">
-					{clients.length === 0
-						? "No clients yet. Create one above or add environments and scopes in Setup first."
-						: "No clients match the current filters."}
-				</p>
-			)}
-		</div>
+									) : (
+										<>
+											<IconButton
+												type="button"
+												aria-label={`Edit ${label}`}
+												title="Edit"
+												onClick={() => onStartEdit(client)}
+											>
+												<Pencil className="h-4 w-4" />
+											</IconButton>
+											<IconButton
+												type="button"
+												variant="danger"
+												aria-label={`Delete ${label}`}
+												title="Delete"
+												onClick={() => onRequestDelete(client)}
+											>
+												<Trash2 className="h-4 w-4" />
+											</IconButton>
+										</>
+									)}
+								</div>
+							</Td>
+						</tr>
+					);
+				})}
+			</TBody>
+		</Table>
 	);
 }
