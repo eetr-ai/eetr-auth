@@ -4,6 +4,54 @@ All notable changes to this monorepo are documented in this file.
 
 The current released baseline for both the auth server and the client library is 0.3.1.
 
+## [0.5.0](https://github.com/eetr-ai/eetr-auth/compare/v0.4.0...v0.5.0) (2026-08-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **db:** databases must run db/patches/0.5.0.sql (new client/token columns and the dcr_rate_limit table) before deploying this release. This is a version bump to 0.5.0; there is no 0.4.3 patch.
+
+### Features
+
+* **admin:** open panels by row click and show a client's tokens in place ([477609f](https://github.com/eetr-ai/eetr-auth/commit/477609fda5273ddb8c2c04449b3e515d23f25cf9))
+* **admin:** surface dynamically registered clients ([c55886a](https://github.com/eetr-ai/eetr-auth/commit/c55886adeb13e8e82baf9b84e45aef4e62b9012f))
+* **client:** add DCR registerClient and resource-indicator support ([38a1a0a](https://github.com/eetr-ai/eetr-auth/commit/38a1a0a1cff182896b42ae28c90c4e09be1c6487))
+* **clients:** rebuild Clients on the directory idiom and retire the detail route ([73c8acd](https://github.com/eetr-ai/eetr-auth/commit/73c8acd5945b6b54964d8eb0be90286d1ddcbfa9))
+* **db:** require 0.5.0 schema migration for DCR and resource support ([68affc6](https://github.com/eetr-ai/eetr-auth/commit/68affc61ff1072628f34855b1dc73550ae07e4f8))
+* **db:** schema for public clients, DCR, and resource binding ([d4db830](https://github.com/eetr-ai/eetr-auth/commit/d4db8306020058402d5437c76b034edd6dd06386))
+* **docs:** scaffold Fumadocs static-export app ([ff755ef](https://github.com/eetr-ai/eetr-auth/commit/ff755efa3116ccc5223e210427588f9a45ca5ee0))
+* Dynamic Client Registration (RFC 7591) with public clients and resource indicators ([31008cc](https://github.com/eetr-ai/eetr-auth/commit/31008cca59475cd51b0eb9f57194e4001bbd92a9))
+* **oauth:** add loopback URI matching helper ([4e6890f](https://github.com/eetr-ai/eetr-auth/commit/4e6890fd8c7a12af36816fd50f2b66b665175559))
+* **oauth:** advertise DCR, public clients, and refresh in discovery ([c6b4cb3](https://github.com/eetr-ai/eetr-auth/commit/c6b4cb376aaf975f18dbd83d541b4ce1e6a851dd))
+* **oauth:** dynamic client registration endpoint with rate limiting ([4228d1b](https://github.com/eetr-ai/eetr-auth/commit/4228d1b30f3b126314a1aeb372c92ce966b801da))
+* **oauth:** enable CORS on authorize, token, and userinfo endpoints ([fab55d2](https://github.com/eetr-ai/eetr-auth/commit/fab55d2bc3fe10d43083b5eb8b53acfbd1ca8894))
+* **oauth:** enable CORS on authorize, token, and userinfo endpoints ([28fa608](https://github.com/eetr-ai/eetr-auth/commit/28fa60890d278744d90cdd9cffbe6910aa81c8c9))
+* **oauth:** resource-indicator audience binding (RFC 8707) ([2920669](https://github.com/eetr-ai/eetr-auth/commit/292066993080b9ffaff17eed69d778220d517df0))
+* **oauth:** show client name, scopes, and resource on consent ([115386c](https://github.com/eetr-ai/eetr-auth/commit/115386ca8b592e82b0fc900367baf95ee2890fc8))
+* **oauth:** support public (PKCE-only) clients ([8fc0682](https://github.com/eetr-ai/eetr-auth/commit/8fc0682081f6a6310f37f3e9d91e55cc37196358))
+* **setup:** merge Environments and Scopes into a Basic tab ([c1b34ab](https://github.com/eetr-ai/eetr-auth/commit/c1b34abff335e4ec349620445ed2e6efdcb1a035))
+* **setup:** move the password policy form into a slide-in panel ([47c6294](https://github.com/eetr-ai/eetr-auth/commit/47c629411a15fb5f8048bdd2f2501620a338808b))
+* **tokens:** compact the token table onto glyphs and double-purpose cells ([08ffb88](https://github.com/eetr-ai/eetr-auth/commit/08ffb88cf984c1eec6761f7463de5be84d6bfb32))
+* **ui:** add a two-tier theme layer and apply it to the primitives ([5131cf2](https://github.com/eetr-ai/eetr-auth/commit/5131cf2e2ecbd71c8a33da328eb37ce50fd8df71))
+* **ui:** add surface primitives and move every screen onto the theme ([913787e](https://github.com/eetr-ai/eetr-auth/commit/913787ea0a68091f73df9e53a4b3e15a47494d3a))
+* **uploads:** stage files on the CDN and promote them when the form saves ([03353e2](https://github.com/eetr-ai/eetr-auth/commit/03353e2cad45c8cfd6affcc557629a5e5a589a1b))
+* **uploads:** stage files on the CDN and promote them when the form saves ([bb91599](https://github.com/eetr-ai/eetr-auth/commit/bb91599edd836ad556962a14af7e3889aa61de13))
+* **users:** rebuild Users on the shared directory idiom ([bba4f1e](https://github.com/eetr-ai/eetr-auth/commit/bba4f1e119873cc65822c77f170fb2fd4b6a4380))
+
+
+### Bug Fixes
+
+* **assets:** honour the site CDN URL for avatars, not just the logo ([bf5b97e](https://github.com/eetr-ai/eetr-auth/commit/bf5b97e4b63ce09436b17427a80280c45381d6f2))
+* **docs:** enable trailingSlash for GitHub Pages ([7b5f78c](https://github.com/eetr-ai/eetr-auth/commit/7b5f78cc2d4cc30c15a55bcdece93a4d9eefaaf2))
+* **docs:** enable trailingSlash for GitHub Pages ([6ec99b3](https://github.com/eetr-ai/eetr-auth/commit/6ec99b367b04a0ad0f9a3be20f90b7f3381032eb))
+* **oauth:** accept loopback redirect_uris registered under another host ([8725b8c](https://github.com/eetr-ai/eetr-auth/commit/8725b8c9d20749e7ad3d2db9b2fc324d00d1dde7))
+* **oauth:** accept loopback redirect_uris registered under another host ([2239ff4](https://github.com/eetr-ai/eetr-auth/commit/2239ff45d3f92c68e37c8eeb6449b4a4b0b1a571))
+* **oauth:** canonicalize loopback resource indicators ([e311e59](https://github.com/eetr-ai/eetr-auth/commit/e311e59156732724ce2c497dac1e1b5bf042786a))
+* **oauth:** drop the asymmetric localhost shortcut in the canonicalizer ([9451e6c](https://github.com/eetr-ai/eetr-auth/commit/9451e6c0bb99ae31f01a733f510d5173e40539b7))
+* **uploads:** buffer the staged object when promoting it ([3756889](https://github.com/eetr-ai/eetr-auth/commit/3756889e3e2de9a46c0a27d93bd010952eeea77e))
+* **uploads:** release preview URLs on unmount and fail loudly on spawn errors ([06d26c2](https://github.com/eetr-ai/eetr-auth/commit/06d26c2ae39305a5c6f19720ff5335209d39392f))
+* **uploads:** restore the one-call avatar API and stage only for forms ([9bd38ff](https://github.com/eetr-ai/eetr-auth/commit/9bd38ffccbfd45421d99b6841ecd28ee44578781))
+
 ## [0.4.0](https://github.com/eetr-ai/eetr-auth/compare/v0.3.1...v0.4.0) (2026-06-06)
 
 
