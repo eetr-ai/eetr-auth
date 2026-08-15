@@ -14,8 +14,9 @@ import { listEnvironments } from "@/app/actions/environment-actions";
 import type { Environment } from "@/lib/repositories/environment.repository";
 import { Banner, FullPageSpinner, PageHeader } from "@/components/ui";
 import { TokensToolbar } from "./_components/tokens-toolbar";
-import { TokensTable } from "./_components/tokens-table";
-import type { TokenActivityItem } from "./_components/types";
+import { TokensTable, tokenKey } from "./_components/tokens-table";
+import type { TokenAction } from "./_components/token-row";
+import type { TokenActivityItem } from "@/components/tokens/types";
 
 enum TokensPageActionType {
 	SET_TOKENS = "SET_TOKENS",
@@ -25,6 +26,8 @@ enum TokensPageActionType {
 	SET_CLIENT_FILTER = "SET_CLIENT_FILTER",
 	SET_ERROR = "SET_ERROR",
 	SET_TOKEN_ACTION_KEY = "SET_TOKEN_ACTION_KEY",
+	SET_CONFIRMING_ACTION = "SET_CONFIRMING_ACTION",
+	SET_CONFIRMING_CLEANUP = "SET_CONFIRMING_CLEANUP",
 	SET_CLEANUP_RUNNING = "SET_CLEANUP_RUNNING",
 	SET_CLEANUP_MESSAGE = "SET_CLEANUP_MESSAGE",
 }
@@ -38,6 +41,10 @@ interface TokensPageState {
 	clientFilter: string;
 	error: string | null;
 	tokenActionKey: string | null;
+	/** Row key + action currently awaiting inline confirmation. */
+	confirmingAction: { key: string; action: TokenAction } | null;
+	/** Cleanup is bulk-destructive, so it confirms inline before running. */
+	confirmingCleanup: boolean;
 	cleanupRunning: boolean;
 	cleanupMessage: string | null;
 }
@@ -50,6 +57,8 @@ const initialState: TokensPageState = {
 	clientFilter: "",
 	error: null,
 	tokenActionKey: null,
+	confirmingAction: null,
+	confirmingCleanup: false,
 	cleanupRunning: false,
 	cleanupMessage: null,
 };
@@ -73,6 +82,13 @@ function reducer(
 			return { ...state, error: (action.data as string | null) ?? null };
 		case TokensPageActionType.SET_TOKEN_ACTION_KEY:
 			return { ...state, tokenActionKey: (action.data as string | null) ?? null };
+		case TokensPageActionType.SET_CONFIRMING_CLEANUP:
+			return { ...state, confirmingCleanup: (action.data as boolean | undefined) ?? false };
+		case TokensPageActionType.SET_CONFIRMING_ACTION:
+			return {
+				...state,
+				confirmingAction: (action.data as { key: string; action: TokenAction } | null) ?? null,
+			};
 		case TokensPageActionType.SET_CLEANUP_RUNNING:
 			return { ...state, cleanupRunning: (action.data as boolean | undefined) ?? false };
 		case TokensPageActionType.SET_CLEANUP_MESSAGE:
@@ -106,6 +122,8 @@ function TokensPageContent() {
 		clientFilter,
 		error,
 		tokenActionKey,
+		confirmingAction,
+		confirmingCleanup,
 		cleanupRunning,
 		cleanupMessage,
 	} = state;
@@ -147,13 +165,27 @@ function TokensPageContent() {
 		dispatch({ type: TokensPageActionType.SET_TOKENS, data: tokenItems });
 	};
 
+	const requestAction = (token: TokenActivityItem, action: TokenAction) => {
+		dispatch({ type: TokensPageActionType.SET_ERROR, data: null });
+		dispatch({
+			type: TokensPageActionType.SET_CONFIRMING_ACTION,
+			data: { key: tokenKey(token), action },
+		});
+	};
+
+	const cancelAction = () =>
+		dispatch({ type: TokensPageActionType.SET_CONFIRMING_ACTION, data: null });
+
+	const confirmAction = (token: TokenActivityItem, action: TokenAction) =>
+		action === "revoke" ? handleRevoke(token) : handleDelete(token);
+
 	const handleRevoke = async (token: TokenActivityItem) => {
-		if (!confirm(`Revoke this ${token.tokenType} token?`)) return;
-		const actionKey = `${token.tokenType}:${token.tokenId}:revoke`;
+		const actionKey = tokenKey(token);
 		dispatch({ type: TokensPageActionType.SET_TOKEN_ACTION_KEY, data: actionKey });
 		dispatch({ type: TokensPageActionType.SET_ERROR, data: null });
 		try {
 			await revokeTokenByValue(token.tokenId);
+			dispatch({ type: TokensPageActionType.SET_CONFIRMING_ACTION, data: null });
 			await reloadTokens();
 		} catch (err) {
 			dispatch({
@@ -166,12 +198,12 @@ function TokensPageContent() {
 	};
 
 	const handleDelete = async (token: TokenActivityItem) => {
-		if (!confirm(`Delete this ${token.tokenType} token? This cannot be undone.`)) return;
-		const actionKey = `${token.tokenType}:${token.tokenId}:delete`;
+		const actionKey = tokenKey(token);
 		dispatch({ type: TokensPageActionType.SET_TOKEN_ACTION_KEY, data: actionKey });
 		dispatch({ type: TokensPageActionType.SET_ERROR, data: null });
 		try {
 			await deleteTokenByValue(token.tokenId);
+			dispatch({ type: TokensPageActionType.SET_CONFIRMING_ACTION, data: null });
 			await reloadTokens();
 		} catch (err) {
 			dispatch({
@@ -184,7 +216,7 @@ function TokensPageContent() {
 	};
 
 	const handleRunCleanup = async () => {
-		if (!confirm("Run token cleanup now? This will delete expired access tokens, expired/revoked refresh tokens, and used/expired authorization codes.")) return;
+		dispatch({ type: TokensPageActionType.SET_CONFIRMING_CLEANUP, data: false });
 		dispatch({ type: TokensPageActionType.SET_CLEANUP_RUNNING, data: true });
 		dispatch({ type: TokensPageActionType.SET_CLEANUP_MESSAGE, data: null });
 		try {
@@ -249,6 +281,13 @@ function TokensPageContent() {
 				}
 				cleanupRunning={cleanupRunning}
 				cleanupMessage={cleanupMessage}
+				confirmingCleanup={confirmingCleanup}
+				onRequestCleanup={() =>
+					dispatch({ type: TokensPageActionType.SET_CONFIRMING_CLEANUP, data: true })
+				}
+				onCancelCleanup={() =>
+					dispatch({ type: TokensPageActionType.SET_CONFIRMING_CLEANUP, data: false })
+				}
 				onRunCleanup={handleRunCleanup}
 			/>
 
@@ -256,8 +295,11 @@ function TokensPageContent() {
 				tokens={filteredTokens}
 				envById={envById}
 				actionInProgress={tokenActionKey != null}
-				onRevoke={handleRevoke}
-				onDelete={handleDelete}
+				confirming={confirmingAction}
+				busyKey={tokenActionKey}
+				onRequestAction={requestAction}
+				onConfirmAction={confirmAction}
+				onCancelAction={cancelAction}
 			/>
 
 			{filteredTokens.length === 0 && (

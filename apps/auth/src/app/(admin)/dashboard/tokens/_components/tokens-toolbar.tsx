@@ -1,5 +1,5 @@
 import { Loader2, Eraser } from "lucide-react";
-import { Select } from "@/components/ui";
+import { InlineDeleteConfirm, Select } from "@/components/ui";
 import type { Environment } from "@/lib/repositories/environment.repository";
 
 interface TokensToolbarProps {
@@ -12,6 +12,10 @@ interface TokensToolbarProps {
 	onClientFilterChange: (value: string) => void;
 	cleanupRunning: boolean;
 	cleanupMessage: string | null;
+	/** Cleanup deletes in bulk, so it confirms inline before running. */
+	confirmingCleanup: boolean;
+	onRequestCleanup: () => void;
+	onCancelCleanup: () => void;
 	onRunCleanup: () => void;
 }
 
@@ -24,6 +28,9 @@ export function TokensToolbar({
 	onClientFilterChange,
 	cleanupRunning,
 	cleanupMessage,
+	confirmingCleanup,
+	onRequestCleanup,
+	onCancelCleanup,
 	onRunCleanup,
 }: TokensToolbarProps) {
 	// A deep link can name a client that has no tokens. Without an option to
@@ -71,19 +78,29 @@ export function TokensToolbar({
 				</Select>
 			</div>
 
-			<button
-				type="button"
-				onClick={onRunCleanup}
-				disabled={cleanupRunning}
-				className="flex items-center gap-2 rounded-control border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-surface-hover disabled:opacity-50"
-			>
-				{cleanupRunning ? (
-					<Loader2 className="h-4 w-4 animate-spin" />
-				) : (
-					<Eraser className="h-4 w-4" />
-				)}
-				{cleanupRunning ? "Cleaning up…" : "Run cleanup"}
-			</button>
+			{confirmingCleanup ? (
+				<InlineDeleteConfirm
+					label="Delete expired tokens and used codes?"
+					confirmLabel="Run cleanup"
+					busy={cleanupRunning}
+					onConfirm={onRunCleanup}
+					onCancel={onCancelCleanup}
+				/>
+			) : (
+				<button
+					type="button"
+					onClick={onRequestCleanup}
+					disabled={cleanupRunning}
+					className="flex items-center gap-2 rounded-control border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-surface-hover disabled:opacity-50"
+				>
+					{cleanupRunning ? (
+						<Loader2 className="h-4 w-4 animate-spin" />
+					) : (
+						<Eraser className="h-4 w-4" />
+					)}
+					{cleanupRunning ? "Cleaning up…" : "Run cleanup"}
+				</button>
+			)}
 			{cleanupMessage && <span className="text-sm text-muted-foreground">{cleanupMessage}</span>}
 		</div>
 	);
