@@ -53,6 +53,9 @@ export default function UsersPage() {
 	const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
 	const dirty = isUserDraftDirty(draft, baseline);
+	// Derived from `users` rather than snapshotted, so the silent refetch after an
+	// avatar upload refreshes the picture in the open panel.
+	const editingUser = editingId ? (users.find((user) => user.id === editingId) ?? null) : null;
 
 	/**
 	 * `silent` skips the full-page spinner. Post-mutation refreshes must be
@@ -239,8 +242,6 @@ export default function UsersPage() {
 				<UsersTable
 					users={users}
 					environments={environments}
-					uploadingAvatarUserId={uploadingAvatarUserId}
-					onAvatarUpload={(userId, file) => void handleAvatarUpload(userId, file)}
 					resettingVerificationUserId={resettingVerificationUserId}
 					onResetVerification={handleResetVerification}
 					onStartEdit={startEdit}
@@ -282,6 +283,9 @@ export default function UsersPage() {
 					onChange={(patch) => setDraft((prev) => ({ ...prev, ...patch }))}
 					environments={environments}
 					editingId={editingId}
+					user={editingUser}
+					uploadingAvatar={uploadingAvatarUserId === editingId}
+					onAvatarUpload={(userId, file) => void handleAvatarUpload(userId, file)}
 					error={error}
 					onSubmit={handleSubmit}
 				/>

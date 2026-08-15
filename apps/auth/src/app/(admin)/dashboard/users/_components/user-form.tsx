@@ -1,5 +1,9 @@
-import { Banner, Input } from "@/components/ui";
+import { useRef } from "react";
+import { ImageIcon } from "lucide-react";
+import { Banner, Button, Input } from "@/components/ui";
+import type { UserRecord } from "@/lib/repositories/admin.repository";
 import type { Environment } from "@/lib/repositories/environment.repository";
+import { UserAvatar } from "./user-avatar";
 import type { UserDraft } from "./user-draft";
 
 interface UserFormProps {
@@ -10,6 +14,10 @@ interface UserFormProps {
 	environments: Environment[];
 	/** null when creating; a password is required in that case. */
 	editingId: string | null;
+	/** The record being edited, for the avatar. null while creating. */
+	user: UserRecord | null;
+	uploadingAvatar: boolean;
+	onAvatarUpload: (userId: string, file: File) => void;
 	/** Save errors render here rather than in the page, which sits behind the scrim. */
 	error: string | null;
 	onSubmit: (e: React.FormEvent) => void;
@@ -21,9 +29,13 @@ export function UserForm({
 	onChange,
 	environments,
 	editingId,
+	user,
+	uploadingAvatar,
+	onAvatarUpload,
 	error,
 	onSubmit,
 }: UserFormProps) {
+	const fileInputRef = useRef<HTMLInputElement>(null);
 	const toggleEnvironment = (id: string) => {
 		onChange({
 			environmentIds: draft.environmentIds.includes(id)
@@ -35,6 +47,38 @@ export function UserForm({
 	return (
 		<form id={formId} onSubmit={onSubmit} className="space-y-4">
 			<Banner variant="error" message={error} />
+
+			{user ? (
+				<div className="flex items-center gap-4">
+					<UserAvatar user={user} className="h-16 w-16" />
+					<div>
+						{/* Uploads immediately rather than joining the draft: it is a separate
+						    multipart endpoint, not part of the user record this form saves. */}
+						<input
+							ref={fileInputRef}
+							type="file"
+							accept="image/*"
+							className="hidden"
+							onChange={(e) => {
+								const file = e.target.files?.[0];
+								if (file && user) onAvatarUpload(user.id, file);
+								// Reset so picking the same file twice still fires onChange.
+								e.target.value = "";
+							}}
+						/>
+						<Button
+							type="button"
+							variant="secondary"
+							icon={ImageIcon}
+							loading={uploadingAvatar}
+							onClick={() => fileInputRef.current?.click()}
+						>
+							Change photo
+						</Button>
+						<p className="mt-1 text-xs text-muted-foreground">Saved as soon as you pick a file.</p>
+					</div>
+				</div>
+			) : null}
 
 			<label className="block text-sm">
 				<span className="mb-1 block text-muted-foreground">Username</span>
