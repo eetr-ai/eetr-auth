@@ -41,6 +41,7 @@ import {
 import { SetupTabs } from "./_components/setup-tabs";
 import { SiteIdentitySection } from "./_components/site-identity-section";
 import { AdminApiSection } from "./_components/admin-api-section";
+import { BasicSection } from "./_components/basic-section";
 import { EnvironmentsSection } from "./_components/environments-section";
 import { ScopesSection } from "./_components/scopes-section";
 import { PasswordPoliciesSection } from "./_components/password-policies-section";
@@ -476,29 +477,33 @@ function SetupPageContent() {
 				onSave={handleSaveAdminClients}
 			/>
 
-			<EnvironmentsSection
-				saving={envSaving}
+			<BasicSection
 				activeTab={activeTab}
-				environments={environments}
-				envName={envName}
-				editingEnvId={editingEnvId}
-				editingEnvName={editingEnvName}
-				envError={envError}
-				dispatch={dispatch}
-				onCreate={handleCreateEnv}
-				onUpdate={handleUpdateEnv}
-				onDelete={handleDeleteEnv}
-			/>
-
-			<ScopesSection
-				saving={scopeSaving}
-				activeTab={activeTab}
-				scopes={scopes}
-				scopeName={scopeName}
-				scopeError={scopeError}
-				dispatch={dispatch}
-				onCreate={handleCreateScope}
-				onDelete={handleDeleteScope}
+				environments={
+					<EnvironmentsSection
+						saving={envSaving}
+						environments={environments}
+						envName={envName}
+						editingEnvId={editingEnvId}
+						editingEnvName={editingEnvName}
+						envError={envError}
+						dispatch={dispatch}
+						onCreate={handleCreateEnv}
+						onUpdate={handleUpdateEnv}
+						onDelete={handleDeleteEnv}
+					/>
+				}
+				scopes={
+					<ScopesSection
+						saving={scopeSaving}
+						scopes={scopes}
+						scopeName={scopeName}
+						scopeError={scopeError}
+						dispatch={dispatch}
+						onCreate={handleCreateScope}
+						onDelete={handleDeleteScope}
+					/>
+				}
 			/>
 
 			<PasswordPoliciesSection

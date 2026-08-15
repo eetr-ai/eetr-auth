@@ -1,12 +1,19 @@
-import type { FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import type { ReducerAction } from "@eetr/react-reducer-utils";
-import { Plus, Trash2 } from "lucide-react";
-import { Banner, Button, IconButton, Input } from "@/components/ui";
+import { Plus, Tag, Trash2 } from "lucide-react";
+import {
+	Banner,
+	Button,
+	EmptyState,
+	IconButton,
+	InlineDeleteConfirm,
+	Input,
+	SectionCard,
+} from "@/components/ui";
 import type { Scope } from "@/lib/repositories/scope.repository";
-import { SetupPageActionType, type SetupTabId } from "./state";
+import { SetupPageActionType } from "./state";
 
 interface ScopesSectionProps {
-	activeTab: SetupTabId;
 	scopes: Scope[];
 	scopeName: string;
 	scopeError: string | null;
@@ -18,7 +25,6 @@ interface ScopesSectionProps {
 }
 
 export function ScopesSection({
-	activeTab,
 	scopes,
 	scopeName,
 	scopeError,
@@ -27,15 +33,11 @@ export function ScopesSection({
 	onDelete,
 	saving,
 }: ScopesSectionProps) {
+	// Purely ephemeral UI state, so it stays local rather than in the page reducer.
+	const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+
 	return (
-		<section
-			className={`mt-6 rounded-card border border-border p-6 ${activeTab !== "scopes" ? "hidden" : ""}`}
-			role="tabpanel"
-			id="setup-panel-scopes"
-			aria-labelledby="setup-tab-scopes"
-			aria-hidden={activeTab !== "scopes"}
-		>
-			<h2 className="mb-4 text-lg font-medium">Scopes</h2>
+		<SectionCard title="Scopes" icon={Tag}>
 			<Banner variant="error" message={scopeError} />
 			<form onSubmit={onCreate} className="mb-4 flex gap-2">
 				<Input
@@ -54,30 +56,43 @@ export function ScopesSection({
 					Add
 				</Button>
 			</form>
-			<ul className="space-y-2">
-				{scopes.map((scope) => (
-					<li
-						key={scope.id}
-						className="flex items-center justify-between rounded-card border border-border px-3 py-2"
-					>
-						<span className="font-medium">{scope.scopeName}</span>
-						<IconButton
-							type="button"
-							variant="danger"
-							aria-label="Delete"
-							disabled={saving}
-										onClick={() => onDelete(scope.id)}
-						>
-							<Trash2 className="h-4 w-4" />
-						</IconButton>
-					</li>
-				))}
-				{scopes.length === 0 && (
-					<li className="py-2 text-sm text-muted-foreground">
-						No scopes yet. Add one above.
-					</li>
-				)}
-			</ul>
-		</section>
+			{scopes.length === 0 ? (
+				<EmptyState
+					icon={Tag}
+					title="No scopes yet"
+					description="Scopes are the permissions a client can request during authorization."
+				/>
+			) : (
+				<ul className="divide-y divide-border overflow-hidden rounded-card border border-border">
+					{scopes.map((scope) => (
+							<li key={scope.id} className="flex items-center justify-between gap-2 px-3 py-2">
+							<span className="min-w-0 truncate font-medium">{scope.scopeName}</span>
+							{confirmingDeleteId === scope.id ? (
+								<InlineDeleteConfirm
+									label={`Delete "${scope.scopeName}"?`}
+									busy={saving}
+									onConfirm={() => {
+										onDelete(scope.id);
+										setConfirmingDeleteId(null);
+									}}
+									onCancel={() => setConfirmingDeleteId(null)}
+								/>
+							) : (
+								<IconButton
+									type="button"
+									variant="danger"
+									aria-label={`Delete ${scope.scopeName}`}
+									title="Delete"
+									disabled={saving}
+									onClick={() => setConfirmingDeleteId(scope.id)}
+								>
+									<Trash2 className="h-4 w-4" />
+								</IconButton>
+							)}
+						</li>
+					))}
+				</ul>
+			)}
+		</SectionCard>
 	);
 }

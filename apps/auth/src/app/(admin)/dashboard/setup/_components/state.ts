@@ -12,10 +12,10 @@ export interface ClientListItem {
 }
 
 export type SetupTabId =
+	/** Environments + scopes, side by side. The landing tab. */
+	| "basic"
 	| "site"
 	| "admin-api"
-	| "environments"
-	| "scopes"
 	| "password-policies";
 
 export enum SetupPageActionType {
@@ -79,7 +79,7 @@ export interface SetupPageState {
 }
 
 export const initialState: SetupPageState = {
-	activeTab: "site",
+	activeTab: "basic",
 	environments: [],
 	scopes: [],
 	passwordPolicies: [],
@@ -113,7 +113,7 @@ export function reducer(
 ): SetupPageState {
 	switch (action.type) {
 		case SetupPageActionType.SET_ACTIVE_TAB:
-			return { ...state, activeTab: (action.data as SetupTabId) ?? "site" };
+			return { ...state, activeTab: (action.data as SetupTabId) ?? "basic" };
 		case SetupPageActionType.SET_ENVIRONMENTS:
 			return { ...state, environments: (action.data as Environment[]) ?? [] };
 		case SetupPageActionType.SET_SCOPES:
