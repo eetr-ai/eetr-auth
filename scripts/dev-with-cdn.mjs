@@ -13,12 +13,23 @@ let shuttingDown = false;
 
 function run(name, command, args) {
 	const child = spawn(command, args, { stdio: "inherit", shell: false });
+	// Without this, a command that cannot start at all (missing binary, bad PATH)
+	// raises an unhandled 'error' and leaves the sibling process running.
+	child.on("error", (error) => {
+		if (shuttingDown) return;
+		shuttingDown = true;
+		console.error(`\n${name} failed to start: ${error.message}`);
+		stopAll();
+		process.exit(1);
+	});
 	child.on("exit", (code, signal) => {
 		if (shuttingDown) return;
 		shuttingDown = true;
 		console.log(`\n${name} exited (${signal ?? code}); stopping the others.`);
 		stopAll();
-		process.exit(code ?? 0);
+		// A signal death reports no exit code. Reporting 0 there would tell a
+		// wrapping script that a crashed dev server finished successfully.
+		process.exit(code ?? (signal ? 1 : 0));
 	});
 	children.push(child);
 	return child;

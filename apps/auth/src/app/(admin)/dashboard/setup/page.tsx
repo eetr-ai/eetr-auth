@@ -140,6 +140,17 @@ function SetupPageContent() {
 		load();
 	}, [dispatch]);
 
+	// The save, clear and replace paths each revoke the previous preview, but
+	// leaving the page with one staged unmounts without passing through them.
+	const logoPreviewUrlRef = useRef<string | null>(null);
+	logoPreviewUrlRef.current = logoPreviewUrl;
+	useEffect(
+		() => () => {
+			if (logoPreviewUrlRef.current) URL.revokeObjectURL(logoPreviewUrlRef.current);
+		},
+		[],
+	);
+
 	const handleCreateEnv = async (e: React.FormEvent) => {
 		e.preventDefault();
 		dispatch({ type: SetupPageActionType.SET_ENV_ERROR, data: null });

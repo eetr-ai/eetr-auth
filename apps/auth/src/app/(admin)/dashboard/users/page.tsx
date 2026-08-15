@@ -82,6 +82,17 @@ export default function UsersPage() {
 		load();
 	}, []);
 
+	// closePanel releases the preview on every normal dismissal, but navigating
+	// away with the panel open unmounts without passing through it.
+	const avatarPreviewUrlRef = useRef<string | null>(null);
+	avatarPreviewUrlRef.current = draft.avatarPreviewUrl;
+	useEffect(
+		() => () => {
+			if (avatarPreviewUrlRef.current) URL.revokeObjectURL(avatarPreviewUrlRef.current);
+		},
+		[],
+	);
+
 	const openCreate = () => {
 		setError(null);
 		setEditingId(null);
