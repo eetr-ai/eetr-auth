@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import {
 	LayoutDashboard,
 	User as UserIcon,
-	Loader2,
 	Clock,
 	Zap,
 	CheckCircle,

@@ -2,6 +2,7 @@
 
 import { ReducerAction, bootstrapProvider } from "@eetr/react-reducer-utils";
 import { useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Fingerprint } from "lucide-react";
 import {
 	listTokenActivity,
@@ -21,6 +22,7 @@ enum TokensPageActionType {
 	SET_ENVIRONMENTS = "SET_ENVIRONMENTS",
 	SET_LOADING = "SET_LOADING",
 	SET_ENVIRONMENT_FILTER = "SET_ENVIRONMENT_FILTER",
+	SET_CLIENT_FILTER = "SET_CLIENT_FILTER",
 	SET_ERROR = "SET_ERROR",
 	SET_TOKEN_ACTION_KEY = "SET_TOKEN_ACTION_KEY",
 	SET_CLEANUP_RUNNING = "SET_CLEANUP_RUNNING",
@@ -32,6 +34,8 @@ interface TokensPageState {
 	environments: Environment[];
 	loading: boolean;
 	environmentFilter: string;
+	/** OAuth client_id, not the client row id. Deep-linked from the client panel. */
+	clientFilter: string;
 	error: string | null;
 	tokenActionKey: string | null;
 	cleanupRunning: boolean;
@@ -43,6 +47,7 @@ const initialState: TokensPageState = {
 	environments: [],
 	loading: true,
 	environmentFilter: "",
+	clientFilter: "",
 	error: null,
 	tokenActionKey: null,
 	cleanupRunning: false,
@@ -62,6 +67,8 @@ function reducer(
 			return { ...state, loading: (action.data as boolean | undefined) ?? false };
 		case TokensPageActionType.SET_ENVIRONMENT_FILTER:
 			return { ...state, environmentFilter: (action.data as string) ?? "" };
+		case TokensPageActionType.SET_CLIENT_FILTER:
+			return { ...state, clientFilter: (action.data as string) ?? "" };
 		case TokensPageActionType.SET_ERROR:
 			return { ...state, error: (action.data as string | null) ?? null };
 		case TokensPageActionType.SET_TOKEN_ACTION_KEY:
@@ -96,11 +103,21 @@ function TokensPageContent() {
 		environments,
 		loading,
 		environmentFilter,
+		clientFilter,
 		error,
 		tokenActionKey,
 		cleanupRunning,
 		cleanupMessage,
 	} = state;
+
+	// Deep link from the client panel: /dashboard/tokens?client=<oauth client_id>
+	const searchParams = useSearchParams();
+	const requestedClient = searchParams.get("client");
+	useEffect(() => {
+		if (requestedClient) {
+			dispatch({ type: TokensPageActionType.SET_CLIENT_FILTER, data: requestedClient });
+		}
+	}, [requestedClient, dispatch]);
 
 	useEffect(() => {
 		async function load() {
@@ -197,10 +214,17 @@ function TokensPageContent() {
 	};
 
 	const envById = Object.fromEntries(environments.map((environment) => [environment.id, environment]));
-	const filteredTokens =
-		environmentFilter.trim().length > 0
-			? tokens.filter((token) => token.environmentId === environmentFilter)
-			: tokens;
+	const filteredTokens = tokens.filter(
+		(token) =>
+			(!environmentFilter.trim() || token.environmentId === environmentFilter) &&
+			(!clientFilter.trim() || token.clientId === clientFilter),
+	);
+
+	// Clients that actually appear in the activity list, so the filter never
+	// offers an option that would yield nothing.
+	const clientOptions = Array.from(
+		new Map(tokens.map((token) => [token.clientId, token.clientName ?? token.clientId])).entries(),
+	).sort((a, b) => a[1].localeCompare(b[1]));
 
 	if (loading && tokens.length === 0) {
 		return <FullPageSpinner />;
@@ -217,6 +241,11 @@ function TokensPageContent() {
 				environmentFilter={environmentFilter}
 				onEnvironmentFilterChange={(value) =>
 					dispatch({ type: TokensPageActionType.SET_ENVIRONMENT_FILTER, data: value })
+				}
+				clientOptions={clientOptions}
+				clientFilter={clientFilter}
+				onClientFilterChange={(value) =>
+					dispatch({ type: TokensPageActionType.SET_CLIENT_FILTER, data: value })
 				}
 				cleanupRunning={cleanupRunning}
 				cleanupMessage={cleanupMessage}
