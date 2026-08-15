@@ -11,7 +11,7 @@ import {
 } from "@/app/actions/token-actions";
 import { listEnvironments } from "@/app/actions/environment-actions";
 import type { Environment } from "@/lib/repositories/environment.repository";
-import { FullPageSpinner } from "@/components/ui";
+import { Banner, FullPageSpinner, PageHeader } from "@/components/ui";
 import { TokensToolbar } from "./_components/tokens-toolbar";
 import { TokensTable } from "./_components/tokens-table";
 import type { TokenActivityItem } from "./_components/types";
@@ -208,14 +208,9 @@ function TokensPageContent() {
 
 	return (
 		<main className="flex h-screen flex-col bg-background p-6 text-foreground">
-			<div className="mb-6 flex shrink-0 items-center gap-2 text-xl font-semibold">
-				<Fingerprint className="h-6 w-6" />
-				Tokens
-			</div>
+			<PageHeader icon={Fingerprint} title="Tokens" />
 
-			{error && (
-				<p className="mb-4 shrink-0 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">{error}</p>
-			)}
+			<Banner variant="error" message={error} className="shrink-0" />
 
 			<TokensToolbar
 				environments={environments}

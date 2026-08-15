@@ -85,7 +85,7 @@ export function PasswordComplexityStep({
 					onChange={(e) => setConfirmPassword(e.target.value)}
 					placeholder="Re-enter new password"
 				/>
-				{mismatch ? <p className="text-sm text-red-600 dark:text-red-400">Passwords don&apos;t match.</p> : null}
+				{mismatch ? <p className="text-sm text-danger-fg">Passwords don&apos;t match.</p> : null}
 			</div>
 
 			{requirements.length > 0 ? (
@@ -98,7 +98,7 @@ export function PasswordComplexityStep({
 								className={`flex items-center gap-2 text-sm ${met ? "text-foreground" : "text-muted-foreground"}`}
 							>
 								{met ? (
-									<Check className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400" aria-hidden />
+									<Check className="h-4 w-4 shrink-0 text-success-icon" aria-hidden />
 								) : (
 									<Circle className="h-3.5 w-3.5 shrink-0" aria-hidden />
 								)}

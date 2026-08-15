@@ -77,7 +77,7 @@ export function EditUserForm({
 					placeholder="New password (optional)"
 					className={compactInput}
 				/>
-				<label className="flex items-center gap-2 rounded-xl border border-brand-muted px-2 py-1 text-sm">
+				<label className="flex items-center gap-2 rounded-card border border-border px-2 py-1 text-sm">
 					<input
 						type="checkbox"
 						checked={isAdmin}
@@ -87,19 +87,19 @@ export function EditUserForm({
 				</label>
 				<button
 					type="submit"
-					className="rounded-full border border-brand-muted px-2 py-1 text-sm hover:bg-brand-muted/30"
+					className="rounded-full border border-border px-2 py-1 text-sm hover:bg-surface-hover"
 				>
 					Save
 				</button>
 				<button
 					type="button"
 					onClick={onCancel}
-					className="rounded-full border border-brand-muted px-2 py-1 text-sm hover:bg-brand-muted/30"
+					className="rounded-full border border-border px-2 py-1 text-sm hover:bg-surface-hover"
 				>
 					Cancel
 				</button>
 			</div>
-			<div className="rounded-xl border border-brand-muted px-3 py-2">
+			<div className="rounded-card border border-border px-3 py-2">
 				<span className="text-xs font-medium text-muted-foreground">Environments</span>
 				{environments.length === 0 ? (
 					<p className="mt-1 text-xs text-muted-foreground">No environments defined.</p>
@@ -111,7 +111,7 @@ export function EditUserForm({
 									type="checkbox"
 									checked={environmentIds.includes(env.id)}
 									onChange={() => toggleEnvironment(env.id)}
-									className="rounded border-brand-muted"
+									className="rounded border-border"
 								/>
 								<span>{env.name}</span>
 							</label>

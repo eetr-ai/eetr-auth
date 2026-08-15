@@ -46,7 +46,7 @@ export function ClientInfoSection({
 				</form>
 			</div>
 			<p className="mb-1 text-sm font-medium">Client ID</p>
-			<code className="block rounded border border-brand-muted bg-background px-3 py-2 font-mono text-sm">
+			<code className="block rounded border border-border bg-background px-3 py-2 font-mono text-sm">
 				{client.clientId}
 			</code>
 			<p className="mt-2 text-sm text-muted-foreground">
@@ -62,7 +62,7 @@ export function ClientInfoSection({
 					type="button"
 					onClick={onRotateSecret}
 					disabled={rotating}
-					className="flex items-center gap-2 rounded-full border border-brand-muted px-3 py-2 text-sm font-medium hover:bg-brand-muted/30 disabled:opacity-50"
+					className="flex items-center gap-2 rounded-full border border-border px-3 py-2 text-sm font-medium hover:bg-surface-hover disabled:opacity-50"
 				>
 					<RefreshCw className={`h-4 w-4 ${rotating ? "animate-spin" : ""}`} />
 					Rotate secret
@@ -70,7 +70,7 @@ export function ClientInfoSection({
 				<button
 					type="button"
 					onClick={onDelete}
-					className="flex items-center gap-2 rounded-full border border-red-300 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-200 dark:hover:bg-red-950/50"
+					className="flex items-center gap-2 rounded-full border border-danger-border px-3 py-2 text-sm font-medium text-danger-fg hover:bg-danger-bg"
 				>
 					<Trash2 className="h-4 w-4" />
 					Delete client

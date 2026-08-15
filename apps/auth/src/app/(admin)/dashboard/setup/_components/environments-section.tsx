@@ -32,7 +32,7 @@ export function EnvironmentsSection({
 }: EnvironmentsSectionProps) {
 	return (
 		<section
-			className={`mt-6 rounded-xl border border-brand-muted p-6 ${activeTab !== "environments" ? "hidden" : ""}`}
+			className={`mt-6 rounded-card border border-border p-6 ${activeTab !== "environments" ? "hidden" : ""}`}
 			role="tabpanel"
 			id="setup-panel-environments"
 			aria-labelledby="setup-tab-environments"
@@ -58,7 +58,7 @@ export function EnvironmentsSection({
 				{environments.map((env) => (
 					<li
 						key={env.id}
-						className="flex items-center justify-between rounded-xl border border-brand-muted px-3 py-2"
+						className="flex items-center justify-between rounded-card border border-border px-3 py-2"
 					>
 						{editingEnvId === env.id ? (
 							<form onSubmit={onUpdate} className="flex flex-1 gap-2">
@@ -71,12 +71,12 @@ export function EnvironmentsSection({
 											data: e.target.value,
 										})
 									}
-									className="flex-1 rounded-xl border border-brand-muted bg-background px-2 py-1 text-sm focus:border-brand focus:outline-none"
+									className="flex-1 rounded-card border border-border bg-background px-2 py-1 text-sm focus:border-brand focus:outline-none"
 									autoFocus
 								/>
 								<button
 									type="submit"
-									className="rounded-full border border-brand-muted px-2 py-1 text-sm hover:bg-brand-muted/30"
+									className="rounded-full border border-border px-2 py-1 text-sm hover:bg-surface-hover"
 								>
 									Save
 								</button>
@@ -92,7 +92,7 @@ export function EnvironmentsSection({
 											data: "",
 										});
 									}}
-									className="rounded-full border border-brand-muted px-2 py-1 text-sm hover:bg-brand-muted/30"
+									className="rounded-full border border-border px-2 py-1 text-sm hover:bg-surface-hover"
 								>
 									Cancel
 								</button>

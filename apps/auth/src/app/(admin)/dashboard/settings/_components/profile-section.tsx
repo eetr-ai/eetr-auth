@@ -41,10 +41,10 @@ export function ProfileSection({
 					<img
 						src={avatarPreview}
 						alt=""
-						className="h-16 w-16 shrink-0 rounded-full border border-brand-muted object-cover"
+						className="h-16 w-16 shrink-0 rounded-full border border-border object-cover"
 					/>
 				) : (
-					<div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-dashed border-brand-muted">
+					<div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-dashed border-border">
 						<ImageIcon className="h-6 w-6 text-muted-foreground" />
 					</div>
 				)}

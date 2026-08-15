@@ -59,7 +59,7 @@ export function CreateUserForm({
 					onChange={(e) => onPasswordChange(e.target.value)}
 					placeholder="Password"
 				/>
-				<label className="flex items-center gap-2 rounded-xl border border-brand-muted px-3 py-2 text-sm">
+				<label className="flex items-center gap-2 rounded-card border border-border px-3 py-2 text-sm">
 					<input
 						type="checkbox"
 						checked={isAdmin}

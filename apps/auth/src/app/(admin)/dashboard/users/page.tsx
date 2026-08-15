@@ -12,7 +12,7 @@ import {
 import { listEnvironments } from "@/app/actions/environment-actions";
 import type { UserRecord } from "@/lib/repositories/admin.repository";
 import type { Environment } from "@/lib/repositories/environment.repository";
-import { FullPageSpinner } from "@/components/ui";
+import { FullPageSpinner, PageHeader } from "@/components/ui";
 import { CreateUserForm } from "./_components/create-user-form";
 import { UsersSection } from "./_components/users-section";
 
@@ -330,10 +330,7 @@ function UsersPageContent() {
 
 	return (
 		<main className="min-h-screen bg-background p-6 text-foreground">
-			<div className="flex items-center gap-2 text-xl font-semibold">
-				<Users className="h-6 w-6" />
-				Users
-			</div>
+			<PageHeader icon={Users} title="Users" />
 
 			<div className="mt-8 grid gap-8">
 				<CreateUserForm

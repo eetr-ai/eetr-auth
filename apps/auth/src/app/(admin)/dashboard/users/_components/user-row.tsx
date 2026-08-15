@@ -69,7 +69,7 @@ export function UserRow({
 	onCancelDelete,
 }: UserRowProps) {
 	return (
-		<li className="rounded-xl border border-brand-muted px-3 py-2">
+		<li className="rounded-card border border-border px-3 py-2">
 			{isEditing ? (
 				<EditUserForm
 					username={editingUsername}
@@ -115,7 +115,7 @@ export function UserRow({
 							/>
 						) : (
 							<>
-								<label className="cursor-pointer rounded-full border border-brand-muted px-2 py-1 text-xs hover:bg-brand-muted/30">
+								<label className="cursor-pointer rounded-full border border-border px-2 py-1 text-xs hover:bg-surface-hover">
 									{isUploadingAvatar ? "Uploading..." : "Photo"}
 									<input
 										type="file"
@@ -136,7 +136,7 @@ export function UserRow({
 										type="button"
 										onClick={onResetVerification}
 										disabled={isResettingVerification}
-										className="rounded-full border border-brand-muted px-2 py-1 text-xs hover:bg-brand-muted/30 disabled:opacity-50"
+										className="rounded-full border border-border px-2 py-1 text-xs hover:bg-surface-hover disabled:opacity-50"
 									>
 										<span className="inline-flex items-center gap-1">
 											<RotateCcw className="h-3.5 w-3.5" />
@@ -181,7 +181,7 @@ function EnvironmentBadges({
 			{names.map((name) => (
 				<span
 					key={name}
-					className="rounded-full bg-brand-muted/40 px-2 py-0.5 text-xs text-muted-foreground"
+					className="rounded-full bg-surface-sunken px-2 py-0.5 text-xs text-muted-foreground"
 				>
 					{name}
 				</span>

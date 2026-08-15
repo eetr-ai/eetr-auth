@@ -9,10 +9,10 @@ interface AuditLogTableProps {
 
 export function AuditLogTable({ rows, loading }: AuditLogTableProps) {
 	return (
-		<div className="min-h-0 flex-1 overflow-auto rounded-xl border border-brand-muted">
+		<div className="min-h-0 flex-1 overflow-auto rounded-card border border-border">
 			<table className="w-full min-w-[900px] text-left text-sm">
 				<thead>
-					<tr className="border-b border-brand-muted bg-brand-muted/20">
+					<tr className="border-b border-border bg-surface-sunken">
 						<th className="px-4 py-3 font-medium">Time</th>
 						<th className="px-4 py-3 font-medium">Actor</th>
 						<th className="px-4 py-3 font-medium">Action</th>

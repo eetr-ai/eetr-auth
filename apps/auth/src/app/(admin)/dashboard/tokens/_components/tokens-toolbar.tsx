@@ -25,7 +25,7 @@ export function TokensToolbar({
 				<select
 					value={environmentFilter}
 					onChange={(event) => onEnvironmentFilterChange(event.target.value)}
-					className="rounded-xl border border-brand-muted bg-background px-3 py-1.5 text-sm focus:border-brand focus:outline-none"
+					className="rounded-card border border-border bg-background px-3 py-1.5 text-sm focus:border-brand focus:outline-none"
 				>
 					<option value="">All</option>
 					{environments.map((environment) => (
@@ -39,7 +39,7 @@ export function TokensToolbar({
 				type="button"
 				onClick={onRunCleanup}
 				disabled={cleanupRunning}
-				className="flex items-center gap-2 rounded-xl border border-brand-muted bg-background px-3 py-1.5 text-sm font-medium hover:bg-brand-muted/30 disabled:opacity-50"
+				className="flex items-center gap-2 rounded-card border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-surface-hover disabled:opacity-50"
 			>
 				{cleanupRunning ? (
 					<Loader2 className="h-4 w-4 animate-spin" />

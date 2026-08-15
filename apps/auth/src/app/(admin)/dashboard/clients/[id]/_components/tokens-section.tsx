@@ -12,10 +12,10 @@ export function TokensSection({ tokens, tokenActionKey, onRevoke, onDelete }: To
 	return (
 		<Card>
 			<h2 className="mb-3 text-lg font-medium">Issued Tokens</h2>
-			<div className="overflow-x-auto rounded-xl border border-brand-muted">
+			<div className="overflow-x-auto rounded-card border border-border">
 				<table className="w-full min-w-[760px] text-left text-sm">
 					<thead>
-						<tr className="border-b border-brand-muted bg-brand-muted/20">
+						<tr className="border-b border-border bg-surface-sunken">
 							<th className="px-4 py-3 font-medium">Type</th>
 							<th className="px-4 py-3 font-medium">Token</th>
 							<th className="px-4 py-3 font-medium">Scopes</th>

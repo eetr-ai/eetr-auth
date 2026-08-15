@@ -63,12 +63,12 @@ export function AuthenticatorSection({
 			{status === null ? (
 				<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
 			) : status.enrolled ? (
-				<div className="flex items-center gap-3 rounded-xl border border-brand-muted p-3">
+				<div className="flex items-center gap-3 rounded-card border border-border p-3">
 					<Smartphone className="h-5 w-5 shrink-0 text-muted-foreground" />
 					<div className="min-w-0 flex-1">
 						<div className="flex items-center gap-2">
 							<span className="text-sm font-medium">Authenticator app</span>
-							<span className="shrink-0 rounded-full border border-green-300 bg-green-50 px-2 py-0.5 text-xs text-green-700 dark:border-green-800 dark:bg-green-950/50 dark:text-green-200">
+							<span className="shrink-0 rounded-full border border-success-border bg-success-bg px-2 py-0.5 text-xs text-success-fg">
 								Enabled
 							</span>
 						</div>
@@ -100,13 +100,13 @@ export function AuthenticatorSection({
 						Scan this QR code with your authenticator app, then enter the 6-digit code it shows.
 					</p>
 					<div className="flex justify-center">
-						<div className="rounded-xl bg-white p-3">
+						<div className="rounded-card bg-white p-3">
 							<QRCodeSVG value={enroll.otpauthUri} size={176} />
 						</div>
 					</div>
 					<div>
 						<p className="mb-1 text-xs text-muted-foreground">Can&apos;t scan? Enter this key manually:</p>
-						<code className="block break-all rounded-xl border border-brand-muted bg-brand-muted/20 px-3 py-2 text-sm tracking-wider">
+						<code className="block break-all rounded-card border border-border bg-surface-sunken px-3 py-2 text-sm tracking-wider">
 							{enroll.secret}
 						</code>
 					</div>

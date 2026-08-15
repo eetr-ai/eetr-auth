@@ -26,7 +26,7 @@ export function ScopesSection({
 }: ScopesSectionProps) {
 	return (
 		<section
-			className={`mt-6 rounded-xl border border-brand-muted p-6 ${activeTab !== "scopes" ? "hidden" : ""}`}
+			className={`mt-6 rounded-card border border-border p-6 ${activeTab !== "scopes" ? "hidden" : ""}`}
 			role="tabpanel"
 			id="setup-panel-scopes"
 			aria-labelledby="setup-tab-scopes"
@@ -55,7 +55,7 @@ export function ScopesSection({
 				{scopes.map((scope) => (
 					<li
 						key={scope.id}
-						className="flex items-center justify-between rounded-xl border border-brand-muted px-3 py-2"
+						className="flex items-center justify-between rounded-card border border-border px-3 py-2"
 					>
 						<span className="font-medium">{scope.scopeName}</span>
 						<IconButton

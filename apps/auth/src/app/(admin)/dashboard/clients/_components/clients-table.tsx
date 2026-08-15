@@ -38,7 +38,7 @@ export function ClientsTable({
 					<select
 						value={envFilter}
 						onChange={(e) => onEnvFilterChange(e.target.value)}
-						className="rounded-xl border border-brand-muted bg-background px-3 py-1.5 text-sm focus:border-brand focus:outline-none"
+						className="rounded-card border border-border bg-background px-3 py-1.5 text-sm focus:border-brand focus:outline-none"
 					>
 						<option value="">All</option>
 						{environments.map((e) => (
@@ -53,7 +53,7 @@ export function ClientsTable({
 					<select
 						value={typeFilter}
 						onChange={(e) => onTypeFilterChange(e.target.value as ClientTypeFilter)}
-						className="rounded-xl border border-brand-muted bg-background px-3 py-1.5 text-sm focus:border-brand focus:outline-none"
+						className="rounded-card border border-border bg-background px-3 py-1.5 text-sm focus:border-brand focus:outline-none"
 					>
 						<option value="">All</option>
 						<option value="dynamic">Dynamic (DCR)</option>
@@ -61,10 +61,10 @@ export function ClientsTable({
 					</select>
 				</div>
 			</div>
-			<div className="overflow-x-auto rounded-xl border border-brand-muted">
+			<div className="overflow-x-auto rounded-card border border-border">
 				<table className="w-full min-w-[500px] text-left text-sm">
 					<thead>
-						<tr className="border-b border-brand-muted bg-brand-muted/20">
+						<tr className="border-b border-border bg-surface-sunken">
 							<th className="px-4 py-3 font-medium">Name</th>
 							<th className="px-4 py-3 font-medium">Client ID</th>
 							<th className="px-4 py-3 font-medium">Type</th>
@@ -75,12 +75,12 @@ export function ClientsTable({
 					</thead>
 					<tbody>
 						{visibleClients.map((c) => (
-							<tr key={c.id} className="border-b border-brand-muted/50">
+							<tr key={c.id} className="border-b border-border">
 								<td className="px-4 py-3">
 									<div className="flex items-center gap-2">
 										<span>{c.name ?? "—"}</span>
 										{c.isDynamic && (
-											<span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950/50 dark:text-blue-200">
+											<span className="inline-flex items-center gap-1 rounded-full bg-accent-bg px-2 py-0.5 text-xs font-medium text-accent-fg">
 												<Sparkles className="h-3 w-3" />
 												Dynamic
 											</span>
@@ -99,7 +99,7 @@ export function ClientsTable({
 									<div className="flex gap-2">
 										<Link
 											href={`/dashboard/clients/${c.id}`}
-											className="flex items-center gap-1 rounded-full border border-brand-muted px-2 py-1 text-xs hover:bg-brand-muted/30"
+											className="flex items-center gap-1 rounded-full border border-border px-2 py-1 text-xs hover:bg-surface-hover"
 										>
 											<Eye className="h-3 w-3" />
 											View

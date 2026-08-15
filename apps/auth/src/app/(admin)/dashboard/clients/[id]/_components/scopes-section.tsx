@@ -22,7 +22,7 @@ export function ScopesSection({ scopes, scopeIds, onToggleScope, saving, onSubmi
 								type="checkbox"
 								checked={scopeIds.includes(s.id)}
 								onChange={() => onToggleScope(s.id)}
-								className="rounded border-brand-muted"
+								className="rounded border-border"
 							/>
 							<span className="text-sm">{s.scopeName}</span>
 						</label>

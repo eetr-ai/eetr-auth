@@ -417,7 +417,7 @@ function ClientDetailPageContent() {
 			<div className="mb-6 flex items-center gap-4">
 				<Link
 					href="/dashboard/clients"
-					className="flex items-center gap-1 rounded-full border border-brand-muted px-3 py-1.5 text-sm hover:bg-brand-muted/30"
+					className="flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-sm hover:bg-surface-hover"
 				>
 					<ArrowLeft className="h-4 w-4" />
 					Clients

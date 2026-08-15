@@ -24,7 +24,7 @@ export function AdminApiSection({
 }: AdminApiSectionProps) {
 	return (
 		<section
-			className={`mt-6 rounded-xl border border-brand-muted p-6 ${activeTab !== "admin-api" ? "hidden" : ""}`}
+			className={`mt-6 rounded-card border border-border p-6 ${activeTab !== "admin-api" ? "hidden" : ""}`}
 			role="tabpanel"
 			id="setup-panel-admin-api"
 			aria-labelledby="setup-tab-admin-api"
@@ -40,14 +40,14 @@ export function AdminApiSection({
 					No OAuth clients yet. Create clients under Clients first.
 				</p>
 			) : (
-				<ul className="mb-4 max-h-64 space-y-2 overflow-y-auto rounded-xl border border-brand-muted p-3">
+				<ul className="mb-4 max-h-64 space-y-2 overflow-y-auto rounded-card border border-border p-3">
 					{clients.map((c) => {
 						const checked = selectedAdminClientIds.includes(c.id);
 						const envLabel = envById.get(c.environmentId) ?? c.environmentId;
 						const label = c.name?.trim() ? c.name : c.clientId;
 						return (
 							<li key={c.id}>
-								<label className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-1.5 hover:bg-brand-muted/20">
+								<label className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-1.5 hover:bg-surface-sunken">
 									<input
 										type="checkbox"
 										checked={checked}

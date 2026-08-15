@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { KeyRound, Plus } from "lucide-react";
-import { Button, FullPageSpinner } from "@/components/ui";
+import { Button, FullPageSpinner, PageHeader } from "@/components/ui";
 import { listClients, createClient } from "@/app/actions/client-actions";
 import { listEnvironments } from "@/app/actions/environment-actions";
 import { listScopes } from "@/app/actions/scope-actions";
@@ -117,16 +117,16 @@ export default function ClientsPage() {
 	}
 
 	return (
-		<main className="min-h-screen p-6 bg-background text-foreground">
-			<div className="flex items-center justify-between">
-				<div className="flex items-center gap-2 text-xl font-semibold">
-					<KeyRound className="h-6 w-6" />
-					Clients
-				</div>
-				<Button type="button" icon={Plus} onClick={() => setShowCreate((v) => !v)}>
-					Create client
-				</Button>
-			</div>
+		<main className="min-h-screen bg-background p-6 text-foreground">
+			<PageHeader
+				icon={KeyRound}
+				title="Clients"
+				action={
+					<Button type="button" icon={Plus} onClick={() => setShowCreate((v) => !v)}>
+						Create client
+					</Button>
+				}
+			/>
 
 			{createdSecret && (
 				<CreatedSecretPanel

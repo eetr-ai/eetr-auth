@@ -12,14 +12,14 @@ export function VerificationStatus({ user }: VerificationStatusProps) {
 	}
 	if (user.emailVerifiedAt) {
 		return (
-			<span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200">
+			<span className="inline-flex items-center gap-1 rounded-full bg-success-bg px-2 py-0.5 text-xs text-success-fg">
 				<BadgeCheck className="h-3.5 w-3.5" />
 				Verified
 			</span>
 		);
 	}
 	return (
-		<span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700 dark:bg-amber-950/50 dark:text-amber-200">
+		<span className="inline-flex items-center gap-1 rounded-full bg-warning-bg px-2 py-0.5 text-xs text-warning-fg">
 			<BadgeX className="h-3.5 w-3.5" />
 			Unverified
 		</span>

@@ -18,7 +18,7 @@ interface SetupTabsProps {
 export function SetupTabs({ activeTab, dispatch }: SetupTabsProps) {
 	return (
 		<div
-			className="mt-8 flex flex-wrap gap-1 border-b border-brand-muted"
+			className="mt-8 flex flex-wrap gap-1 border-b border-border"
 			role="tablist"
 			aria-label="Setup sections"
 		>

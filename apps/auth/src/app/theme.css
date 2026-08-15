@@ -45,15 +45,28 @@
 	--red-950-a: rgb(69 10 10 / 0.5);
 	--red-900-a: rgb(127 29 29 / 0.6);
 
+	--red-600: #dc2626;
+	--red-400-dk: #f87171;
+
 	--green-50: #f0fdf4;
+	--green-300: #86efac;
+	--green-600: #16a34a;
 	--green-700: #15803d;
+	--green-800: #166534;
 	--green-200-dk: #bbf7d0;
+	--green-400-dk: #4ade80;
 	--green-950-a: rgb(5 46 22 / 0.5);
 
 	--amber-50: #fffbeb;
+	--amber-300: #fcd34d;
 	--amber-700: #b45309;
 	--amber-200-dk: #fde68a;
 	--amber-950-a: rgb(69 26 3 / 0.5);
+
+	--blue-50: #eff6ff;
+	--blue-700: #1d4ed8;
+	--blue-200-dk: #bfdbfe;
+	--blue-950-a: rgb(23 37 84 / 0.5);
 }
 
 /* ── Tier 2: roles — light ───────────────────────────────────────────────── */
@@ -86,9 +99,21 @@
 
 	--success-bg: var(--green-50);
 	--success-fg: var(--green-700);
+	--success-border: var(--green-300);
 
 	--warning-bg: var(--amber-50);
 	--warning-fg: var(--amber-700);
+	--warning-border: var(--amber-300);
+
+	/* Blue notice, e.g. the dynamically-registered client badge. */
+	--accent-bg: var(--blue-50);
+	--accent-fg: var(--blue-700);
+
+	/* Status *glyphs* on a normal background. Icons carry meaning by shape as
+	   well as color, so they can sit a step lighter than the -fg roles. Status
+	   text keeps -fg, which holds the contrast ratio at small sizes. */
+	--success-icon: var(--green-600);
+	--danger-icon: var(--red-600);
 
 	--scrim: rgb(0 0 0 / 0.40);
 }
@@ -119,9 +144,17 @@
 
 	--success-bg: var(--green-950-a);
 	--success-fg: var(--green-200-dk);
+	--success-border: var(--green-800);
 
 	--warning-bg: var(--amber-950-a);
 	--warning-fg: var(--amber-200-dk);
+	--warning-border: var(--amber-700);
+
+	--accent-bg: var(--blue-950-a);
+	--accent-fg: var(--blue-200-dk);
+
+	--success-icon: var(--green-400-dk);
+	--danger-icon: var(--red-400-dk);
 
 	--scrim: rgb(0 0 0 / 0.60);
 }
@@ -151,9 +184,17 @@
 
 		--success-bg: var(--green-950-a);
 		--success-fg: var(--green-200-dk);
+		--success-border: var(--green-800);
 
 		--warning-bg: var(--amber-950-a);
 		--warning-fg: var(--amber-200-dk);
+		--warning-border: var(--amber-700);
+
+		--accent-bg: var(--blue-950-a);
+		--accent-fg: var(--blue-200-dk);
+
+		--success-icon: var(--green-400-dk);
+		--danger-icon: var(--red-400-dk);
 
 		--scrim: rgb(0 0 0 / 0.60);
 	}
@@ -184,9 +225,17 @@
 
 	--color-success-bg: var(--success-bg);
 	--color-success-fg: var(--success-fg);
+	--color-success-border: var(--success-border);
 
 	--color-warning-bg: var(--warning-bg);
 	--color-warning-fg: var(--warning-fg);
+	--color-warning-border: var(--warning-border);
+
+	--color-accent-bg: var(--accent-bg);
+	--color-accent-fg: var(--accent-fg);
+
+	--color-success-icon: var(--success-icon);
+	--color-danger-icon: var(--danger-icon);
 
 	--color-scrim: var(--scrim);
 

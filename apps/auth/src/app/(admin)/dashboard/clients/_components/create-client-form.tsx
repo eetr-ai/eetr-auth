@@ -64,7 +64,7 @@ export function CreateClientForm({
 						value={createEnvId}
 						onChange={(e) => onCreateEnvIdChange(e.target.value)}
 						required
-						className="w-full rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+						className="w-full rounded-card border border-border bg-background px-3 py-2 text-foreground focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
 					>
 						<option value="">Select environment</option>
 						{environments.map((e) => (
@@ -83,12 +83,12 @@ export function CreateClientForm({
 								value={uri}
 								onChange={(e) => onRedirectUriChange(i, e.target.value)}
 								placeholder="https://..."
-								className="flex-1 rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground placeholder:text-foreground/50 focus:border-brand focus:outline-none"
+								className="flex-1 rounded-card border border-border bg-background px-3 py-2 text-foreground placeholder:text-foreground/50 focus:border-brand focus:outline-none"
 							/>
 							<button
 								type="button"
 								onClick={() => onRemoveRedirectUri(i)}
-								className="rounded-full p-2 text-muted-foreground hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/50 dark:hover:text-red-200"
+								className="rounded-full p-2 text-muted-foreground hover:bg-danger-bg hover:text-danger-fg"
 								aria-label="Remove"
 							>
 								<Trash2 className="h-4 w-4" />
@@ -112,7 +112,7 @@ export function CreateClientForm({
 									type="checkbox"
 									checked={selectedScopeIds.includes(s.id)}
 									onChange={() => onToggleScope(s.id)}
-									className="rounded border-brand-muted"
+									className="rounded border-border"
 								/>
 								<span className="text-sm">{s.scopeName}</span>
 							</label>
@@ -130,7 +130,7 @@ export function CreateClientForm({
 						type="datetime-local"
 						value={expiresAt}
 						onChange={(e) => onExpiresAtChange(e.target.value)}
-						className="w-full rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground focus:border-brand focus:outline-none"
+						className="w-full rounded-card border border-border bg-background px-3 py-2 text-foreground focus:border-brand focus:outline-none"
 					/>
 				</div>
 				<div className="flex gap-2">

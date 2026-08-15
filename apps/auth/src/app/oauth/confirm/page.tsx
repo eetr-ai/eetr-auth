@@ -48,21 +48,21 @@ export default async function OAuthConfirmPage() {
 
 	return (
 		<main className="min-h-screen bg-background p-6 text-foreground">
-			<div className="mx-auto mt-16 w-full max-w-xl rounded-xl border border-brand-muted bg-background p-8">
+			<div className="mx-auto mt-16 w-full max-w-xl rounded-card border border-border bg-background p-8">
 				<h1 className="text-2xl font-semibold">Authorize {clientName}</h1>
 				<p className="mt-2 text-sm text-muted-foreground">
 					<span className="font-medium text-foreground">{clientName}</span> wants to access your
 					account. Choose which account should authorize it.
 				</p>
 
-				<div className="mt-6 rounded-xl border border-brand-muted p-4">
+				<div className="mt-6 rounded-card border border-border p-4">
 					<p className="text-sm font-medium">This will grant access to:</p>
 					{requestedScopes.length > 0 ? (
 						<div className="mt-2 flex flex-wrap gap-1.5">
 							{requestedScopes.map((scope) => (
 								<span
 									key={scope}
-									className="inline-flex items-center rounded-full bg-brand-muted/40 px-2 py-0.5 font-mono text-xs text-foreground"
+									className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 font-mono text-xs text-foreground"
 								>
 									{scope}
 								</span>
@@ -81,7 +81,7 @@ export default async function OAuthConfirmPage() {
 					)}
 				</div>
 
-				<div className="mt-4 flex items-center gap-4 rounded-xl border border-brand-muted p-4">
+				<div className="mt-4 flex items-center gap-4 rounded-card border border-border p-4">
 					{session.user.image ? (
 						<div
 							aria-label={displayName}
@@ -89,7 +89,7 @@ export default async function OAuthConfirmPage() {
 							style={{ backgroundImage: `url("${session.user.image}")` }}
 						/>
 					) : (
-						<div className="flex h-12 w-12 items-center justify-center rounded-full border border-brand-muted text-sm font-semibold">
+						<div className="flex h-12 w-12 items-center justify-center rounded-full border border-border text-sm font-semibold">
 							{displayName.slice(0, 2).toUpperCase()}
 						</div>
 					)}
@@ -105,7 +105,7 @@ export default async function OAuthConfirmPage() {
 
 				<a
 					href="/api/authorize/complete"
-					className="mt-6 block w-full rounded-full bg-brand px-4 py-2 text-center font-medium text-white hover:bg-brand-muted"
+					className="mt-6 block w-full rounded-full bg-brand px-4 py-2 text-center font-medium text-white hover:bg-brand-hover"
 				>
 					Continue as {displayName}
 				</a>
@@ -121,7 +121,7 @@ export default async function OAuthConfirmPage() {
 				>
 					<button
 						type="submit"
-						className="w-full rounded-full border border-brand-muted px-4 py-2 font-medium hover:bg-brand-muted/30"
+						className="w-full rounded-full border border-border px-4 py-2 font-medium hover:bg-surface-hover"
 					>
 						Sign in with a different account
 					</button>

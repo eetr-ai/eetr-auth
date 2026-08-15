@@ -76,9 +76,9 @@ export function PasswordStep({
 				</Link>
 			</p>
 			<div className="relative flex items-center gap-3">
-				<hr className="flex-1 border-brand-muted/40" />
+				<hr className="flex-1 border-border/40" />
 				<span className="text-xs text-muted-foreground">or</span>
-				<hr className="flex-1 border-brand-muted/40" />
+				<hr className="flex-1 border-border/40" />
 			</div>
 			<Button
 				type="button"

@@ -44,7 +44,7 @@ export default async function HomePage({
 			<div className="fixed right-4 top-4">
 				<ThemeSwitcher />
 			</div>
-			<div className="w-full max-w-sm space-y-8 rounded-xl border border-brand-muted bg-background p-8">
+			<div className="w-full max-w-sm space-y-8 rounded-card border border-border bg-background p-8">
 				<div className="flex flex-col items-center gap-3">
 					{/* eslint-disable-next-line @next/next/no-img-element -- CDN or /public paths from site settings */}
 					<img
@@ -52,7 +52,7 @@ export default async function HomePage({
 						alt=""
 						width={120}
 						height={120}
-						className="h-[120px] w-[120px] rounded-xl object-contain"
+						className="h-[120px] w-[120px] rounded-card object-contain"
 					/>
 					<div className="text-center">
 						<h1 className="text-2xl font-semibold text-foreground">{displayTitle}</h1>
@@ -70,23 +70,23 @@ export default async function HomePage({
 					) : null}
 				</div>
 				{error === "CredentialsSignin" && (
-					<p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
+					<p className="rounded-card bg-danger-bg px-3 py-2 text-sm text-danger-fg">
 						Invalid username or password.
 					</p>
 				)}
 				{error === "AuthError" && (
-					<p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">
+					<p className="rounded-card bg-danger-bg px-3 py-2 text-sm text-danger-fg">
 						Something went wrong. Please try again.
 					</p>
 				)}
 				{reset === "success" && (
-					<p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200">
+					<p className="rounded-card bg-success-bg px-3 py-2 text-sm text-success-fg">
 						Your password was updated. You can sign in below.
 					</p>
 				)}
 				{session?.user?.id ? (
 					<div className="space-y-4">
-						<p className="rounded-xl bg-brand-muted/30 px-3 py-2 text-sm">
+						<p className="rounded-card bg-surface-sunken px-3 py-2 text-sm">
 							Signed in as <strong>{session.user.name ?? session.user.id}</strong>. This account
 							does not have admin dashboard access.
 						</p>
@@ -98,7 +98,7 @@ export default async function HomePage({
 						>
 							<button
 								type="submit"
-								className="w-full rounded-full border border-brand-muted px-4 py-2 font-medium text-foreground hover:bg-brand-muted/30"
+								className="w-full rounded-full border border-border px-4 py-2 font-medium text-foreground hover:bg-surface-hover"
 							>
 								Sign out
 							</button>

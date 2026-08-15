@@ -7,7 +7,7 @@ import type {
 	PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/types";
 import { UserCircle } from "lucide-react";
-import { FullPageSpinner } from "@/components/ui";
+import { FullPageSpinner, PageHeader } from "@/components/ui";
 import {
 	updateDisplayName,
 	changePassword,
@@ -426,10 +426,7 @@ export default function SettingsPage() {
 
 	return (
 		<main className="min-h-screen bg-background p-6 text-foreground">
-			<div className="mb-8 flex items-center gap-2 text-xl font-semibold">
-				<UserCircle className="h-6 w-6" />
-				Settings
-			</div>
+			<PageHeader icon={UserCircle} title="Settings" />
 
 			<div className="mx-auto grid max-w-xl gap-6 lg:max-w-5xl lg:grid-cols-2">
 				{/* Profile — name, username, avatar together */}

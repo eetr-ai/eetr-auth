@@ -3,7 +3,7 @@
 import { ReducerAction, bootstrapProvider } from "@eetr/react-reducer-utils";
 import { useEffect, useRef } from "react";
 import { Settings } from "lucide-react";
-import { FullPageSpinner } from "@/components/ui";
+import { FullPageSpinner, PageHeader } from "@/components/ui";
 import {
 	listEnvironments,
 	createEnvironment,
@@ -414,10 +414,7 @@ function SetupPageContent() {
 
 	return (
 		<main className="min-h-screen bg-background p-6 text-foreground">
-			<div className="flex items-center gap-2 text-xl font-semibold">
-				<Settings className="h-6 w-6" />
-				Setup
-			</div>
+			<PageHeader icon={Settings} title="Setup" />
 
 			<SetupTabs activeTab={activeTab} dispatch={dispatch} />
 

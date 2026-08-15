@@ -199,7 +199,7 @@ export function PasswordPoliciesSection({
 
 	return (
 		<section
-			className={`mt-6 rounded-xl border border-brand-muted p-6 ${activeTab !== "password-policies" ? "hidden" : ""}`}
+			className={`mt-6 rounded-card border border-border p-6 ${activeTab !== "password-policies" ? "hidden" : ""}`}
 			role="tabpanel"
 			id="setup-panel-password-policies"
 			aria-labelledby="setup-tab-password-policies"
@@ -212,7 +212,7 @@ export function PasswordPoliciesSection({
 			</p>
 			<Banner variant="error" message={error} />
 
-			<div className="mb-6 rounded-xl border border-brand-muted p-4">
+			<div className="mb-6 rounded-card border border-border p-4">
 				<label className="text-sm" htmlFor="admin-password-policy">
 					<span className="mb-1 block font-medium">Admin sign-in policy</span>
 					<span className="mb-2 block text-xs text-muted-foreground">
@@ -225,7 +225,7 @@ export function PasswordPoliciesSection({
 						value={adminPasswordPolicyId ?? ""}
 						disabled={savingAdminPolicy}
 						onChange={(e) => handleAdminPolicyChange(e.target.value)}
-						className="w-full max-w-sm rounded-xl border border-brand-muted bg-background px-3 py-2 text-foreground focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand disabled:opacity-50"
+						className="w-full max-w-sm rounded-card border border-border bg-background px-3 py-2 text-foreground focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand disabled:opacity-50"
 					>
 						<option value="">None</option>
 						{policies.map((policy) => (
@@ -238,7 +238,7 @@ export function PasswordPoliciesSection({
 				</label>
 			</div>
 
-			<form onSubmit={handleSubmit} className="mb-6 space-y-4 rounded-xl border border-brand-muted p-4">
+			<form onSubmit={handleSubmit} className="mb-6 space-y-4 rounded-card border border-border p-4">
 				<div className="flex flex-wrap items-center gap-3">
 					<Input
 						type="text"
@@ -252,7 +252,7 @@ export function PasswordPoliciesSection({
 							type="checkbox"
 							checked={draft.enabled}
 							onChange={(e) => update({ enabled: e.target.checked })}
-							className="rounded border-brand-muted"
+							className="rounded border-border"
 						/>
 						Enabled
 					</label>
@@ -314,7 +314,7 @@ export function PasswordPoliciesSection({
 							type="checkbox"
 							checked={draft.rejectContainsIdentifier}
 							onChange={(e) => update({ rejectContainsIdentifier: e.target.checked })}
-							className="rounded border-brand-muted"
+							className="rounded border-border"
 						/>
 						No username/email
 					</label>
@@ -341,7 +341,7 @@ export function PasswordPoliciesSection({
 											checked={checked}
 											disabled={ownedByOther}
 											onChange={() => toggleEnvironment(env.id)}
-											className="rounded border-brand-muted"
+											className="rounded border-border"
 										/>
 										<span>{env.name}</span>
 										{ownedByOther ? (
@@ -375,13 +375,13 @@ export function PasswordPoliciesSection({
 					return (
 						<li
 							key={policy.id}
-							className="flex items-start justify-between gap-3 rounded-xl border border-brand-muted px-3 py-2"
+							className="flex items-start justify-between gap-3 rounded-card border border-border px-3 py-2"
 						>
 							<div className="min-w-0">
 								<div className="flex items-center gap-2">
 									<span className="font-medium">{policy.name}</span>
 									{!policy.enabled ? (
-										<span className="rounded-full bg-brand-muted/40 px-2 py-0.5 text-xs text-muted-foreground">
+										<span className="rounded-full bg-surface-sunken px-2 py-0.5 text-xs text-muted-foreground">
 											Disabled
 										</span>
 									) : null}
@@ -394,7 +394,7 @@ export function PasswordPoliciesSection({
 										envNames.map((name) => (
 											<span
 												key={name}
-												className="rounded-full bg-brand-muted/40 px-2 py-0.5 text-xs text-muted-foreground"
+												className="rounded-full bg-surface-sunken px-2 py-0.5 text-xs text-muted-foreground"
 											>
 												{name}
 											</span>

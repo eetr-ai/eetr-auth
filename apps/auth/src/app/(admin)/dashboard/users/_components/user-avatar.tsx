@@ -15,7 +15,7 @@ export function UserAvatar({ user }: UserAvatarProps) {
 		);
 	}
 	return (
-		<div className="flex h-10 w-10 items-center justify-center rounded-full border border-brand-muted text-xs font-semibold">
+		<div className="flex h-10 w-10 items-center justify-center rounded-full border border-border text-xs font-semibold">
 			{(user.name ?? user.username).slice(0, 2).toUpperCase()}
 		</div>
 	);

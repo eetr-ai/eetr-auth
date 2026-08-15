@@ -13,14 +13,14 @@ interface AuditLogFiltersProps {
 }
 
 const fieldInputClass =
-	"rounded-lg border border-brand-muted bg-background px-2 py-1.5 text-sm";
+	"rounded-lg border border-border bg-background px-2 py-1.5 text-sm";
 const fieldLabelClass = "mb-1 block text-xs text-muted-foreground";
 
 export function AuditLogFilters({ filters, onChange }: AuditLogFiltersProps) {
 	const set = (patch: Partial<AuditLogFilterValues>) => onChange({ ...filters, ...patch });
 
 	return (
-		<div className="mb-4 flex shrink-0 flex-wrap items-end gap-4 rounded-xl border border-brand-muted bg-brand-muted/10 p-4">
+		<div className="mb-4 flex shrink-0 flex-wrap items-end gap-4 rounded-card border border-border bg-surface-sunken p-4">
 			<div>
 				<label className={fieldLabelClass}>Action contains</label>
 				<input

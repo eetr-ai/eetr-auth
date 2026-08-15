@@ -51,10 +51,10 @@ function SortIcon({
 
 export function LogsTable({ rows, loading, orderBy, orderDir, onSort }: LogsTableProps) {
 	return (
-		<div className="min-h-0 flex-1 overflow-auto rounded-xl border border-brand-muted">
+		<div className="min-h-0 flex-1 overflow-auto rounded-card border border-border">
 			<table className="w-full min-w-[800px] text-left text-sm">
 				<thead>
-					<tr className="border-b border-brand-muted bg-brand-muted/20">
+					<tr className="border-b border-border bg-surface-sunken">
 						{COLUMNS.map((col) => (
 							<th key={col.column} className="px-4 py-3 font-medium">
 								<button
@@ -84,15 +84,15 @@ export function LogsTable({ rows, loading, orderBy, orderDir, onSort }: LogsTabl
 						</tr>
 					) : (
 						rows.map((row) => (
-							<tr key={row.id} className="border-b border-brand-muted/50">
+							<tr key={row.id} className="border-b border-border">
 								<td className="px-4 py-2 uppercase">{row.request_type}</td>
 								<td className="px-4 py-2 font-mono text-xs">{row.ip_address ?? "—"}</td>
 								<td className="px-4 py-2">{row.environment_name ?? "—"}</td>
 								<td className="px-4 py-2">
 									{row.succeeded ? (
-										<span className="text-green-600 dark:text-green-400">Yes</span>
+										<span className="text-success-icon">Yes</span>
 									) : (
-										<span className="text-red-600 dark:text-red-400">No</span>
+										<span className="text-danger-icon">No</span>
 									)}
 								</td>
 								<td className="px-4 py-2 font-mono text-xs">{formatMs(row.duration_ms)}</td>

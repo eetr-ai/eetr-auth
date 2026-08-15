@@ -24,13 +24,13 @@ interface LogsFiltersProps {
 	onApply: () => void;
 }
 
-const selectClass = "rounded-lg border border-brand-muted bg-background px-2 py-1.5 text-sm";
-const inputClass = "rounded-lg border border-brand-muted bg-background px-2 py-1.5 text-sm";
+const selectClass = "rounded-lg border border-border bg-background px-2 py-1.5 text-sm";
+const inputClass = "rounded-lg border border-border bg-background px-2 py-1.5 text-sm";
 const labelClass = "mb-1 block text-xs text-muted-foreground";
 
 export function LogsFilters({ filters, environments, onChange, onApply }: LogsFiltersProps) {
 	return (
-		<div className="mb-4 flex shrink-0 flex-wrap items-end gap-4 rounded-xl border border-brand-muted bg-brand-muted/10 p-4">
+		<div className="mb-4 flex shrink-0 flex-wrap items-end gap-4 rounded-card border border-border bg-surface-sunken p-4">
 			<div>
 				<label className={labelClass}>Request type</label>
 				<select
@@ -121,7 +121,7 @@ export function LogsFilters({ filters, environments, onChange, onApply }: LogsFi
 			<button
 				type="button"
 				onClick={onApply}
-				className="rounded-lg border border-brand-muted bg-background px-3 py-1.5 text-sm font-medium hover:bg-brand-muted/30"
+				className="rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-surface-hover"
 			>
 				Apply filters
 			</button>
