@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { KeyRound, ListTodo, Pencil, Plus, RotateCcw } from "lucide-react";
+import { KeyRound, Pencil, Plus, RotateCcw } from "lucide-react";
 import {
 	Banner,
 	Button,
@@ -37,6 +37,7 @@ import {
 } from "./_components/client-draft";
 import { ClientForm } from "./_components/client-form";
 import { ClientsTable, type ClientTypeFilter } from "./_components/clients-table";
+import { ClientTokens } from "./_components/client-tokens";
 import { SecretReveal } from "./_components/secret-reveal";
 
 /** The form lives in the panel body; its submit button lives in the panel footer. */
@@ -65,6 +66,9 @@ export default function ClientsPage() {
 	/** The OAuth client_id of the client being edited. Distinct from `editingId`,
 	 *  which is the row id — the tokens list keys off the OAuth id. */
 	const [editingOauthClientId, setEditingOauthClientId] = useState<string | null>(null);
+	/** Dynamically registered (RFC 7591) clients are managed by their own software,
+	 *  so the panel shows them read-only: no edits, and no secret to rotate. */
+	const [editingIsDynamic, setEditingIsDynamic] = useState(false);
 
 	/** A one-time secret, from creation or rotation. Must be read before dismissal. */
 	const [revealedSecret, setRevealedSecret] = useState<{
@@ -137,6 +141,7 @@ export default function ClientsPage() {
 		setRevealedSecret(null);
 		setEditingId(clientId);
 		setEditingOauthClientId(null);
+		setEditingIsDynamic(false);
 		setDraft(emptyDraft);
 		setBaseline(emptyDraft);
 		setPanelOpen(true);
@@ -151,6 +156,7 @@ export default function ClientsPage() {
 			setDraft(next);
 			setBaseline(next);
 			setEditingOauthClientId(details.clientId);
+			setEditingIsDynamic(details.isDynamic);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to load client");
 		} finally {
@@ -361,16 +367,23 @@ export default function ClientsPage() {
 				onRequestClose={requestClose}
 				icon={KeyRound}
 				width="lg"
-				title={editingId ? "Edit client" : "New client"}
+				title={editingIsDynamic ? "Client" : editingId ? "Edit client" : "New client"}
 				description={
-					editingId
-						? "The environment is fixed at creation, because changing it would invalidate issued tokens."
-						: "The client secret is shown once, immediately after creation."
+					editingIsDynamic
+						? "Registered dynamically (RFC 7591), so it is managed by the client software itself and cannot be edited here."
+						: editingId
+							? "The environment is fixed at creation, because changing it would invalidate issued tokens."
+							: "The client secret is shown once, immediately after creation."
 				}
 				footer={
 					revealedSecret ? (
 						<Button type="button" onClick={closePanel}>
 							Done
+						</Button>
+					) : editingIsDynamic ? (
+						// Nothing here is editable, so the only action is to leave.
+						<Button type="button" variant="secondary" onClick={requestClose}>
+							Close
 						</Button>
 					) : (
 						<div className="flex flex-wrap items-center gap-2">
@@ -419,18 +432,15 @@ export default function ClientsPage() {
 							environments={environments}
 							scopes={scopes}
 							editingId={editingId}
+							readOnly={editingIsDynamic}
 							error={error}
 							onSubmit={handleSubmit}
 						/>
-						{editingOauthClientId ? (
-							<a
-								href={`/dashboard/tokens?client=${encodeURIComponent(editingOauthClientId)}`}
-								className="mt-6 inline-flex items-center gap-2 text-sm text-muted-foreground underline hover:text-foreground"
-							>
-								<ListTodo className="h-4 w-4" />
-								View issued tokens
-							</a>
-						) : null}
+						<ClientTokens
+							clientId={editingId}
+							oauthClientId={editingOauthClientId}
+							environments={environments}
+						/>
 					</>
 				)}
 			</SidePanel>

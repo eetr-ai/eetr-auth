@@ -13,6 +13,8 @@ interface ClientFormProps {
 	scopes: Scope[];
 	/** null when creating. Environment and expiry are fixed after creation. */
 	editingId: string | null;
+	/** Dynamically registered clients are owned by their software; show, don't edit. */
+	readOnly?: boolean;
 	/** Save errors render here rather than on the page, which sits behind the scrim. */
 	error: string | null;
 	onSubmit: (e: React.FormEvent) => void;
@@ -25,6 +27,7 @@ export function ClientForm({
 	environments,
 	scopes,
 	editingId,
+	readOnly = false,
 	error,
 	onSubmit,
 }: ClientFormProps) {
@@ -56,6 +59,8 @@ export function ClientForm({
 				<Input
 					type="text"
 					data-autofocus
+					readOnly={readOnly}
+					disabled={readOnly}
 					value={draft.name}
 					onChange={(e) => onChange({ name: e.target.value })}
 					placeholder="Web app"
@@ -64,7 +69,7 @@ export function ClientForm({
 
 			<label className="block text-sm">
 				<span className="mb-1 block text-muted-foreground">Environment</span>
-				{editingId ? (
+				{editingId || readOnly ? (
 					// Moving a client between environments would invalidate its tokens,
 					// so it is fixed at creation. Shown disabled rather than hidden.
 					<Input type="text" value={environmentName} readOnly disabled />
@@ -94,11 +99,14 @@ export function ClientForm({
 							<Input
 								type="url"
 								aria-label={`Redirect URI ${index + 1}`}
+								readOnly={readOnly}
+								disabled={readOnly}
 								value={uri}
 								onChange={(e) => setUriAt(index, e.target.value)}
 								placeholder="https://app.example.com/callback"
 								className="flex-1"
 							/>
+							{readOnly ? null : (
 							<IconButton
 								type="button"
 								variant="danger"
@@ -108,17 +116,20 @@ export function ClientForm({
 							>
 								<Trash2 className="h-4 w-4" />
 							</IconButton>
+							)}
 						</div>
 					))}
 				</div>
-				<button
-					type="button"
-					onClick={() => onChange({ redirectUris: [...draft.redirectUris, ""] })}
-					className="mt-2 inline-flex items-center gap-1 rounded-full border border-border px-3 py-1 text-xs hover:bg-surface-hover"
-				>
-					<Plus className="h-3.5 w-3.5" />
-					Add URI
-				</button>
+				{readOnly ? null : (
+					<button
+						type="button"
+						onClick={() => onChange({ redirectUris: [...draft.redirectUris, ""] })}
+						className="mt-2 inline-flex items-center gap-1 rounded-full border border-border px-3 py-1 text-xs hover:bg-surface-hover"
+					>
+						<Plus className="h-3.5 w-3.5" />
+						Add URI
+					</button>
+				)}
 			</div>
 
 			<div>
@@ -130,9 +141,10 @@ export function ClientForm({
 				) : (
 					<div className="flex flex-wrap gap-3">
 						{scopes.map((scope) => (
-							<label key={scope.id} className="flex cursor-pointer items-center gap-2 text-sm">
+							<label key={scope.id} className={`flex items-center gap-2 text-sm ${readOnly ? "opacity-70" : "cursor-pointer"}`}>
 								<input
 									type="checkbox"
+									disabled={readOnly}
 									checked={draft.scopeIds.includes(scope.id)}
 									onChange={() => toggleScope(scope.id)}
 									className="rounded-chip border-border"

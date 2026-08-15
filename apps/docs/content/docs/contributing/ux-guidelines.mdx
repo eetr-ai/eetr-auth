@@ -217,14 +217,18 @@ contract to review a change against:
 4. **Row actions** — `IconButton` only, in a fixed order: surface-specific icons first, then `Pencil`,
    then `Trash2`. No pills, no "View" link, no navigation. While confirming, `InlineDeleteConfirm`
    replaces the whole group.
-5. **Empty vs filtered** — `EmptyState` with the header's CTA when the collection is genuinely empty;
+5. **Clicking a row opens its edit panel.** The actions cell calls `stopPropagation`, so pressing a
+   row action never also opens the panel. **Keep the `Pencil` anyway**: a `<tr>` cannot carry button
+   semantics cleanly, so the icon button remains the keyboard-reachable, labelled affordance and the
+   row click is a pointer convenience on top of it.
+6. **Empty vs filtered** — `EmptyState` with the header's CTA when the collection is genuinely empty;
    a plain muted line when filters merely exclude everything. These are different messages: the fix
    for one is to create a record, for the other to change the filter.
-6. **Create and edit** — one `SidePanel`, titled "New X" / "Edit X", footer "Add X" / "Save X" plus
+7. **Create and edit** — one `SidePanel`, titled "New X" / "Edit X", footer "Add X" / "Save X" plus
    Cancel.
-7. **Errors** — page-level `Banner` for list errors, in-panel `Banner` for save errors. Render only
+8. **Errors** — page-level `Banner` for list errors, in-panel `Banner` for save errors. Render only
    one at a time; a page-level banner is invisible behind the scrim.
-8. **State** — `panelOpen`, `editingId`, `draft`, `baseline`, `saving`, `confirmingDeleteId`,
+9. **State** — `panelOpen`, `editingId`, `draft`, `baseline`, `saving`, `confirmingDeleteId`,
    `deletingId`.
 
 A new directory surface should need no new layout class strings. If it does, the primitive is wrong —

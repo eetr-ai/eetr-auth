@@ -14,8 +14,8 @@ import { listEnvironments } from "@/app/actions/environment-actions";
 import type { Environment } from "@/lib/repositories/environment.repository";
 import { Banner, FullPageSpinner, PageHeader } from "@/components/ui";
 import { TokensToolbar } from "./_components/tokens-toolbar";
-import { TokensTable, tokenKey } from "./_components/tokens-table";
-import type { TokenAction } from "./_components/token-row";
+import { TokensTable, tokenKey } from "@/components/tokens/tokens-table";
+import type { TokenAction } from "@/components/tokens/token-row";
 import type { TokenActivityItem } from "@/components/tokens/types";
 
 enum TokensPageActionType {

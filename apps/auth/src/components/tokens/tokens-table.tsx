@@ -1,7 +1,7 @@
 import { TBody, THead, Table, Th } from "@/components/ui";
 import type { Environment } from "@/lib/repositories/environment.repository";
 import { TokenRow, type TokenAction } from "./token-row";
-import type { TokenActivityItem } from "@/components/tokens/types";
+import type { TokenActivityItem } from "./types";
 
 /** Identifies a row across the two token types, whose ids can collide. */
 export function tokenKey(token: TokenActivityItem): string {
@@ -18,6 +18,9 @@ interface TokensTableProps {
 	onRequestAction: (token: TokenActivityItem, action: TokenAction) => void;
 	onConfirmAction: (token: TokenActivityItem, action: TokenAction) => void;
 	onCancelAction: () => void;
+	/** Suppress the client column where every row is the same client. */
+	hideClient?: boolean;
+	minWidth?: string;
 }
 
 export function TokensTable({
@@ -29,10 +32,12 @@ export function TokensTable({
 	onRequestAction,
 	onConfirmAction,
 	onCancelAction,
+	hideClient = false,
+	minWidth = "min-w-[700px]",
 }: TokensTableProps) {
 	return (
 		<div className="min-h-0 flex-1 overflow-auto">
-			<Table minWidth="min-w-[700px]">
+			<Table minWidth={minWidth}>
 				<THead>
 					{/* Type and scopes ride in the Token cell, client id and environment in
 					    the Client cell, and status and both timestamps are glyphs. Ten
@@ -43,7 +48,7 @@ export function TokensTable({
 						<span className="sr-only">Status</span>
 					</Th>
 					<Th>Token</Th>
-					<Th>Client</Th>
+					{hideClient ? null : <Th>Client</Th>}
 					<Th>Lifetime</Th>
 					<Th className="text-right">Actions</Th>
 				</THead>
@@ -61,6 +66,7 @@ export function TokensTable({
 								onRequestAction={onRequestAction}
 								onConfirmAction={onConfirmAction}
 								onCancelAction={onCancelAction}
+								hideClient={hideClient}
 							/>
 						);
 					})}

@@ -42,7 +42,14 @@ export function ClientsTable({
 				{clients.map((client) => {
 					const label = client.name ?? client.clientId;
 					return (
-						<tr key={client.id}>
+						// Row click is a convenience for pointer users. The pencil stays as the
+						// keyboard-reachable, screen-reader-labelled way to do the same thing —
+						// a <tr> cannot carry button semantics cleanly.
+						<tr
+							key={client.id}
+							onClick={() => onStartEdit(client)}
+							className="cursor-pointer transition-colors hover:bg-surface-hover"
+						>
 							<Td>
 								<div className="flex items-center gap-2">
 									<span className="truncate">{client.name ?? "—"}</span>
@@ -60,7 +67,8 @@ export function ClientsTable({
 							</Td>
 							<Td>{envById.get(client.environmentId) ?? client.environmentId}</Td>
 							<Td className="text-muted-foreground">{client.createdBy}</Td>
-							<Td>
+							{/* Actions own their clicks, so hitting one never also opens the panel. */}
+							<Td onClick={(event) => event.stopPropagation()}>
 								<div className="flex items-center justify-end gap-1">
 									{confirmingDeleteId === client.id ? (
 										<InlineDeleteConfirm

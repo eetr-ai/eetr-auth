@@ -1,8 +1,8 @@
 import { Ban, RefreshCw, Trash2 } from "lucide-react";
 import { IconButton, InlineDeleteConfirm, Td } from "@/components/ui";
 import type { Environment } from "@/lib/repositories/environment.repository";
-import { DateLine, TokenStatusGlyph, TokenTypeGlyph } from "@/components/tokens/token-glyphs";
-import { maskToken, type TokenActivityItem } from "@/components/tokens/types";
+import { DateLine, TokenStatusGlyph, TokenTypeGlyph } from "./token-glyphs";
+import { maskToken, type TokenActivityItem } from "./types";
 
 /** Which destructive action a row is currently asking to confirm. */
 export type TokenAction = "revoke" | "delete";
@@ -17,6 +17,8 @@ interface TokenRowProps {
 	onRequestAction: (token: TokenActivityItem, action: TokenAction) => void;
 	onConfirmAction: (token: TokenActivityItem, action: TokenAction) => void;
 	onCancelAction: () => void;
+	/** Suppress the client column where every row is the same client. */
+	hideClient?: boolean;
 }
 
 export function TokenRow({
@@ -28,6 +30,7 @@ export function TokenRow({
 	onRequestAction,
 	onConfirmAction,
 	onCancelAction,
+	hideClient = false,
 }: TokenRowProps) {
 	return (
 		<tr>
@@ -72,22 +75,24 @@ export function TokenRow({
 				</div>
 			</Td>
 
-			<Td>
-				{/* The client id sits under the name rather than behind a hover tooltip,
-				    which was unreachable by keyboard and touch. The environment rides
-				    along as a pill, which retires its own column. */}
-				<div className="min-w-0">
-					<div className="flex items-center gap-2">
-						<span className="truncate">{token.clientName ?? token.clientId}</span>
-						<span className="shrink-0 rounded-full bg-surface-sunken px-2 py-0.5 text-xs text-muted-foreground">
-							{envById[token.environmentId]?.name ?? token.environmentId}
-						</span>
+			{hideClient ? null : (
+				<Td>
+					{/* The client id sits under the name rather than behind a hover tooltip,
+					    which was unreachable by keyboard and touch. The environment rides
+					    along as a pill, which retires its own column. */}
+					<div className="min-w-0">
+						<div className="flex items-center gap-2">
+							<span className="truncate">{token.clientName ?? token.clientId}</span>
+							<span className="shrink-0 rounded-full bg-surface-sunken px-2 py-0.5 text-xs text-muted-foreground">
+								{envById[token.environmentId]?.name ?? token.environmentId}
+							</span>
+						</div>
+						<div className="truncate font-mono text-xs text-muted-foreground">
+							{token.clientId}
+						</div>
 					</div>
-					<div className="truncate font-mono text-xs text-muted-foreground">
-						{token.clientId}
-					</div>
-				</div>
-			</Td>
+				</Td>
+			)}
 
 			<Td className="text-xs">
 				<div className="flex flex-col gap-1">

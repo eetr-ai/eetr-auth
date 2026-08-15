@@ -224,18 +224,23 @@ export function PasswordPoliciesSection({
 							.filter((name): name is string => !!name)
 							.sort((a, b) => a.localeCompare(b));
 						return (
-							<li key={policy.id} className="flex items-start justify-between gap-3 px-4 py-3">
+							// Row click is a convenience for pointer users; the pencil remains
+							// the keyboard-reachable, labelled way to do the same thing.
+							<li
+								key={policy.id}
+								onClick={() => startEdit(policy)}
+								className="flex cursor-pointer items-start justify-between gap-3 px-4 py-3 transition-colors hover:bg-surface-hover"
+							>
+								{/* Environments ride beside the name as pills rather than taking a
+								    third line of their own. */}
 								<div className="min-w-0">
-									<div className="flex items-center gap-2">
+									<div className="flex flex-wrap items-center gap-2">
 										<span className="font-medium">{policy.name}</span>
 										{!policy.enabled ? (
 											<span className="rounded-full bg-surface-sunken px-2 py-0.5 text-xs text-muted-foreground">
 												Disabled
 											</span>
 										) : null}
-									</div>
-									<p className="text-xs text-muted-foreground">{summarize(policy)}</p>
-									<div className="mt-1 flex flex-wrap gap-1">
 										{envNames.length === 0 ? (
 											<span className="text-xs text-muted-foreground">No environments</span>
 										) : (
@@ -249,8 +254,13 @@ export function PasswordPoliciesSection({
 											))
 										)}
 									</div>
+									<p className="mt-0.5 text-xs text-muted-foreground">{summarize(policy)}</p>
 								</div>
-								<div className="flex shrink-0 items-center gap-2">
+								{/* Actions own their clicks, so hitting one never also opens the panel. */}
+								<div
+									className="flex shrink-0 items-center gap-2"
+									onClick={(event) => event.stopPropagation()}
+								>
 									{confirmingDeleteId === policy.id ? (
 										<InlineDeleteConfirm
 											label={`Delete "${policy.name}"?`}
