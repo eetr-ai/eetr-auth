@@ -10,6 +10,7 @@ import {
 	promoteStagedUpload,
 	type AssetBucket,
 } from "@/lib/uploads/staged-upload";
+import { buildAssetUrl, pickAssetCdnBaseUrl } from "@/lib/users/profile";
 
 export const DEFAULT_SITE_TITLE = "Eetr Auth";
 export const DEFAULT_LOGO_PATH = "/eetr-auth-logo.png";
@@ -96,10 +97,7 @@ export class SiteSettingsService {
 	}
 
 	getLogoPublicUrlForKey(logoKey: string, cdnUrlOverride: string | null): string {
-		const baseSource = normalizeOptional(cdnUrlOverride) ?? this.avatarCdnBaseUrl;
-		const base = baseSource.replace(/\/+$/, "");
-		const key = logoKey.replace(/^\/+/, "");
-		return `${base}/${key}`;
+		return buildAssetUrl(logoKey, pickAssetCdnBaseUrl(cdnUrlOverride, this.avatarCdnBaseUrl));
 	}
 
 	getDisplaySiteTitle(siteTitle: string | null | undefined): string {

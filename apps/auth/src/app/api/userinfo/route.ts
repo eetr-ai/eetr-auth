@@ -65,8 +65,7 @@ export const GET = withApiContext(async (req, ctx, getServices) => {
 	}
 
 	// Data minimization: only return claims the token was actually granted.
-	const env = ctx.env as unknown as Record<string, unknown>;
-	const claims = buildUserInfoClaims(user, validation.tokenScopes, env);
+	const claims = buildUserInfoClaims(user, validation.tokenScopes);
 
 	return NextResponse.json(claims, {
 		status: 200,

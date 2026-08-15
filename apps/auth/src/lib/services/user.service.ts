@@ -2,7 +2,12 @@ import type { HashMethod } from "@/lib/config/hash-method";
 import type { UserRecord, UserRepository } from "@/lib/repositories/admin.repository";
 import type { UserChallengeRepository } from "@/lib/repositories/user-challenge.repository";
 import { hashPassword } from "@/lib/auth/password-hash";
-import { normalizeOptionalProfileField } from "@/lib/users/profile";
+import type { SiteSettingsRepository } from "@/lib/repositories/site-settings.repository";
+import {
+	buildAssetUrl,
+	normalizeOptionalProfileField,
+	pickAssetCdnBaseUrl,
+} from "@/lib/users/profile";
 import {
 	StagedUploadError,
 	extensionOfStagedKey,
@@ -29,7 +34,13 @@ interface UpdateUserInput {
 export interface UserServiceDependencies {
 	userRepository: UserRepository;
 	adminAuditLogService: AdminAuditLogService;
+	/** Deploy-time default, used when Setup → Site identity has no CDN URL. */
 	avatarCdnBaseUrl: string;
+	/**
+	 * Optional: when provided, the CDN URL configured in site settings takes
+	 * precedence over `avatarCdnBaseUrl` when building avatar URLs.
+	 */
+	siteSettingsRepository?: SiteSettingsRepository;
 	/** R2 bucket holding avatars. Absent in contexts that never write one. */
 	assetBucket?: AssetBucket;
 	argonHasher?: Fetcher;
@@ -45,6 +56,8 @@ export class UserService {
 	private readonly userRepository: UserRepository;
 	private readonly adminAuditLogService: AdminAuditLogService;
 	private readonly avatarCdnBaseUrl: string;
+	private readonly siteSettingsRepository?: SiteSettingsRepository;
+	private cdnBaseUrl?: Promise<string>;
 	private readonly assetBucket?: AssetBucket;
 	private readonly argonHasher?: Fetcher;
 	private readonly hashMethod: HashMethod;
@@ -54,6 +67,7 @@ export class UserService {
 		userRepository,
 		adminAuditLogService,
 		avatarCdnBaseUrl,
+		siteSettingsRepository,
 		assetBucket,
 		argonHasher,
 		hashMethod,
@@ -62,6 +76,7 @@ export class UserService {
 		this.userRepository = userRepository;
 		this.adminAuditLogService = adminAuditLogService;
 		this.avatarCdnBaseUrl = avatarCdnBaseUrl.replace(/\/+$/, "");
+		this.siteSettingsRepository = siteSettingsRepository;
 		this.assetBucket = assetBucket;
 		this.argonHasher = argonHasher;
 		this.hashMethod = hashMethod;
@@ -84,20 +99,31 @@ export class UserService {
 		};
 	}
 
-	private withAvatarUrl(user: UserRecord): UserRecord {
-		const avatarUrl = user.avatarKey
-			? `${this.avatarCdnBaseUrl}/${user.avatarKey.replace(/^\/+/, "")}`
-			: null;
+	/**
+	 * The CDN base for avatars, preferring the site setting over the environment.
+	 *
+	 * Memoised because services are constructed per request: listing every user
+	 * resolves the base once, not once per avatar.
+	 */
+	private resolveCdnBaseUrl(): Promise<string> {
+		if (!this.siteSettingsRepository) return Promise.resolve(this.avatarCdnBaseUrl);
+		this.cdnBaseUrl ??= this.siteSettingsRepository
+			.get()
+			.then((row) => pickAssetCdnBaseUrl(row?.cdnUrl, this.avatarCdnBaseUrl));
+		return this.cdnBaseUrl;
+	}
 
+	private async withAvatarUrl(user: UserRecord): Promise<UserRecord> {
+		if (!user.avatarKey) return { ...user, avatarUrl: null };
 		return {
 			...user,
-			avatarUrl,
+			avatarUrl: buildAssetUrl(user.avatarKey, await this.resolveCdnBaseUrl()),
 		};
 	}
 
 	async listUsers(): Promise<UserRecord[]> {
 		const users = await this.userRepository.list();
-		return users.map((user) => this.withAvatarUrl(user));
+		return Promise.all(users.map((user) => this.withAvatarUrl(user)));
 	}
 
 	async getById(id: string): Promise<UserRecord | null> {

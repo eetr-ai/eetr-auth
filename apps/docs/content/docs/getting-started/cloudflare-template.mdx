@@ -89,7 +89,10 @@ Configure under **Dashboard → Setup → Site identity**:
   see when they enroll an authenticator app (TOTP).
 - **Site logo** — image upload (JPEG/PNG/WebP, up to 5 MB) stored in R2.
 - **Site URL** — the public auth URL; required so transactional email can build working links.
-- **CDN URL** — optional public base URL used to serve the uploaded logo.
+- **CDN URL** — optional public base URL for every asset in the bucket: the uploaded logo and user
+  avatars alike, including the `picture` claim in id_tokens and `/userinfo`. It takes precedence over
+  the `AVATAR_CDN_BASE_URL` / `JWKS_CDN_BASE_URL` variables, which remain the deploy-time default when
+  it is blank.
 
 <AppShot
   src="setup-site-identity.png"

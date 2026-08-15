@@ -121,6 +121,7 @@ export function getServices(ctx: RequestContext): Services {
 			userRepository: userRepo,
 			adminAuditLogService,
 			avatarCdnBaseUrl,
+			siteSettingsRepository: siteRepo,
 			assetBucket,
 			argonHasher: ctx.env.ARGON_HASHER,
 			hashMethod,
@@ -147,6 +148,7 @@ export function getServices(ctx: RequestContext): Services {
 			refreshTokenRepo,
 			envRepo,
 			userRepo,
+			siteRepo,
 			env: ctx.env,
 		}),
 		tokenActivityLogService: new TokenActivityLogService({

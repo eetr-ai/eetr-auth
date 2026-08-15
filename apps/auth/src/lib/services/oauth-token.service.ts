@@ -14,7 +14,8 @@ import { OAuthServiceError } from "./oauth.types";
 import { normalizeResourceParam } from "./resource-indicator";
 import { resolveHmacKey, verifyClientSecretAgainstStored } from "@/lib/auth/secret-at-rest";
 import type { UserRepository } from "@/lib/repositories/admin.repository";
-import { getAvatarUrl } from "@/lib/users/profile";
+import type { SiteSettingsRepository } from "@/lib/repositories/site-settings.repository";
+import { resolveAvatarUrl } from "@/lib/users/profile";
 
 const JWKS_R2_KEY_DEFAULT = "jwks.json";
 
@@ -150,6 +151,11 @@ export interface OauthTokenServiceDeps {
 	refreshTokenRepo: RefreshTokenRepository;
 	envRepo: EnvironmentRepository;
 	userRepo: UserRepository;
+	/**
+	 * Optional: when provided, the `picture` claim honours the CDN URL from site
+	 * settings instead of only the environment default.
+	 */
+	siteRepo?: SiteSettingsRepository;
 	env: CloudflareEnv;
 }
 
@@ -161,14 +167,16 @@ export class OauthTokenService {
 	private readonly refreshTokenRepo: RefreshTokenRepository;
 	private readonly envRepo: EnvironmentRepository;
 	private readonly userRepo: UserRepository;
+	private readonly siteRepo?: SiteSettingsRepository;
 
-	constructor({ clientRepo, authorizationCodeRepo, tokenRepo, refreshTokenRepo, envRepo, userRepo, env }: OauthTokenServiceDeps) {
+	constructor({ clientRepo, authorizationCodeRepo, tokenRepo, refreshTokenRepo, envRepo, userRepo, siteRepo, env }: OauthTokenServiceDeps) {
 		this.clientRepo = clientRepo;
 		this.authorizationCodeRepo = authorizationCodeRepo;
 		this.tokenRepo = tokenRepo;
 		this.refreshTokenRepo = refreshTokenRepo;
 		this.envRepo = envRepo;
 		this.userRepo = userRepo;
+		this.siteRepo = siteRepo;
 		this.env = env;
 	}
 
@@ -507,7 +515,14 @@ export class OauthTokenService {
 			if (params.scopeNames.includes("profile")) {
 				claims.name = user.name ?? user.username;
 				claims.preferred_username = user.username;
-				const picture = getAvatarUrl(user.avatarKey, this.env as unknown as Record<string, unknown>);
+				// The settings row is only read when a picture is actually being
+				// claimed, so tokens without the profile scope pay nothing for it.
+				const siteRow = user.avatarKey && this.siteRepo ? await this.siteRepo.get() : null;
+				const picture = resolveAvatarUrl(
+					user.avatarKey,
+					siteRow?.cdnUrl,
+					this.env as unknown as Record<string, unknown>,
+				);
 				if (picture) {
 					claims.picture = picture;
 				}

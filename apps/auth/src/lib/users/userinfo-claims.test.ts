@@ -7,19 +7,17 @@ const user: UserInfoClaimsUser = {
 	name: "Alice Example",
 	email: "alice@example.com",
 	emailVerifiedAt: "2026-01-01T00:00:00.000Z",
-	avatarKey: null,
+	avatarUrl: null,
 };
-
-const env: Record<string, unknown> = {};
 
 describe("buildUserInfoClaims", () => {
 	it("returns only sub when no profile/email scopes are granted", () => {
-		const claims = buildUserInfoClaims(user, ["openid"], env);
+		const claims = buildUserInfoClaims(user, ["openid"]);
 		expect(claims).toEqual({ sub: "user-1" });
 	});
 
 	it("includes profile claims only when the profile scope is granted", () => {
-		const claims = buildUserInfoClaims(user, ["openid", "profile"], env);
+		const claims = buildUserInfoClaims(user, ["openid", "profile"]);
 		expect(claims).toMatchObject({
 			sub: "user-1",
 			name: "Alice Example",
@@ -30,8 +28,18 @@ describe("buildUserInfoClaims", () => {
 		expect("email_verified" in claims).toBe(false);
 	});
 
+	it("passes through the avatar URL resolved by UserService", () => {
+		// The URL is built against the site's CDN setting upstream; rebuilding it
+		// here from the environment is what made avatars ignore that setting.
+		const claims = buildUserInfoClaims(
+			{ ...user, avatarUrl: "https://cdn.example.com/avatars/user-1.png" },
+			["profile"],
+		);
+		expect(claims.picture).toBe("https://cdn.example.com/avatars/user-1.png");
+	});
+
 	it("includes email claims only when the email scope is granted", () => {
-		const claims = buildUserInfoClaims(user, ["openid", "email"], env);
+		const claims = buildUserInfoClaims(user, ["openid", "email"]);
 		expect(claims).toMatchObject({
 			sub: "user-1",
 			email: "alice@example.com",
@@ -42,7 +50,7 @@ describe("buildUserInfoClaims", () => {
 	});
 
 	it("includes both claim sets when both scopes are granted", () => {
-		const claims = buildUserInfoClaims(user, ["openid", "profile", "email"], env);
+		const claims = buildUserInfoClaims(user, ["openid", "profile", "email"]);
 		expect(claims).toMatchObject({
 			sub: "user-1",
 			name: "Alice Example",
@@ -53,11 +61,10 @@ describe("buildUserInfoClaims", () => {
 	});
 
 	it("falls back to the username for name and reports email_verified=false when unverified", () => {
-		const claims = buildUserInfoClaims(
-			{ ...user, name: null, emailVerifiedAt: null },
-			["profile", "email"],
-			env
-		);
+		const claims = buildUserInfoClaims({ ...user, name: null, emailVerifiedAt: null }, [
+			"profile",
+			"email",
+		]);
 		expect(claims.name).toBe("alice");
 		expect(claims.email_verified).toBe(false);
 	});
