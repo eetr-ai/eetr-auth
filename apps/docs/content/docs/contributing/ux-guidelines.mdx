@@ -19,14 +19,77 @@ spec, but the primitives are the canonical way to apply them:
 - `IconButton` — icon-only per-row action; `variant` of `default` | `danger`; requires `aria-label`.
 - `Banner` — `variant` of `error` | `success` | `info` | `warning`; renders nothing when `message` is
   falsy.
-- `SectionCard` (titled, icon heading) and `Card` (bare wrapper).
-- `Input`, `Label`, `FormField`.
+- `SectionCard` (titled, icon heading) and `Card` (bare wrapper), both with a `padding` of
+  `sm` | `md` | `none`.
+- `PageHeader` — the icon + title row every page starts with, plus an optional right-aligned `action`.
+- `Table` / `THead` / `TBody` / `Th` / `Td` — table chrome (see [Directory surfaces](#directory-surfaces)).
+- `Input`, `Select`, `Label`, `FormField`.
 - `Spinner` and `FullPageSpinner`.
 - `InlineDeleteConfirm` — the inline destructive-confirmation control (see below).
+- `SidePanel` and `ConfirmDialog` — the overlays (see [Overlays](#overlays)).
+- `EmptyState` — icon, title, description and the create CTA for an empty list.
+
+`SidePanel` and `ConfirmDialog` are built on three hooks that live beside them — `use-presence`,
+`use-focus-trap`, `use-scroll-lock` — which are deliberately **not** re-exported from the barrel.
+Nothing in `components/ui` declares `"use client"`; every consumer is a `_components/` child of a
+client page, so a Server Component must not import the barrel.
 
 Page-specific sub-components are co-located in a `_components/` folder next to the route's `page.tsx`.
 State stays in the page; `_components/` children are presentational (props in, callbacks out) and do
-not declare `"use client"`.
+not declare `"use client"`. Purely ephemeral UI state (which row is asking for delete confirmation)
+may stay local to the child.
+
+## Theme
+
+The theme is `apps/auth/src/app/theme.css`, in two tiers:
+
+1. **Palette** — raw values (`--gray-*`, `--brand-*`, `--red-*`, …). Referenced only by tier 2.
+2. **Roles** — semantic names. **The only thing components may reference.**
+
+Roles cover surfaces (`--background`, `--surface`, `--surface-sunken`, `--surface-hover`), text
+(`--foreground`, `--muted-foreground`), edges (`--border`, `--border-strong`), brand (`--brand`,
+`--brand-hover`, `--brand-fg`), status (`--danger-*`, `--success-*`, `--warning-*`, `--accent-*`) and
+`--scrim`. Adding a theme is one more selector block remapping tier 2 — no component changes.
+
+<Callout type="warn" title="Every role needs every theme">
+  A role defined in `:root` but missing from `.dark` silently keeps its light value in dark mode. The
+  `@media (prefers-color-scheme: dark)` fallback — which covers the moment before the inline theme
+  script runs — has to remap the same roles too.
+</Callout>
+
+Because roles flip on their own, **component code carries no `dark:` variants**. Write
+`bg-danger-bg text-danger-fg`, not a light class plus a `dark:` counterpart.
+
+`node scripts/check-theme.mjs` runs as part of `npm run lint` and fails the build on raw color ramps,
+`rounded-xl`, or `border-brand-muted` outside `theme.css`. Without it these creep back within a few
+PRs, and the nested-border look the visual system exists to prevent comes back with them.
+
+## Visual system
+
+**Depth comes from surface, not outline.**
+
+<Callout type="warn" title="One border per boundary">
+  A boundary gets exactly one edge, drawn by the container. Its children must not draw their own:
+  **never nest a bordered container inside another bordered container**, and separate list rows with
+  `divide-y divide-border` rather than a border each.
+
+  A card does legitimately pair `border-border` with `bg-surface`: in light mode surface and
+  background are the same white, so the hairline is what makes the card visible at all, while in dark
+  mode the raised surface does most of the work and the border only defines the edge.
+</Callout>
+
+**Radius scale**, named for intent so Tailwind's own `rounded-sm|md|lg` stays untouched:
+
+| Token | Size | Use |
+|---|---|---|
+| `rounded-chip` | 4px | badges, tags, checkboxes |
+| `rounded-control` | 6px | inputs, selects |
+| `rounded-card` | 8px | cards, panels, tables |
+
+Buttons stay `rounded-full`. Never use sharp-cornered buttons.
+
+**Spacing**, owned by the primitives rather than remembered per page: page gutter `p-6`; section gap
+`gap-6`; card padding `p-4` dense / `p-6` for forms; table cell `px-4 py-2.5`; control gap `gap-2`.
 
 ## Destructive actions
 
@@ -63,12 +126,12 @@ in place of the row's normal actions. The markup it produces is:
 ```tsx
 {confirmingDeleteUserId === user.id ? (
   <>
-    <span className="text-xs text-red-200">Delete {label}?</span>
+    <span className="text-xs text-danger-fg">Delete {label}?</span>
     <button
       type="button"
       onClick={() => confirmDelete(user)}
       disabled={deletingUserId === user.id}
-      className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200 dark:hover:bg-red-900/60"
+      className="inline-flex items-center gap-1 rounded-full border border-danger-border bg-danger-bg px-3 py-1 text-xs font-medium text-danger-fg hover:bg-danger-bg-hover disabled:opacity-50"
     >
       {deletingUserId === user.id
         ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -79,7 +142,7 @@ in place of the row's normal actions. The markup it produces is:
       type="button"
       onClick={cancelDelete}
       disabled={deletingUserId === user.id}
-      className="inline-flex items-center gap-1 rounded-full border border-brand-muted px-3 py-1 text-xs hover:bg-brand-muted/30 disabled:opacity-50"
+      className="inline-flex items-center gap-1 rounded-full border border-border-strong px-3 py-1 text-xs hover:bg-surface-hover disabled:opacity-50"
     >
       <X className="h-3.5 w-3.5" />
       Cancel
@@ -90,18 +153,23 @@ in place of the row's normal actions. The markup it produces is:
 )}
 ```
 
-For full-page destructive actions (e.g. deleting the current client from its detail page), use the
-same logic but render the confirmation as an inline card/banner above the action area rather than a
-modal.
+For full-page destructive actions, use the same logic but render the confirmation as an inline
+card/banner above the action area rather than a modal.
+
+<Callout type="warn" title="The one exception">
+  The **unsaved-changes guard** when dismissing a `SidePanel` uses `ConfirmDialog`, because what is
+  being confirmed is the dismissal itself — the surface an inline confirmation would attach to is the
+  very thing going away. **Deleting a record is never a dialog.**
+</Callout>
 
 ## Buttons
 
 | Variant | Usage | Classes |
 |---|---|---|
-| Primary | The main call-to-action on a form or page. | `rounded-full bg-brand px-5 py-2 text-sm font-medium text-white hover:bg-brand-muted disabled:opacity-50` |
-| Secondary / ghost | Neutral actions, dismissals, tertiary options. | `rounded-full border border-brand-muted px-4 py-2 text-sm font-medium hover:bg-brand-muted/30 disabled:opacity-50` |
-| Destructive confirm | The "yes, do it" button in a confirmation. | `rounded-full border border-red-300 bg-red-50 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200 dark:hover:bg-red-900/60` |
-| Icon-only | Per-row actions (edit, trash). Always include `aria-label`. | `rounded-full p-1.5 text-muted-foreground hover:bg-brand-muted/30 hover:text-foreground` |
+| Primary | The main call-to-action on a form or page. | `rounded-full bg-brand px-5 py-2 text-sm font-medium text-brand-fg hover:bg-brand-hover disabled:opacity-50` |
+| Secondary / ghost | Neutral actions, dismissals, tertiary options. | `rounded-full border border-border-strong px-4 py-2 text-sm font-medium hover:bg-surface-hover disabled:opacity-50` |
+| Destructive confirm | The "yes, do it" button in a confirmation. | `rounded-full border border-danger-border bg-danger-bg px-3 py-1 text-xs font-medium text-danger-fg hover:bg-danger-bg-hover disabled:opacity-50` |
+| Icon-only | Per-row actions (edit, trash). Always include `aria-label`. | `rounded-full p-1.5 text-muted-foreground hover:bg-surface-hover hover:text-foreground` |
 
 All buttons are pill-shaped (`rounded-full`). Never use sharp-cornered buttons.
 
@@ -112,9 +180,9 @@ or modals.
 
 ```tsx
 // error
-<p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-200">{message}</p>
+<p className="mb-3 rounded-card bg-danger-bg px-3 py-2 text-sm text-danger-fg">{message}</p>
 // success
-<p className="mb-3 rounded-xl bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-950/50 dark:text-green-200">{message}</p>
+<p className="mb-3 rounded-card bg-success-bg px-3 py-2 text-sm text-success-fg">{message}</p>
 ```
 
 Clear the message when the user starts a new attempt at the same action so stale errors do not linger.
@@ -124,7 +192,7 @@ Clear the message when the user starts a new attempt at the same action so stale
 Wrap related controls in a card:
 
 ```tsx
-<section className="rounded-xl border border-brand-muted p-6">
+<section className="rounded-card border border-border bg-surface p-6">
   <h2 className="mb-4 flex items-center gap-2 text-lg font-medium">
     <Icon className="h-5 w-5" />
     {title}
@@ -133,13 +201,86 @@ Wrap related controls in a card:
 </section>
 ```
 
-Cards use `rounded-xl` (not `rounded-full`). Every card heading takes a leading `lucide-react` icon at
-`h-5 w-5`.
+Cards use `rounded-card` (not `rounded-full`). Every card heading takes a leading `lucide-react` icon
+at `h-5 w-5`.
+
+## Directory surfaces
+
+Users and Clients are **directory surfaces** and must stay identical to each other. This is the
+contract to review a change against:
+
+1. **Page header** — `PageHeader` with the icon, title and a right-aligned
+   `<Button icon={Plus}>New …</Button>`. **No second "Manage X" card**; the page title is the heading.
+2. **Toolbar** — filter controls only, using `Select`.
+3. **Table** — one bordered `rounded-card` container that owns the edge; rows separated by `divide-y`,
+   never a border each; `thead` on `--surface-sunken`.
+4. **Row actions** — `IconButton` only, in a fixed order: surface-specific icons first, then `Pencil`,
+   then `Trash2`. No pills, no "View" link, no navigation. While confirming, `InlineDeleteConfirm`
+   replaces the whole group.
+5. **Empty vs filtered** — `EmptyState` with the header's CTA when the collection is genuinely empty;
+   a plain muted line when filters merely exclude everything. These are different messages: the fix
+   for one is to create a record, for the other to change the filter.
+6. **Create and edit** — one `SidePanel`, titled "New X" / "Edit X", footer "Add X" / "Save X" plus
+   Cancel.
+7. **Errors** — page-level `Banner` for list errors, in-panel `Banner` for save errors. Render only
+   one at a time; a page-level banner is invisible behind the scrim.
+8. **State** — `panelOpen`, `editingId`, `draft`, `baseline`, `saving`, `confirmingDeleteId`,
+   `deletingId`.
+
+A new directory surface should need no new layout class strings. If it does, the primitive is wrong —
+fix the primitive.
+
+## Overlays
+
+`SidePanel` is for **multi-field** create/edit forms on a list surface. Single-field entities
+(environments, scopes) keep a compact inline add-row: a full-screen overlay to capture one text input
+costs more screen than it saves.
+
+**Controlled, always.** The consumer owns `open`. `onRequestClose` fires from the X, the scrim and
+Escape, and the panel never closes itself — that is precisely what allows the dirty guard to
+interpose, and what lets the client panel refuse to dismiss while a one-time secret is on screen.
+
+**Motion contract.** Enter/exit use `tw-animate-css` (`animate-in` / `animate-out`), the sanctioned
+animation layer. The JS duration constant must match the `duration-*` class on the animated node.
+Never unmount an overlay directly on the open flag — that skips the exit animation; use `usePresence`,
+which keeps the node mounted for the exit and unmounts on a **timer**, because under
+`prefers-reduced-motion` no `animationend` would ever fire.
+
+**Accessibility contract.** `role="dialog" aria-modal="true"`, `aria-labelledby` the title,
+`tabIndex={-1}` on the container, focus trapped, initial focus on `[data-autofocus]` (else the first
+focusable), focus restored to the trigger on close, and body scroll locked with scrollbar-gutter
+compensation so the page does not shift. The scroll lock is reference-counted so a nested dialog
+closing does not unlock the page under an open panel.
+
+**Stacking.** Panel `z-50`, nested dialog `z-[60]`.
+
+<Callout type="warn" title="The panel is a containing block">
+  An animated panel is a transformed element, so `position: fixed` **inside its children** resolves
+  against the panel, not the viewport. Nested overlays must render into their own portal as a sibling
+  of the panel — never inside its `children`, or they are clipped into the panel's width.
+</Callout>
+
+**Dirty guard.** Capture a baseline draft when the panel opens and compare the *persisted projection*
+— trim text, sort unordered id arrays — so reformatting and checkbox order do not read as edits. Show
+`ConfirmDialog` with `emphasis="cancel"` so Enter cannot discard the work. `closePanel` must not reset
+the draft: the panel keeps rendering its children while it animates out, so clearing them slides out
+an empty form.
+
+Long forms pin their actions in the panel `footer` and link the submit button to the form with the
+HTML `form` attribute.
+
+Mobile is not a design target for the admin surface; `w-full` below `sm` is the whole story.
+
+## Empty states
+
+Use `EmptyState` when a list can be empty and there is a create affordance; it owns the CTA. Copy
+names the action, never the layout — **never write "Add one above"**, which stops being true the
+moment the form moves into a panel.
 
 ## Forms
 
 - Labels: `mb-1 block text-sm text-muted-foreground`.
-- Inputs: `w-full rounded-xl border border-brand-muted bg-background px-3 py-2 ...` with
+- Inputs: `w-full rounded-control border border-border bg-background px-3 py-2 ...` with
   `focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand disabled:opacity-50`.
 - Read-only fields: keep the same input classes and add `readOnly disabled`. Do not hide them; show
   them disabled so the user sees the value.
@@ -153,6 +294,10 @@ Cards use `rounded-xl` (not `rounded-full`). Every card heading takes a leading 
   the button with a bare spinner.
 - Track per-row loading with an id field (`uploadingAvatarUserId`, `deletingUserId`, etc.), not a
   boolean, so concurrent actions on different rows remain independent.
+- **`FullPageSpinner` is for the first load only.** A refetch after a mutation must not unmount the
+  page: pass a `silent` flag so the section, its in-flight controls, and any open overlay stay
+  mounted. Give the acting control its own in-flight state — do not let a full-page spinner double as
+  the thing that prevents a second submit.
 
 ## Icons
 
@@ -173,6 +318,8 @@ Icons come from `lucide-react`. Match the established vocabulary:
 | Reset / retry | `RotateCcw` |
 | Audit log / list | `ClipboardList` (audit), `ListTodo` (token activity) |
 | Password | `Lock` |
+| Add / create | `Plus` |
+| General settings | `SlidersHorizontal` |
 | Image placeholder | `ImageIcon` |
 
 Inline icons in flow text: `h-3.5 w-3.5`. Row action icons: `h-4 w-4`. Section-heading icons:
@@ -180,14 +327,30 @@ Inline icons in flow text: `h-3.5 w-3.5`. Row action icons: `h-4 w-4`. Section-h
 
 ## Colors
 
-Prefer semantic tokens over raw Tailwind colors where they exist:
+Always use role tokens; raw Tailwind color ramps are rejected by the lint step.
 
-- Backgrounds: `bg-background`.
-- Text: `text-foreground`, `text-muted-foreground`.
-- Accents: `border-brand`, `border-brand-muted`, `bg-brand`, `bg-brand-muted`.
-- Destructive: red ramp. Success: green/emerald ramp.
+| Purpose | Token |
+|---|---|
+| Page / raised / recessed background | `bg-background`, `bg-surface`, `bg-surface-sunken` |
+| Hover fill | `bg-surface-hover` |
+| Text | `text-foreground`, `text-muted-foreground` |
+| Edges | `border-border` (default hairline), `border-border-strong` (emphasis) |
+| Brand | `bg-brand`, `hover:bg-brand-hover`, `text-brand-fg` |
+| Destructive | `bg-danger-bg`, `hover:bg-danger-bg-hover`, `text-danger-fg`, `border-danger-border` |
+| Success | `bg-success-bg`, `text-success-fg`, `border-success-border` |
+| Warning | `bg-warning-bg`, `text-warning-fg`, `border-warning-border` |
+| Notice (blue) | `bg-accent-bg`, `text-accent-fg` |
+| Status glyphs on a plain background | `text-success-icon`, `text-danger-icon` |
+| Overlay scrim | `bg-scrim` |
 
-Do not introduce new color ramps without a strong reason.
+`--brand-muted` is a pale brand tint for fills, **not** a hover state for a brand-filled control —
+white label text is unreadable on it. Use `--brand-hover`, which darkens in light mode and lightens
+in dark.
+
+The `-icon` roles are a step lighter than the matching `-fg`, which is fine for a glyph (its shape
+also carries the meaning) but not for text. **Status text uses `-fg`.**
+
+Adding a new role means adding it to every theme block in `theme.css`. Do not introduce new raw ramps.
 
 ## Light and dark theme
 
@@ -197,18 +360,14 @@ before paint to avoid a flash. Tailwind's `dark:` variant is wired to that `.dar
 
 Rules when adding UI:
 
-- **Semantic tokens adapt automatically.** `bg-background`, `text-foreground`, `text-muted-foreground`,
-  `border-brand-muted`, etc. resolve via CSS variables that flip per theme — use them and you get both
-  themes for free.
-- **Raw color ramps need both shades.** When you reach for a raw Tailwind color (red/green/emerald/amber
-  for states), write the **light** value as the base class and add a `dark:` counterpart. Carry any
-  `hover:` prefix into the dark variant too (`hover:bg-red-100 dark:hover:bg-red-900/60`).
-  - Error text/bg: `bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-200`
-  - Success: `bg-green-50 text-green-700 dark:bg-green-950/50 dark:text-green-200`
-  - Warning: `bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-200`
-  - Inline status icons: `text-green-600 dark:text-green-400` (and the red equivalent)
-- **`text-white` on `bg-brand` buttons stays as-is** — the brand color is dark blue in both themes, so
-  white label text is correct either way.
+- **Role tokens adapt automatically**, so component code carries **no `dark:` variants at all**. This
+  is the point of the theme: the old rule — write the light class, then repeat it as a `dark:`
+  counterpart, remembering to carry `hover:` into the dark variant too — was a standing source of
+  dark-mode bugs, because the two halves drift.
+- **A portalled overlay still inherits the theme**, since it mounts under `document.body`, inside the
+  themed `<html>`.
+- **The scrim is `bg-scrim`, not a `foreground`-derived fill** — a `--foreground`-based scrim inverts
+  to white in dark mode.
 
 ## State management
 
@@ -237,8 +396,12 @@ admin UI unless there is a reason (e.g. `fetch` with a file upload). See
 ## What to avoid
 
 - `window.confirm`, `window.alert`, `window.prompt`.
-- Toast libraries or modal overlay libraries — inline banners and inline confirmations cover our needs.
+- Toast libraries, and third-party dialog/drawer/overlay component libraries (Radix, Headless UI,
+  framer-motion). Status messaging is inline banners; overlays are the first-party `SidePanel` /
+  `ConfirmDialog`. `tw-animate-css` is the sanctioned animation utility layer.
 - New third-party UI component libraries. Tailwind + `lucide-react` is the stack.
+- Raw Tailwind color ramps, `rounded-xl`, and `border-brand-muted` as a default border — all three
+  fail `npm run lint`.
 - Emojis in UI copy.
-- Sharp-cornered buttons, hard borders without `-muted`, bright primary colors outside the brand
-  tokens.
+- Sharp-cornered buttons and bright primary colors outside the brand tokens.
+- Nesting a bordered container inside another bordered container.
