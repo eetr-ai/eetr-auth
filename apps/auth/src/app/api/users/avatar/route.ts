@@ -4,12 +4,16 @@ import { withApiContext } from "@/lib/context/with-api-context";
 import { newStagedKey, validateImageUpload } from "@/lib/uploads/staged-upload";
 
 /**
- * Stages a user avatar.
+ * Sets a user's avatar, in one call.
  *
- * This no longer replaces the live avatar. The file lands under `staging/` and
- * the returned key is held by the form until it is saved, so cancelling an edit
- * leaves the current picture untouched. Saving promotes it — see
- * `UserService.updateUser`.
+ * This is the public API contract and does not change: upload a file, the
+ * avatar is applied, and the response carries the new key and URL.
+ *
+ * Staging happens inside the request rather than being exposed to the caller —
+ * the file lands under `staging/`, and only a successful user update promotes
+ * it to the live key. A rejected update therefore cannot leave a half-applied
+ * picture behind. Forms that need to defer the change until save use
+ * `POST /api/users/avatar/stage` instead.
  */
 export const POST = withApiContext(async (req, ctx, getServices) => {
 	const authResult = await authenticateSessionOrBearerUser(req, getServices);
@@ -82,5 +86,10 @@ export const POST = withApiContext(async (req, ctx, getServices) => {
 		httpMetadata: { contentType: file.type },
 	});
 
-	return NextResponse.json({ ok: true, stagedKey, contentType: file.type }, { status: 200 });
+	const updated = await userService.updateUser(targetUserId, { avatarStagedKey: stagedKey }, actorUserId);
+
+	return NextResponse.json(
+		{ ok: true, avatarKey: updated.avatarKey, picture: updated.avatarUrl ?? null },
+		{ status: 200 }
+	);
 });

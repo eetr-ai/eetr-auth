@@ -964,8 +964,9 @@ export function getOpenApiDocument(serverUrl?: string) {
 			"/api/admin/site-logo": {
 				post: {
 					tags: ["Admin"],
-					summary: "Upload site logo",
-					description: "Admin-only endpoint for site logo uploads.",
+					summary: "Stage site logo",
+					description:
+						"Admin session only. Validates the file and stores it in the staging area, returning a key. The logo is replaced when that key is saved from Setup → Site identity, so choosing a file and leaving the page changes nothing.",
 					requestBody: {
 						required: true,
 						content: {
@@ -981,7 +982,22 @@ export function getOpenApiDocument(serverUrl?: string) {
 						},
 					},
 					responses: {
-						"200": { description: "Logo uploaded" },
+						"200": {
+							description: "Logo staged",
+							content: {
+								"application/json": {
+									schema: {
+										type: "object",
+										required: ["ok", "stagedKey", "contentType"],
+										properties: {
+											ok: { type: "boolean", example: true },
+											stagedKey: { type: "string", example: "staging/8f1c….png" },
+											contentType: { type: "string", example: "image/png" },
+										},
+									},
+								},
+							},
+						},
 						"400": { description: "Validation error" },
 						"403": { description: "Forbidden" },
 						"500": { description: "Storage not configured" },

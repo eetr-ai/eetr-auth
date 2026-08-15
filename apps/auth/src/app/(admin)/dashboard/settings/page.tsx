@@ -9,7 +9,7 @@ import type {
 import { UserCircle } from "lucide-react";
 import { FullPageSpinner, PageHeader } from "@/components/ui";
 import {
-	updateDisplayName,
+	updateProfile,
 	changePassword,
 	getAdminPasswordPolicy,
 } from "@/app/actions/user-settings-actions";
@@ -49,11 +49,15 @@ export default function SettingsPage() {
 	const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
 	const [profilePending, startProfileTransition] = useTransition();
 
-	// Avatar
+	// Avatar. Picking a file only stages it; the profile form applies it on save.
 	const avatarInputRef = useRef<HTMLInputElement>(null);
 	const [avatarUploading, setAvatarUploading] = useState(false);
 	const [avatarError, setAvatarError] = useState<string | null>(null);
 	const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+	const [avatarStagedKey, setAvatarStagedKey] = useState<string | null>(null);
+	// The object URL behind the local preview, kept so it can be released when
+	// replaced or on unmount.
+	const avatarObjectUrlRef = useRef<string | null>(null);
 
 	// Passkey
 	const [passkeys, setPasskeys] = useState<PasskeyItem[] | null>(null);
@@ -103,6 +107,13 @@ export default function SettingsPage() {
 		void getAdminPasswordPolicy().then(setAdminPolicy);
 	}, []);
 
+	useEffect(
+		() => () => {
+			if (avatarObjectUrlRef.current) URL.revokeObjectURL(avatarObjectUrlRef.current);
+		},
+		[],
+	);
+
 	const loadPasskeys = useCallback(async () => {
 		try {
 			const res = await fetch("/api/users/passkey");
@@ -136,9 +147,15 @@ export default function SettingsPage() {
 		e.preventDefault();
 		setProfileError(null);
 		setProfileSuccess(null);
+		// A photo still uploading has no staged key yet, so saving now would report
+		// success while silently dropping the picture.
+		if (avatarUploading) return;
 		startProfileTransition(async () => {
 			try {
-				await updateDisplayName(displayName);
+				await updateProfile({ name: displayName, avatarStagedKey });
+				// The local preview already shows the saved image, and re-reading the
+				// CDN URL here could serve the previous picture from cache.
+				setAvatarStagedKey(null);
 				setProfileSuccess("Profile updated.");
 			} catch (err) {
 				setProfileError(err instanceof Error ? err.message : "Failed to update profile.");
@@ -151,15 +168,25 @@ export default function SettingsPage() {
 		e.target.value = "";
 		if (!file || !user?.id) return;
 		setAvatarError(null);
+		setProfileSuccess(null);
 		setAvatarUploading(true);
 		try {
 			const body = new FormData();
 			body.set("userId", user.id);
 			body.set("file", file);
-			const res = await fetch("/api/users/avatar", { method: "POST", body });
-			const json = (await res.json()) as { picture?: string; error_description?: string; error?: string };
-			if (!res.ok) throw new Error(json.error_description ?? json.error ?? "Upload failed.");
-			if (json.picture) setAvatarPreview(json.picture);
+			const res = await fetch("/api/users/avatar/stage", { method: "POST", body });
+			const json = (await res.json().catch(() => null)) as
+				| { stagedKey?: string; error_description?: string; error?: string }
+				| null;
+			if (!res.ok || !json?.stagedKey) {
+				throw new Error(json?.error_description ?? json?.error ?? "Upload failed.");
+			}
+			setAvatarStagedKey(json.stagedKey);
+			// Preview the local file rather than the staged object: the staging area
+			// is not public, so its key has no URL the browser could load.
+			if (avatarObjectUrlRef.current) URL.revokeObjectURL(avatarObjectUrlRef.current);
+			avatarObjectUrlRef.current = URL.createObjectURL(file);
+			setAvatarPreview(avatarObjectUrlRef.current);
 		} catch (err) {
 			setAvatarError(err instanceof Error ? err.message : "Failed to upload avatar.");
 		} finally {
@@ -436,6 +463,7 @@ export default function SettingsPage() {
 					username={user.username ?? ""}
 					avatarPreview={avatarPreview}
 					avatarUploading={avatarUploading}
+					avatarPending={avatarStagedKey !== null}
 					avatarInputRef={avatarInputRef}
 					onAvatarChange={handleAvatarChange}
 					pending={profilePending}

@@ -289,6 +289,20 @@ Uploads are **staged**, never written straight to their final location.
 Cancelling therefore leaves the current avatar or logo exactly as it was, and a
 rejected file never overwrites a good one.
 
+<Callout title="Staging is a form pattern, not an API change">
+  Two steps only make sense where there is a Save button to press. The public
+  API stays one call: `POST /api/users/avatar` sets the avatar and answers with
+  `{ ok, avatarKey, picture }`, exactly as it always has — it stages and
+  promotes inside the request, so the hop is an implementation detail rather
+  than something callers must learn.
+
+  Forms use the session-only `POST /api/users/avatar/stage`, which returns
+  `{ ok, stagedKey, contentType }` and applies nothing. Never change an existing
+  endpoint's response shape to add a form pattern: an integration that was
+  reading `picture` would break with no error, and the picture would silently
+  stop updating.
+</Callout>
+
 <Callout type="warn" title="Only promote from staging">
   `promoteStagedUpload` refuses any key outside the `staging/` prefix, and any
   key containing a path separator or `..`. The key comes from the client, so

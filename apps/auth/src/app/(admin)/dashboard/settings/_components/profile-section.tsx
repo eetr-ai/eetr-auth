@@ -8,6 +8,8 @@ interface ProfileSectionProps {
 	username: string;
 	avatarPreview: string | null;
 	avatarUploading: boolean;
+	/** A photo has been staged and applies when the form is saved. */
+	avatarPending: boolean;
 	avatarInputRef: RefObject<HTMLInputElement | null>;
 	onAvatarChange: (e: ChangeEvent<HTMLInputElement>) => void;
 	pending: boolean;
@@ -22,6 +24,7 @@ export function ProfileSection({
 	username,
 	avatarPreview,
 	avatarUploading,
+	avatarPending,
 	avatarInputRef,
 	onAvatarChange,
 	pending,
@@ -65,7 +68,9 @@ export function ProfileSection({
 					>
 						{avatarUploading ? "Uploading…" : "Change avatar"}
 					</Button>
-					<p className="mt-1 text-xs text-muted-foreground">JPEG, PNG, or WEBP · Max 5 MB</p>
+					<p className="mt-1 text-xs text-muted-foreground">
+						{avatarPending ? "Applied when you save." : "JPEG, PNG, or WEBP · Max 5 MB"}
+					</p>
 				</div>
 			</div>
 

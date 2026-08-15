@@ -25,8 +25,6 @@ const EXTENSION_BY_MIME_TYPE: Record<string, string> = {
 	"image/webp": "webp",
 };
 
-export const ALLOWED_IMAGE_MIME_TYPES = Object.keys(EXTENSION_BY_MIME_TYPE);
-
 /** Returns a human-readable reason the upload is unacceptable, or null. */
 export function validateImageUpload(file: { type: string; size: number }): string | null {
 	if (!EXTENSION_BY_MIME_TYPE[file.type]) {
@@ -41,7 +39,7 @@ export function validateImageUpload(file: { type: string; size: number }): strin
 	return null;
 }
 
-export function extensionForMimeType(contentType: string): string {
+function extensionForMimeType(contentType: string): string {
 	return EXTENSION_BY_MIME_TYPE[contentType] ?? "bin";
 }
 
@@ -136,17 +134,4 @@ export async function promoteStagedUpload(
 	}
 
 	return finalKey;
-}
-
-/** Best-effort discard, for when a form is cancelled. Never throws. */
-export async function discardStagedUpload(
-	bucket: AssetBucket,
-	stagedKey: string,
-): Promise<void> {
-	if (!isStagedKey(stagedKey)) return;
-	try {
-		await bucket.delete(stagedKey);
-	} catch {
-		// Same as above: the lifecycle rule is the backstop.
-	}
 }

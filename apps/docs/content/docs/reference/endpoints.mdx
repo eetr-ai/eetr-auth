@@ -38,7 +38,8 @@ All paths are relative to your issuer base URL (e.g. `https://auth.yourdomain.co
 | Method | Path | Purpose |
 |---|---|---|
 | GET/POST | `/api/users` | User self-service |
-| POST | `/api/users/avatar` | Avatar upload (R2 via Images API) |
+| POST | `/api/users/avatar` | Set the avatar in one call (session or bearer) |
+| POST | `/api/users/avatar/stage` | Stage an avatar for a form to apply on save (session only) |
 | POST | `/api/users/email-verification/request` | Request an email-verification code |
 | POST | `/api/users/email-verification/verify` | Verify an email-verification code |
 | GET/POST | `/api/users/passkey` | List / manage the user's passkeys |
@@ -54,7 +55,7 @@ All paths are relative to your issuer base URL (e.g. `https://auth.yourdomain.co
 |---|---|---|
 | GET/POST | `/api/admin/users` | List / create users |
 | GET/PATCH/DELETE | `/api/admin/users/[id]` | Read / update / delete a user |
-| POST | `/api/admin/site-logo` | Upload the site logo |
+| POST | `/api/admin/site-logo` | Stage the site logo; applied when Site identity is saved |
 
 <Callout type="warn" title="Protect the admin endpoints">
   `/api/admin/*` is bearer-token protected in-app, but should additionally sit behind an IP allowlist

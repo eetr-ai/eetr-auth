@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
 	STAGING_PREFIX,
 	StagedUploadError,
-	discardStagedUpload,
 	isStagedKey,
 	newStagedKey,
 	promoteStagedUpload,
@@ -146,30 +145,5 @@ describe("promoteStagedUpload", () => {
 			"avatars/u1.png",
 		);
 		expect(bucket.store["avatars/u1.png"]).toBe("bytes");
-	});
-});
-
-describe("discardStagedUpload", () => {
-	it("deletes a staged object", async () => {
-		const staged = newStagedKey("image/png");
-		const bucket = createBucket({ [staged]: "bytes" });
-		await discardStagedUpload(bucket, staged);
-		expect(bucket.store[staged]).toBeUndefined();
-	});
-
-	it("ignores keys outside staging", async () => {
-		const bucket = createBucket({ "avatars/u1.png": "bytes" });
-		await discardStagedUpload(bucket, "avatars/u1.png");
-		expect(bucket.delete).not.toHaveBeenCalled();
-		expect(bucket.store["avatars/u1.png"]).toBe("bytes");
-	});
-
-	it("never throws when the bucket fails", async () => {
-		const staged = newStagedKey("image/png");
-		const bucket = createBucket({ [staged]: "bytes" });
-		bucket.delete = vi.fn(async () => {
-			throw new Error("R2 unavailable");
-		});
-		await expect(discardStagedUpload(bucket, staged)).resolves.toBeUndefined();
 	});
 });

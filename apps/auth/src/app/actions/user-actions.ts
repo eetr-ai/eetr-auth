@@ -73,7 +73,9 @@ export async function updateUser(
 		...(updates.emailVerifiedAt !== undefined ? { emailVerifiedAt: updates.emailVerifiedAt } : {}),
 		...(updates.password !== undefined ? { password: updates.password } : {}),
 		...(updates.isAdmin !== undefined ? { isAdmin: updates.isAdmin } : {}),
-		...(updates.avatarKey !== undefined ? { avatarKey: updates.avatarKey } : {}),
+		// avatarKey is deliberately not accepted here: an avatar is set by staging an
+		// upload and passing avatarStagedKey, and a second path that writes the key
+		// straight through would skip that validation entirely.
 		...(updates.avatarStagedKey !== undefined
 			? { avatarStagedKey: updates.avatarStagedKey }
 			: {}),

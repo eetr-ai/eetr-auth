@@ -204,7 +204,7 @@ export default function UsersPage() {
 			const formData = new FormData();
 			formData.set("userId", userId);
 			formData.set("file", file);
-			const response = await fetch("/api/users/avatar", { method: "POST", body: formData });
+			const response = await fetch("/api/users/avatar/stage", { method: "POST", body: formData });
 			const payload = (await response.json().catch(() => null)) as
 				| { stagedKey?: string; error_description?: string; error?: string }
 				| null;
