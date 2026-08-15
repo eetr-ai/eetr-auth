@@ -6,9 +6,9 @@ export type IconButtonVariant = "default" | "danger";
 
 const iconButtonVariants: Record<IconButtonVariant, string> = {
 	default:
-		"rounded-full p-1.5 text-muted-foreground hover:bg-brand-muted/30 hover:text-foreground disabled:opacity-50",
+		"rounded-full p-1.5 text-muted-foreground hover:bg-surface-hover hover:text-foreground disabled:opacity-50",
 	danger:
-		"rounded-full p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-700 disabled:opacity-50 dark:hover:bg-red-950/50 dark:hover:text-red-200",
+		"rounded-full p-1.5 text-muted-foreground hover:bg-danger-bg hover:text-danger-fg disabled:opacity-50",
 };
 
 export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
