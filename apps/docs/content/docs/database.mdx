@@ -73,12 +73,27 @@ The database is organized around users, OAuth clients, tokens, and environments:
     tokens ||--o| refresh_tokens : paired_with
     tokens ||--o{ token_activity_log : logged_in
     environments ||--o{ users_environments : grants
+    users ||--o{ user_consents : granted
+    clients ||--o{ user_consents : consented_to
     password_policies ||--o{ password_policy_environments : assigned_to
 `} />
 
 Key tables include `users`, `user_totp` (encrypted TOTP secrets), `clients`, `environments`,
-`scopes`, `authorization_codes`, `tokens`, `refresh_tokens`, `passkeys`, `password_policies`, and
-`token_activity_log`.
+`scopes`, `user_consents`, `authorization_codes`, `tokens`, `refresh_tokens`, `passkeys`,
+`password_policies`, and `token_activity_log`.
+
+`user_consents` records what an end user has authorized: one row per (user, client) holding the
+accumulated union of consented scope names. The authorize flow skips the consent screen when that
+set already covers every requested scope, and deleting a row withdraws consent.
+
+<Callout type="warn" title="Identifiers vs labels">
+  `environments.name` and `scopes.scope_name` are **identifiers**, not display text.
+  `environments.name` is emitted as the `environment` JWT claim, is the `environmentName` field on
+  `POST /api/token/validate`, and is denormalized into `token_activity_log.environment_name`;
+  `scopes.scope_name` is the protocol token clients send in `scope`. Renaming either changes
+  behaviour. Each has a nullable `display_name` beside it for the human-facing label, and `scopes`
+  additionally has a `description` for consent-screen copy.
+</Callout>
 
 ## Creating an admin user
 

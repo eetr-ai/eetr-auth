@@ -1,5 +1,5 @@
 -- eetr-auth D1 schema (SQLite)
--- Current schema version: 0.5.0
+-- Current schema version: 0.6.0
 -- Apply with: npm run db:schema (fresh local), npm run db:schema:remote (fresh remote),
 -- or the db:migrate variants when upgrading an existing environment
 
@@ -13,13 +13,23 @@ CREATE TABLE IF NOT EXISTS schema_metadata (
 );
 
 INSERT INTO schema_metadata (key, value)
-VALUES ('schema_version', '0.5.0')
+VALUES ('schema_version', '0.6.0')
 ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 
 -- Environments (e.g. development, staging, production)
+--
+-- `name` is the stable IDENTIFIER, not a label: it is emitted as the `environment` JWT
+-- claim, it is the `environmentName` callers send to POST /api/token/validate, and it is
+-- denormalized into token_activity_log.environment_name. Renaming it breaks live token
+-- validation and orphans historical log rows.
+--
+-- `display_name` is the human-facing label used by the admin UI only. NULL means "no
+-- label set" and every surface falls back to `name`, so the label tracks a rename until
+-- an admin sets one explicitly.
 CREATE TABLE IF NOT EXISTS environments (
   id TEXT PRIMARY KEY,
-  name TEXT NOT NULL
+  name TEXT NOT NULL,
+  display_name TEXT
 );
 
 -- Users (only is_admin users can access dashboard)
@@ -92,9 +102,17 @@ CREATE TABLE IF NOT EXISTS redirect_uris (
 CREATE INDEX IF NOT EXISTS idx_redirect_uris_client_id ON redirect_uris(client_id);
 
 -- Scopes (global scope definitions)
+--
+-- `scope_name` is the protocol token (what the client puts in the `scope` parameter).
+-- `display_name` and `description` are the human-readable copy shown on the consent
+-- screen; both are optional and the consent UI falls back to `scope_name` when they are
+-- NULL. Neither affects protocol behaviour or discovery (`scopes_supported` publishes
+-- `scope_name` only).
 CREATE TABLE IF NOT EXISTS scopes (
   id TEXT PRIMARY KEY,
-  scope_name TEXT NOT NULL UNIQUE
+  scope_name TEXT NOT NULL UNIQUE,
+  display_name TEXT,
+  description TEXT
 );
 
 -- Default OIDC scopes. Seeded so a fresh install can perform OpenID Connect out of the box:
@@ -103,10 +121,10 @@ CREATE TABLE IF NOT EXISTS scopes (
 -- the scopes -- an admin still grants them to specific clients, and the client must request
 -- them (or request no scope, which defaults to all of its grants). INSERT OR IGNORE against
 -- the UNIQUE(scope_name) constraint keeps this replay-safe.
-INSERT OR IGNORE INTO scopes (id, scope_name) VALUES
-  (lower(hex(randomblob(16))), 'openid'),
-  (lower(hex(randomblob(16))), 'profile'),
-  (lower(hex(randomblob(16))), 'email');
+INSERT OR IGNORE INTO scopes (id, scope_name, display_name, description) VALUES
+  (lower(hex(randomblob(16))), 'openid', 'Sign you in', 'Verify your identity and sign you in.'),
+  (lower(hex(randomblob(16))), 'profile', 'Your basic profile', 'See your name and profile picture.'),
+  (lower(hex(randomblob(16))), 'email', 'Your email address', 'See your email address and whether it is verified.');
 
 -- Client-scope assignments (which scopes a client can request)
 CREATE TABLE IF NOT EXISTS client_scopes (
@@ -120,6 +138,31 @@ CREATE TABLE IF NOT EXISTS client_scopes (
 
 CREATE INDEX IF NOT EXISTS idx_client_scopes_client_id ON client_scopes(client_id);
 CREATE INDEX IF NOT EXISTS idx_client_scopes_scope_id ON client_scopes(scope_id);
+
+-- Recorded end-user consent. One row per (user, client) holding the accumulated union of
+-- the scope NAMES that user has consented to for that client, space-delimited and sorted.
+--
+-- Stored as text rather than a link table on purpose: a consent record must survive a scope
+-- later being ungranted from the client (or deleted outright), and it parses with the same
+-- whitespace splitting used everywhere else for the `scope` parameter.
+--
+-- The authorize flow skips the consent screen when this set already covers every requested
+-- scope. Deleting a row withdraws consent, so the next authorize prompts again.
+CREATE TABLE IF NOT EXISTS user_consents (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  -- clients.id (the internal row id), not clients.client_id.
+  client_id TEXT NOT NULL,
+  scopes TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(user_id, client_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_consents_user_id ON user_consents(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_consents_client_id ON user_consents(client_id);
 
 -- Named password policies (complexity rules + max password age). Assigned to
 -- environments via password_policy_environments.
