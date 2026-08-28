@@ -9,7 +9,9 @@ function createScopeRepoMock(): ScopeRepository {
 	return {
 		list: vi.fn(),
 		getById: vi.fn(),
+		listByNames: vi.fn(),
 		create: vi.fn(),
+		update: vi.fn(),
 		delete: vi.fn(),
 		countClientScopes: vi.fn(),
 	};
@@ -40,7 +42,13 @@ describe("ScopeService", () => {
 	});
 
 	function makeScope(overrides?: Partial<Scope>): Scope {
-		return { id: "scope-1", scopeName: "read:users", ...overrides };
+		return {
+			id: "scope-1",
+			scopeName: "read:users",
+			displayName: null,
+			description: null,
+			...overrides,
+		};
 	}
 
 	describe("list", () => {
@@ -65,25 +73,113 @@ describe("ScopeService", () => {
 		});
 	});
 
+	describe("listByNames", () => {
+		it("delegates to the repo so consent copy can be resolved per request", async () => {
+			vi.mocked(mockRepo.listByNames).mockResolvedValue([makeScope()]);
+			const service = createService(mockRepo);
+			await expect(service.listByNames(["read:users"])).resolves.toEqual([makeScope()]);
+			expect(mockRepo.listByNames).toHaveBeenCalledWith(["read:users"]);
+		});
+	});
+
 	describe("create", () => {
 		it("creates a scope with a generated UUID and trimmed name", async () => {
 			const service = createService(mockRepo);
 			const result = await service.create("  read:users  ");
-			expect(mockRepo.create).toHaveBeenCalledWith("new-scope-id", "read:users");
-			expect(result).toEqual({ id: "new-scope-id", scopeName: "read:users" });
+			expect(mockRepo.create).toHaveBeenCalledWith("new-scope-id", "read:users", {
+				displayName: null,
+				description: null,
+			});
+			expect(result).toEqual({
+				id: "new-scope-id",
+				scopeName: "read:users",
+				displayName: null,
+				description: null,
+			});
+		});
+
+		it("trims consent copy and stores it alongside the name", async () => {
+			const service = createService(mockRepo);
+			const result = await service.create("read:users", {
+				displayName: "  Your users  ",
+				description: "  See the users in your account.  ",
+			});
+			expect(mockRepo.create).toHaveBeenCalledWith("new-scope-id", "read:users", {
+				displayName: "Your users",
+				description: "See the users in your account.",
+			});
+			expect(result.displayName).toBe("Your users");
+		});
+
+		it("collapses blank consent copy to null so 'no copy' has one representation", async () => {
+			const service = createService(mockRepo);
+			await service.create("read:users", { displayName: "   ", description: "" });
+			expect(mockRepo.create).toHaveBeenCalledWith("new-scope-id", "read:users", {
+				displayName: null,
+				description: null,
+			});
 		});
 
 		it("writes a scope.create audit entry attributed to the actor", async () => {
 			const insert = vi.fn();
 			const service = createService(mockRepo, createAuditLogService(insert));
-			await service.create("  read:users  ", "admin-1");
+			await service.create("  read:users  ", {}, "admin-1");
 			expect(insert).toHaveBeenCalledWith(
 				expect.objectContaining({
 					actor_user_id: "admin-1",
 					action: "scope.create",
 					resource_type: "scope",
 					resource_id: "new-scope-id",
-					details: JSON.stringify({ scopeName: "read:users" }),
+					details: JSON.stringify({
+						scopeName: "read:users",
+						displayName: null,
+						description: null,
+					}),
+				})
+			);
+		});
+	});
+
+	describe("update", () => {
+		it("returns null when the scope does not exist", async () => {
+			vi.mocked(mockRepo.getById).mockResolvedValue(null);
+			const service = createService(mockRepo);
+			await expect(service.update("missing", { displayName: "x", description: null })).resolves.toBeNull();
+			expect(mockRepo.update).not.toHaveBeenCalled();
+		});
+
+		it("updates only the consent copy, never the protocol scope name", async () => {
+			vi.mocked(mockRepo.getById).mockResolvedValue(makeScope());
+			const service = createService(mockRepo);
+			const result = await service.update("scope-1", {
+				displayName: "  Your users  ",
+				description: null,
+			});
+			expect(mockRepo.update).toHaveBeenCalledWith("scope-1", {
+				displayName: "Your users",
+				description: null,
+			});
+			expect(result?.scopeName).toBe("read:users");
+		});
+
+		it("writes a scope.update audit entry capturing both sides of the change", async () => {
+			vi.mocked(mockRepo.getById).mockResolvedValue(
+				makeScope({ displayName: "Old label", description: "Old copy." })
+			);
+			const insert = vi.fn();
+			const service = createService(mockRepo, createAuditLogService(insert));
+			await service.update("scope-1", { displayName: "New label", description: null }, "admin-1");
+			expect(insert).toHaveBeenCalledWith(
+				expect.objectContaining({
+					actor_user_id: "admin-1",
+					action: "scope.update",
+					resource_type: "scope",
+					resource_id: "scope-1",
+					details: JSON.stringify({
+						scopeName: "read:users",
+						from: { displayName: "Old label", description: "Old copy." },
+						to: { displayName: "New label", description: null },
+					}),
 				})
 			);
 		});

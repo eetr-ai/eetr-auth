@@ -31,6 +31,7 @@ export const AUDIT_ACTION = {
 
 	// Setup: scopes
 	scopeCreate: "scope.create",
+	scopeUpdate: "scope.update",
 	scopeDelete: "scope.delete",
 
 	// Setup: password policies

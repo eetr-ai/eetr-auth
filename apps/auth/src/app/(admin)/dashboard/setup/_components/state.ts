@@ -27,6 +27,11 @@ export enum SetupPageActionType {
 	SET_LOADING = "SET_LOADING",
 	SET_ENV_NAME = "SET_ENV_NAME",
 	SET_SCOPE_NAME = "SET_SCOPE_NAME",
+	SET_SCOPE_DISPLAY_NAME = "SET_SCOPE_DISPLAY_NAME",
+	SET_SCOPE_DESCRIPTION = "SET_SCOPE_DESCRIPTION",
+	SET_EDITING_SCOPE_ID = "SET_EDITING_SCOPE_ID",
+	SET_EDITING_SCOPE_DISPLAY_NAME = "SET_EDITING_SCOPE_DISPLAY_NAME",
+	SET_EDITING_SCOPE_DESCRIPTION = "SET_EDITING_SCOPE_DESCRIPTION",
 	SET_EDITING_ENV_ID = "SET_EDITING_ENV_ID",
 	SET_EDITING_ENV_NAME = "SET_EDITING_ENV_NAME",
 	SET_ENV_ERROR = "SET_ENV_ERROR",
@@ -57,8 +62,15 @@ export interface SetupPageState {
 	loading: boolean;
 	envName: string;
 	scopeName: string;
+	/** Consent-screen copy for the scope being added in the inline add-row. */
+	scopeDisplayName: string;
+	scopeDescription: string;
 	editingEnvId: string | null;
 	editingEnvName: string;
+	/** Scope whose consent copy is being edited inline; null when nothing is open. */
+	editingScopeId: string | null;
+	editingScopeDisplayName: string;
+	editingScopeDescription: string;
 	envError: string | null;
 	/** In flight for an environment create/update/delete, to block double submits. */
 	envSaving: boolean;
@@ -92,8 +104,13 @@ export const initialState: SetupPageState = {
 	loading: true,
 	envName: "",
 	scopeName: "",
+	scopeDisplayName: "",
+	scopeDescription: "",
 	editingEnvId: null,
 	editingEnvName: "",
+	editingScopeId: null,
+	editingScopeDisplayName: "",
+	editingScopeDescription: "",
 	envError: null,
 	envSaving: false,
 	scopeError: null,
@@ -138,6 +155,16 @@ export function reducer(
 			return { ...state, envName: (action.data as string) ?? "" };
 		case SetupPageActionType.SET_SCOPE_NAME:
 			return { ...state, scopeName: (action.data as string) ?? "" };
+		case SetupPageActionType.SET_SCOPE_DISPLAY_NAME:
+			return { ...state, scopeDisplayName: (action.data as string) ?? "" };
+		case SetupPageActionType.SET_SCOPE_DESCRIPTION:
+			return { ...state, scopeDescription: (action.data as string) ?? "" };
+		case SetupPageActionType.SET_EDITING_SCOPE_ID:
+			return { ...state, editingScopeId: (action.data as string | null) ?? null };
+		case SetupPageActionType.SET_EDITING_SCOPE_DISPLAY_NAME:
+			return { ...state, editingScopeDisplayName: (action.data as string) ?? "" };
+		case SetupPageActionType.SET_EDITING_SCOPE_DESCRIPTION:
+			return { ...state, editingScopeDescription: (action.data as string) ?? "" };
 		case SetupPageActionType.SET_EDITING_ENV_ID:
 			return { ...state, editingEnvId: (action.data as string | null) ?? null };
 		case SetupPageActionType.SET_EDITING_ENV_NAME:

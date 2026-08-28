@@ -13,6 +13,7 @@ import {
 import {
 	listScopes,
 	createScope,
+	updateScope,
 	deleteScope,
 } from "@/app/actions/scope-actions";
 import {
@@ -71,8 +72,13 @@ function SetupPageContent() {
 		loading,
 		envName,
 		scopeName,
+		scopeDisplayName,
+		scopeDescription,
 		editingEnvId,
 		editingEnvName,
+		editingScopeId,
+		editingScopeDisplayName,
+		editingScopeDescription,
 		envError,
 		envSaving,
 		scopeError,
@@ -230,13 +236,45 @@ function SetupPageContent() {
 		if (!name) return;
 		dispatch({ type: SetupPageActionType.SET_SCOPE_SAVING, data: true });
 		try {
-			await createScope(name);
+			await createScope(name, scopeDisplayName, scopeDescription);
 			dispatch({ type: SetupPageActionType.SET_SCOPE_NAME, data: "" });
+			dispatch({ type: SetupPageActionType.SET_SCOPE_DISPLAY_NAME, data: "" });
+			dispatch({ type: SetupPageActionType.SET_SCOPE_DESCRIPTION, data: "" });
 			await load({ silent: true });
 		} catch (err) {
 			dispatch({
 				type: SetupPageActionType.SET_SCOPE_ERROR,
 				data: err instanceof Error ? err.message : "Failed to create scope",
+			});
+		} finally {
+			dispatch({ type: SetupPageActionType.SET_SCOPE_SAVING, data: false });
+		}
+	};
+
+	const handleUpdateScope = async (e: React.FormEvent) => {
+		e.preventDefault();
+		if (!editingScopeId) return;
+		dispatch({ type: SetupPageActionType.SET_SCOPE_ERROR, data: null });
+		dispatch({ type: SetupPageActionType.SET_SCOPE_SAVING, data: true });
+		try {
+			const updated = await updateScope(
+				editingScopeId,
+				editingScopeDisplayName,
+				editingScopeDescription
+			);
+			if (updated) {
+				dispatch({ type: SetupPageActionType.SET_EDITING_SCOPE_ID, data: null });
+				await load({ silent: true });
+			} else {
+				dispatch({
+					type: SetupPageActionType.SET_SCOPE_ERROR,
+					data: "Scope no longer exists",
+				});
+			}
+		} catch (err) {
+			dispatch({
+				type: SetupPageActionType.SET_SCOPE_ERROR,
+				data: err instanceof Error ? err.message : "Failed to update scope",
 			});
 		} finally {
 			dispatch({ type: SetupPageActionType.SET_SCOPE_SAVING, data: false });
@@ -528,9 +566,15 @@ function SetupPageContent() {
 						saving={scopeSaving}
 						scopes={scopes}
 						scopeName={scopeName}
+						scopeDisplayName={scopeDisplayName}
+						scopeDescription={scopeDescription}
+						editingScopeId={editingScopeId}
+						editingScopeDisplayName={editingScopeDisplayName}
+						editingScopeDescription={editingScopeDescription}
 						scopeError={scopeError}
 						dispatch={dispatch}
 						onCreate={handleCreateScope}
+						onUpdate={handleUpdateScope}
 						onDelete={handleDeleteScope}
 					/>
 				}

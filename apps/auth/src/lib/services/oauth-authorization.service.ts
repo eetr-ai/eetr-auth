@@ -1,5 +1,5 @@
 import type { ClientRepository } from "@/lib/repositories/client.repository";
-import type { TokenRepository } from "@/lib/repositories/token.repository";
+import type { ClientScopeGrant, TokenRepository } from "@/lib/repositories/token.repository";
 import type { AuthorizationCodeRepository } from "@/lib/repositories/authorization-code.repository";
 import type { UserRepository } from "@/lib/repositories/admin.repository";
 import { OAuthServiceError } from "./oauth.types";
@@ -57,6 +57,24 @@ export class OauthAuthorizationService {
 		this.tokenRepo = tokenRepo;
 		this.authorizationCodeRepo = authorizationCodeRepo;
 		this.userRepo = userRepo;
+	}
+
+
+	/**
+	 * Resolve the scope grants an authorize request actually covers.
+	 *
+	 * An authorize request with no `scope` means "every scope this client is granted" --
+	 * the OAuth default this server has always applied. That rule lives here so the
+	 * consent screen shows exactly the set `authorize` will bind to the code, rather than
+	 * re-deriving it and risking the two drifting apart.
+	 */
+	async resolveClientScopeGrants(
+		clientRowId: string,
+		requestedScopeNames: string[]
+	): Promise<ClientScopeGrant[]> {
+		return requestedScopeNames.length > 0
+			? this.tokenRepo.getClientScopeGrantsByNames(clientRowId, requestedScopeNames)
+			: this.tokenRepo.getClientScopeGrants(clientRowId);
 	}
 
 	async authorize(params: AuthorizeRequestParams): Promise<{ redirectTo: string }> {
@@ -131,10 +149,7 @@ export class OauthAuthorizationService {
 		}
 
 		const requestedScopes = parseScopeParam(params.scope ?? undefined);
-		const grants =
-			requestedScopes.length > 0
-				? await this.tokenRepo.getClientScopeGrantsByNames(client.id, requestedScopes)
-				: await this.tokenRepo.getClientScopeGrants(client.id);
+		const grants = await this.resolveClientScopeGrants(client.id, requestedScopes);
 
 		if (requestedScopes.length > 0 && grants.length !== requestedScopes.length) {
 			throw new OAuthServiceError(

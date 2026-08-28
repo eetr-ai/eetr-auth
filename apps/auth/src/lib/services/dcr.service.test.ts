@@ -39,12 +39,14 @@ function createEnvRepoMock(exists = true): EnvironmentRepository {
 function createScopeRepoMock(): ScopeRepository {
 	return {
 		list: vi.fn().mockResolvedValue([
-			{ id: "scope-openid", scopeName: "openid" },
-			{ id: "scope-profile", scopeName: "profile" },
-			{ id: "scope-email", scopeName: "email" },
+			{ id: "scope-openid", scopeName: "openid", displayName: null, description: null },
+			{ id: "scope-profile", scopeName: "profile", displayName: null, description: null },
+			{ id: "scope-email", scopeName: "email", displayName: null, description: null },
 		]),
 		getById: vi.fn(),
+		listByNames: vi.fn(),
 		create: vi.fn(),
+		update: vi.fn(),
 		delete: vi.fn(),
 		countClientScopes: vi.fn(),
 	};

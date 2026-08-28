@@ -1,6 +1,19 @@
-import type { Scope, ScopeRepository } from "@/lib/repositories/scope.repository";
+import type { Scope, ScopeCopy, ScopeRepository } from "@/lib/repositories/scope.repository";
 import type { AdminAuditLogService } from "./admin-audit-log.service";
 import { AUDIT_ACTION, AUDIT_RESOURCE } from "./audit-actions";
+
+/**
+ * Trim consent copy and collapse blank input to NULL, so "no copy" is a single
+ * representation in the database rather than an empty string the UI has to special-case.
+ */
+function normalizeCopy(copy: Partial<ScopeCopy>): ScopeCopy {
+	const displayName = copy.displayName?.trim();
+	const description = copy.description?.trim();
+	return {
+		displayName: displayName ? displayName : null,
+		description: description ? description : null,
+	};
+}
 
 export interface ScopeServiceDependencies {
 	scopeRepo: ScopeRepository;
@@ -24,18 +37,55 @@ export class ScopeService {
 		return this.scopeRepo.getById(id);
 	}
 
-	async create(scopeName: string, actorUserId: string | null = null): Promise<Scope> {
+	async listByNames(scopeNames: string[]): Promise<Scope[]> {
+		return this.scopeRepo.listByNames(scopeNames);
+	}
+
+	async create(
+		scopeName: string,
+		copy: Partial<ScopeCopy> = {},
+		actorUserId: string | null = null
+	): Promise<Scope> {
 		const name = scopeName.trim();
 		const id = crypto.randomUUID();
-		await this.scopeRepo.create(id, name);
+		const normalized = normalizeCopy(copy);
+		await this.scopeRepo.create(id, name, normalized);
 		await this.adminAuditLogService.logAction({
 			actorUserId,
 			action: AUDIT_ACTION.scopeCreate,
 			resourceType: AUDIT_RESOURCE.scope,
 			resourceId: id,
-			details: { scopeName: name },
+			details: { scopeName: name, ...normalized },
 		});
-		return { id, scopeName: name };
+		return { id, scopeName: name, ...normalized };
+	}
+
+	/**
+	 * Update a scope's consent copy. `scopeName` is the protocol token clients send in
+	 * `scope` and is deliberately not editable -- renaming it would silently break every
+	 * client already requesting it, and every client_scopes grant referencing it.
+	 */
+	async update(
+		id: string,
+		copy: Partial<ScopeCopy>,
+		actorUserId: string | null = null
+	): Promise<Scope | null> {
+		const existing = await this.scopeRepo.getById(id);
+		if (!existing) return null;
+		const normalized = normalizeCopy(copy);
+		await this.scopeRepo.update(id, normalized);
+		await this.adminAuditLogService.logAction({
+			actorUserId,
+			action: AUDIT_ACTION.scopeUpdate,
+			resourceType: AUDIT_RESOURCE.scope,
+			resourceId: id,
+			details: {
+				scopeName: existing.scopeName,
+				from: { displayName: existing.displayName, description: existing.description },
+				to: normalized,
+			},
+		});
+		return { ...existing, ...normalized };
 	}
 
 	async delete(id: string, actorUserId: string | null = null): Promise<{ ok: boolean; error?: string }> {

@@ -104,6 +104,28 @@ Additional capabilities:
 - Per-client scope allowlist.
 - Scope propagation through token rotation.
 
+### Consent copy
+
+A scope can carry two optional fields of human-readable copy, edited in the admin dashboard under
+**Setup → Basic → Scopes**:
+
+| Field | Shown as | Example |
+| --- | --- | --- |
+| `display_name` | The line title on the consent screen | `Your email address` |
+| `description` | The explanation beneath it | `See your email address and whether it is verified.` |
+
+Both are optional. When neither is set the consent screen falls back to the raw protocol token
+(`read:users`), which is the behaviour every scope had before this existed. The three seeded OIDC
+scopes ship with copy already written.
+
+Copy is presentation only — it never appears in `scopes_supported`, in a token, or anywhere else in
+the protocol.
+
+<Callout type="warn" title="`scope_name` is not editable">
+  Only the copy can be changed after creation. `scope_name` is the token clients send in `scope`, so
+  renaming it would break every client already requesting it and every grant referencing it.
+</Callout>
+
 <Callout type="info" title="Scope resolution">
   Requesting a scope a client wasn't granted fails with `invalid_scope`. In the
   [client library](/docs/client-library), prefer the `OIDCScope` constants and the `scopes[]` array
