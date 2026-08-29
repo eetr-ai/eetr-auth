@@ -82,6 +82,13 @@ CREATE TABLE IF NOT EXISTS client_claims (
   claim_value TEXT NOT NULL,
   value_type TEXT NOT NULL DEFAULT 'string'
     CHECK (value_type IN ('string', 'number', 'boolean', 'json')),
+  -- Structured claims are the ones most likely to be hand-written, and a malformed one
+  -- would silently vanish from every token (getTokenClaims drops what it cannot decode),
+  -- so reject it at the boundary instead. The other types are deliberately NOT constrained
+  -- here: 'boolean' is case-insensitive in the service, and a SQL check for 'number' cannot
+  -- match what Number() accepts (1e5, .5, -2.5) without rejecting valid input. Type
+  -- semantics live in ClientClaimService.
+  CHECK (value_type <> 'json' OR json_valid(claim_value)),
   UNIQUE(client_id, claim_name),
   FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
 );
