@@ -6,6 +6,7 @@
     "mcp-server-dcr",
     "waf-rate-limiting",
     "mfa-totp",
-    "spa-public-client"
+    "spa-public-client",
+    "local-development-with-agents"
   ]
 }

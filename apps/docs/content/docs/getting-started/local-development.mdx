@@ -70,3 +70,10 @@ when you want the local env files without touching the database.
   Local development uses `HASH_METHOD=md5` so you don't need the Rust `argon-hasher` Worker running
   to sign in. Production always uses Argon2id via the hasher Worker.
 </Callout>
+
+## Tokens without a browser
+
+Once the server is up, anything automated that needs a token — a test suite, a CI job, a coding
+agent iterating on your app — can obtain a real one without a password or a browser, using a test
+client and a passwordless test user. See
+[Local development with agents](/docs/guides/local-development-with-agents).

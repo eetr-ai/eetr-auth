@@ -1,0 +1,120 @@
+---
+title: Local development with agents
+description: Let a script, test suite, or coding agent sign in and obtain real tokens locally, with no password, no browser, and no human in the loop.
+icon: FlaskConical
+---
+
+Anything automated that needs a token — a test suite, a CI job, a coding agent iterating on your
+app — hits the same wall: the authorization code flow is designed around a human at a browser. The
+usual workarounds are all bad. Sharing a real account's password puts a live credential in a config
+file. Driving a headless browser makes the sign-in page's markup part of your test contract. Faking
+tokens means the thing you exercise is not the thing you ship.
+
+A [test client](/docs/features/clients#test-clients) paired with
+[test users](/docs/features/admin#test-users) removes the wall instead of working around it. The flow
+stays a real authorization code flow — real PKCE, real consent records, real signed JWTs from the
+same issuer — but the sign-in step is one unauthenticated POST rather than a form.
+
+<Callout type="warn" title="Local and preview environments only">
+  Anyone who can reach a test client's sign-in page can sign in as any test user on it. There is no
+  secret in that step; that is the whole point. Never grant a test user an environment that also
+  contains production clients.
+</Callout>
+
+## 1. Create a test user
+
+**Users → New user**, tick **Test user (passwordless)**:
+
+- Ticking the box clears **Is admin** and disables the password field. A test user can never be an
+  admin — enforced in the service, in the session, and by a database constraint.
+- **Grant at least one environment.** That grant is the only thing that puts the user on a sign-in
+  page; a test user with no environment appears nowhere. The form refuses to create one.
+- Usernames are globally unique, so prefix per environment (`test_dev_alice`) if several people share
+  a deployment.
+
+Note the user's **id** (the UUID, not the username) — it is what the sign-in call takes. Keep it in
+your test fixture or CI config alongside the client id.
+
+## 2. Create a test client
+
+**Clients → New client**, tick **Test client**, in the **same environment** as the user. Set the
+redirect URI to whatever your app uses locally and grant the scopes you want to exercise.
+
+Both flags are fixed at creation. To change one, delete and recreate.
+
+## 3. Run the flow
+
+Five calls, sharing one cookie jar. Nothing is scraped and no browser is involved.
+
+```bash
+BASE=http://localhost:3000
+CID=your_test_client_id
+SEC=your_test_client_secret          # omit for a public (PKCE-only) client
+RURI=http://localhost:4000/api/auth/callback
+USER_ID=b5110cfa-5731-4e24-a94a-8b48b8a0104b
+JAR=$(mktemp)
+
+# PKCE pair
+VER=$(openssl rand -base64 48 | tr '+/' '-_' | tr -d '=')
+CHAL=$(printf %s "$VER" | openssl dgst -binary -sha256 | base64 | tr '+/' '-_' | tr -d '=')
+
+# 1. Start the authorization request. Sets the signed `oauth_pending` cookie.
+curl -s -c "$JAR" -o /dev/null \
+  "$BASE/api/authorize?response_type=code&client_id=$CID&redirect_uri=$RURI&scope=openid&state=ci-1&code_challenge=$CHAL&code_challenge_method=S256"
+
+# 2. Auth.js requires a CSRF token on the sign-in POST.
+CSRF=$(curl -s -b "$JAR" -c "$JAR" "$BASE/api/auth/csrf" | jq -r .csrfToken)
+
+# 3. Sign in as the test user. No password.
+curl -s -b "$JAR" -c "$JAR" -o /dev/null -X POST "$BASE/api/auth/callback/test-user" \
+  -d "csrfToken=$CSRF" -d "userId=$USER_ID" -d "callbackUrl=$BASE/oauth/confirm"
+
+# 4. Complete. Test clients skip the consent screen, so this returns the code directly.
+CODE=$(curl -s -b "$JAR" -c "$JAR" -o /dev/null -w '%{redirect_url}' \
+  "$BASE/api/authorize/complete" | sed -n 's/.*code=\([^&]*\).*/\1/p')
+
+# 5. Exchange it.
+curl -s -u "$CID:$SEC" -X POST "$BASE/api/token" \
+  -d grant_type=authorization_code -d "code=$CODE" \
+  -d "redirect_uri=$RURI" -d "code_verifier=$VER"
+```
+
+You get back an ordinary token response — `access_token`, `id_token`, `refresh_token`, `scope` —
+signed by the same key, carrying the same `environment` claim and the same
+[custom claims](/docs/features/clients#custom-jwt-claims) as any other client of that environment.
+
+<Callout type="info" title="Three things that will bite you">
+  **The cookie jar is the mechanism.** It carries both the pending authorization and the session, and
+  the sign-in call re-derives everything from it. Give each run its own jar, and never reorder the
+  steps.
+
+  **The whole sequence must finish within 300 seconds**, the `oauth_pending` cookie's lifetime. Fine
+  for a test, but a job that waits on a build between steps 1 and 4 will fail at step 4.
+
+  **Run it signed out.** If the same jar already holds a session, step 1 skips the sign-in page
+  entirely and goes straight to a code — for whoever that session belongs to, not your test user.
+</Callout>
+
+## Why the user id is safe to hardcode
+
+The id is a **selector, not a credential**. The provider that mints the session ignores it as
+authority and re-derives every condition from the signed cookie and the database: a pending
+authorization must exist, its client must be a non-expired test client, and the target must be a
+non-admin test user granted that client's environment.
+
+So posting a user id on its own achieves nothing. Without a live pending authorization for a test
+client, there is no session to be had — and even with one, the session that results can only ever
+reach test clients. Commit the id to your repo if it is convenient.
+
+## What a test user cannot do
+
+Worth knowing before you reach for one as a general-purpose fixture:
+
+- **Sign in to any non-test client.** Refused at `/authorize`, and re-checked on every token refresh
+  (which revokes the presented refresh token).
+- **Be an admin**, so no dashboard and no admin API.
+- **Use a password or a passkey.** Both providers refuse them outright, and a password-reset request
+  for one is silently ignored.
+
+Everything else behaves normally: they have a stable `sub`, they appear in the admin Users list, and
+their consents and tokens are recorded and revocable like anyone else's.

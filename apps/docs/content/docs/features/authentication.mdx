@@ -71,6 +71,9 @@ test client, no amount of posting a user id produces a session.
 MFA, TOTP, email verification, password max-age and password complexity do not apply here. Every one
 of them is password- or email-bound and has no meaning for an account with no password.
 
+To drive this from a script or CI job, see
+[Local development with agents](/docs/guides/local-development-with-agents).
+
 <Callout type="warn" title="This is only as strong as the page is private">
   Anyone who can load a test client's sign-in page can sign in as any test user on it. That is the
   feature, not a gap — keep test users out of environments that hold production clients.
