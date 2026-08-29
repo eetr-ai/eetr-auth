@@ -50,6 +50,32 @@ Per-environment password policies are managed from **Setup → Password policies
   caption="Setup → Password policies — complexity rules, max age, and per-environment assignment (plus the global admin sign-in policy)."
 />
 
+## Passwordless test sign-in
+
+When the authorizing client is a [test client](/docs/features/clients#test-clients), the sign-in page
+renders a picker of the [test users](/docs/features/admin#test-users) granted that client's
+environment instead of the password form. One click signs in, the consent screen is skipped, and the
+browser lands back at the client's `redirect_uri` with an authorization code.
+
+Which client is authorizing is read from the signed, httpOnly `oauth_pending` cookie set by
+`GET /authorize` — the page is reached by redirect, so there is nothing in the URL to read. That
+cookie lives **300 seconds**; if it lapses while the picker sits open, the page says the request
+expired rather than silently falling back to a password form.
+
+The provider that mints the session takes only a user id, and is directly reachable, so the id is
+treated as a selector and never as authority. Every condition is re-derived at the moment the session
+is minted: a pending authorization exists, its client is a non-expired test client, and the target is
+a non-admin test user granted that client's environment. Without a live pending authorization for a
+test client, no amount of posting a user id produces a session.
+
+MFA, TOTP, email verification, password max-age and password complexity do not apply here. Every one
+of them is password- or email-bound and has no meaning for an account with no password.
+
+<Callout type="warn" title="This is only as strong as the page is private">
+  Anyone who can load a test client's sign-in page can sign in as any test user on it. That is the
+  feature, not a gap — keep test users out of environments that hold production clients.
+</Callout>
+
 ## Passkeys (WebAuthn)
 
 - Register and sign in with device passkeys — Touch ID, Face ID, hardware keys.

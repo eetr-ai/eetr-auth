@@ -55,6 +55,30 @@ Users are granted access to specific environments via a `users_environments` map
   access to that environment or `/authorize` will reject them.
 </Callout>
 
+### Test users
+
+A **test user** is a passwordless account that signs in with one click from a
+[test client's](/docs/features/clients#test-clients) sign-in page. They exist so that exercising an
+integration does not mean creating a real account with a real password and typing it on every run.
+
+- Create one from **Users → New user** by ticking **Test user (passwordless)**. Ticking it clears
+  **Is admin** and disables the password field.
+- **Grant at least one environment.** That grant is the only thing that puts the user on a sign-in
+  page — a test user with no environment appears nowhere.
+- They store the empty sentinel `''` in `password_hash`, so no password can ever authenticate them.
+  They also cannot register a passkey, and a password-reset request for one is silently ignored.
+- They can never be admins. This is enforced in the service, in the session (the provider hardcodes
+  `isAdmin: false`), and by a DB `CHECK`, so no path — dashboard, admin API, or hand-written SQL —
+  can produce a passwordless dashboard admin.
+- Usernames are globally unique, so prefix them per environment (`test_staging_alice`) if two teams
+  share a deployment.
+
+<Callout type="warn" title="The flag is set at creation and cannot be changed">
+  There is no toggle on an existing user, and both admin API endpoints reject `isTestUser`. Promoting
+  a real user would leave a real password hash on an account signable with one click; demoting a test
+  user would leave an account nobody can sign into. **Delete and recreate** instead.
+</Callout>
+
 ## Admin API
 
 - Bearer-token protected (a client-credential JWT from a client configured as an **admin API

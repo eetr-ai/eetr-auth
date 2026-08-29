@@ -90,6 +90,14 @@ Key tables include `users`, `user_totp` (encrypted TOTP secrets), `clients`, `en
 accumulated union of consented scope names. The authorize flow skips the consent screen when that
 set already covers every requested scope, and deleting a row withdraws consent.
 
+`users.is_test_user` and `clients.is_test` are the passwordless
+[test user / test client](/docs/features/clients#test-clients) pair. A test user stores the empty
+sentinel `''` in `password_hash` — the same idiom `clients.client_secret` uses for public clients —
+which `verifyPassword()` rejects on shape, so the column stays `NOT NULL` without a table rebuild.
+Both flags are set at creation and immutable, and each carries a `CHECK` that SQLite applies on
+`INSERT` and `UPDATE` alike: a test user can never be an admin, and a dynamically registered client
+can never be a test client.
+
 <Callout type="warn" title="Identifiers vs labels">
   `environments.name` and `scopes.scope_name` are **identifiers**, not display text.
   `environments.name` is emitted as the `environment` JWT claim, is the `environmentName` field on
