@@ -45,3 +45,26 @@ export async function submitSignIn(params: {
 		throw err;
 	}
 }
+
+/**
+ * One-click sign-in as a test user, from a test client's sign-in page.
+ *
+ * `userId` is a selector, not authority: the `test-user` provider re-derives every
+ * condition (pending authorization, client is a test client, user is a non-admin test
+ * user granted that environment) before minting anything. Like the other sign-in actions
+ * this holds no logic of its own -- it exists to call signIn from a client component.
+ */
+export async function submitTestUserSignIn(userId: string, callbackUrl: string) {
+	const redirectTo = callbackUrl?.trim() || "/oauth/confirm";
+	try {
+		await signIn("test-user", { userId, redirectTo });
+	} catch (err) {
+		if (err instanceof CredentialsSignin) {
+			redirect(`/?error=CredentialsSignin&callbackUrl=${encodeURIComponent(redirectTo)}`);
+		}
+		if (err instanceof AuthError) {
+			redirect(`/?error=AuthError&callbackUrl=${encodeURIComponent(redirectTo)}`);
+		}
+		throw err;
+	}
+}

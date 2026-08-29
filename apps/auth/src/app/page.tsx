@@ -3,7 +3,11 @@ import { redirect } from "next/navigation";
 import { signOut, auth } from "@/auth";
 import { getPublicSiteSettings } from "@/lib/public-site-settings";
 import { SignInForm } from "@/app/sign-in-form";
+import { TestUserPicker } from "@/app/_components/test-user-picker";
 import { ThemeSwitcher } from "@/app/theme-switcher";
+import { buildRequestContext } from "@/lib/context/build-context";
+import { getServices } from "@/lib/services/registry";
+import { resolvePendingClient } from "@/lib/auth/pending-client";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +29,26 @@ export default async function HomePage({
 		getPublicSiteSettings(),
 		searchParams,
 	]);
+
+	// Which client is authorizing lives only in the signed `oauth_pending` cookie — this
+	// page is reached by redirect, so there is nothing in the URL to read. A test client
+	// gets the one-click picker instead of the password form. Same lookup the consent page
+	// does; null simply means "no OAuth request in flight", i.e. a plain dashboard login.
+	const ctx = await buildRequestContext();
+	const services = getServices(ctx);
+	const pendingClient = await resolvePendingClient(
+		services.clientService,
+		ctx.env as unknown as Record<string, unknown>
+	);
+	const isTestSignIn = pendingClient?.isTest === true;
+	const testUsers = isTestSignIn
+		? await services.userService.listTestUsersForEnvironment(pendingClient!.environmentId)
+		: [];
+	// The cookie lives 300s. When it lapses mid-flow the callbackUrl still points at the
+	// confirm step, so falling back to the password form would silently offer the wrong
+	// thing on a test client — and on any client it would strand the user in a flow whose
+	// request no longer exists. Say so instead.
+	const pendingExpired = !pendingClient && callbackUrl?.trim() === "/oauth/confirm";
 	const { displayTitle, displayLogoUrl, siteUrl, mfaEnabled } = site;
 	const normalizedCallbackUrl = callbackUrl?.trim() ?? "";
 	const callbackTargetsAdmin =
@@ -104,6 +128,18 @@ export default async function HomePage({
 							</button>
 						</form>
 					</div>
+				) : pendingExpired ? (
+					<p className="rounded-card bg-warning-bg px-3 py-2 text-sm text-warning-fg">
+						This sign-in request expired. Return to the application and start again.
+					</p>
+				) : isTestSignIn ? (
+					<TestUserPicker
+						users={testUsers}
+						clientName={pendingClient!.name?.trim() || pendingClient!.clientId}
+						callbackUrl={
+							callbackUrl && callbackUrl.trim().length > 0 ? callbackUrl : "/oauth/confirm"
+						}
+					/>
 				) : (
 					<SignInForm
 						mfaEnabled={mfaEnabled}
