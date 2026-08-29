@@ -24,6 +24,11 @@ It provides:
 - **Users** area (`Dashboard → Users`) — the user side panel includes **Connected applications**: the
   clients that user has authorized, the scopes consented to for each, and a revoke action that also
   revokes the user's tokens for that client.
+- **Environments** carry an optional **display name** alongside their name. The name is the stable
+  identifier — it is the `environment` JWT claim, the `environmentName` field on
+  `POST /api/token/validate`, and the value stored in the activity log — so it cannot be changed
+  freely. The display name is what the dashboard shows; when it is unset, surfaces fall back to the
+  name.
 - **Setup** area (`Dashboard → Setup`) — a tabbed page covering **Basic** (environments and scopes, side by side), **Site identity** (title, logo, URL, CDN URL), **Admin API**, and **Password policies** (per-environment complexity rules + max password age).
 
 ## User management

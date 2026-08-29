@@ -25,6 +25,7 @@ import {
 } from "./policy-draft";
 import { PolicyForm } from "./policy-form";
 import type { SetupTabId } from "./state";
+import { environmentLabel } from "@/lib/repositories/environment.repository";
 
 /** The form lives in the panel body; its submit button lives in the panel footer. */
 const FORM_ID = "password-policy-form";
@@ -220,7 +221,10 @@ export function PasswordPoliciesSection({
 				<ul className="divide-y divide-border overflow-hidden rounded-card border border-border">
 					{policies.map((policy) => {
 						const envNames = policy.environmentIds
-							.map((id) => environments.find((env) => env.id === id)?.name)
+							.map((id) => {
+								const env = environments.find((candidate) => candidate.id === id);
+								return env ? environmentLabel(env) : undefined;
+							})
 							.filter((name): name is string => !!name)
 							.sort((a, b) => a.localeCompare(b));
 						return (

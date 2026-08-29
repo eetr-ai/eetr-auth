@@ -2,6 +2,15 @@ import type { Environment, EnvironmentRepository } from "@/lib/repositories/envi
 import type { AdminAuditLogService } from "./admin-audit-log.service";
 import { AUDIT_ACTION, AUDIT_RESOURCE } from "./audit-actions";
 
+/**
+ * Trim the label and collapse blank input to NULL, so "no label" has a single
+ * representation and every surface falls back to `name` consistently.
+ */
+function normalizeDisplayName(displayName: string | null | undefined): string | null {
+	const trimmed = displayName?.trim();
+	return trimmed ? trimmed : null;
+}
+
 export interface EnvironmentServiceDependencies {
 	envRepo: EnvironmentRepository;
 	adminAuditLogService: AdminAuditLogService;
@@ -24,33 +33,47 @@ export class EnvironmentService {
 		return this.envRepo.getById(id);
 	}
 
-	async create(name: string, actorUserId: string | null = null): Promise<Environment> {
+	async create(
+		name: string,
+		displayName: string | null = null,
+		actorUserId: string | null = null
+	): Promise<Environment> {
 		const id = crypto.randomUUID();
 		const trimmed = name.trim();
-		await this.envRepo.create(id, trimmed);
+		const label = normalizeDisplayName(displayName);
+		await this.envRepo.create(id, trimmed, label);
 		await this.adminAuditLogService.logAction({
 			actorUserId,
 			action: AUDIT_ACTION.environmentCreate,
 			resourceType: AUDIT_RESOURCE.environment,
 			resourceId: id,
-			details: { name: trimmed },
+			details: { name: trimmed, displayName: label },
 		});
-		return { id, name: trimmed };
+		return { id, name: trimmed, displayName: label };
 	}
 
-	async update(id: string, name: string, actorUserId: string | null = null): Promise<Environment | null> {
+	async update(
+		id: string,
+		name: string,
+		displayName: string | null = null,
+		actorUserId: string | null = null
+	): Promise<Environment | null> {
 		const existing = await this.envRepo.getById(id);
 		if (!existing) return null;
 		const trimmed = name.trim();
-		await this.envRepo.update(id, trimmed);
+		const label = normalizeDisplayName(displayName);
+		await this.envRepo.update(id, trimmed, label);
 		await this.adminAuditLogService.logAction({
 			actorUserId,
 			action: AUDIT_ACTION.environmentUpdate,
 			resourceType: AUDIT_RESOURCE.environment,
 			resourceId: id,
-			details: { from: existing.name, to: trimmed },
+			details: {
+				from: { name: existing.name, displayName: existing.displayName },
+				to: { name: trimmed, displayName: label },
+			},
 		});
-		return { id, name: trimmed };
+		return { id, name: trimmed, displayName: label };
 	}
 
 	async delete(id: string, actorUserId: string | null = null): Promise<{ ok: boolean; error?: string }> {

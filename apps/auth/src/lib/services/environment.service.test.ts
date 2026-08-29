@@ -41,7 +41,7 @@ describe("EnvironmentService", () => {
 	});
 
 	function makeEnv(overrides?: Partial<Environment>): Environment {
-		return { id: "env-1", name: "production", ...overrides };
+		return { id: "env-1", name: "production", displayName: null, ...overrides };
 	}
 
 	describe("list", () => {
@@ -70,21 +70,34 @@ describe("EnvironmentService", () => {
 		it("creates an environment with a generated UUID and trimmed name", async () => {
 			const service = createService(mockRepo);
 			const result = await service.create("  staging  ");
-			expect(mockRepo.create).toHaveBeenCalledWith("new-env-id", "staging");
-			expect(result).toEqual({ id: "new-env-id", name: "staging" });
+			expect(mockRepo.create).toHaveBeenCalledWith("new-env-id", "staging", null);
+			expect(result).toEqual({ id: "new-env-id", name: "staging", displayName: null });
+		});
+
+		it("stores a trimmed display name when one is given", async () => {
+			const service = createService(mockRepo);
+			const result = await service.create("staging", "  Staging (EU)  ");
+			expect(mockRepo.create).toHaveBeenCalledWith("new-env-id", "staging", "Staging (EU)");
+			expect(result.displayName).toBe("Staging (EU)");
+		});
+
+		it("collapses a blank display name to null so surfaces fall back to the name", async () => {
+			const service = createService(mockRepo);
+			await service.create("staging", "   ");
+			expect(mockRepo.create).toHaveBeenCalledWith("new-env-id", "staging", null);
 		});
 
 		it("writes an environment.create audit entry attributed to the actor", async () => {
 			const insert = vi.fn();
 			const service = createService(mockRepo, createAuditLogService(insert));
-			await service.create("  staging  ", "admin-1");
+			await service.create("  staging  ", null, "admin-1");
 			expect(insert).toHaveBeenCalledWith(
 				expect.objectContaining({
 					actor_user_id: "admin-1",
 					action: "environment.create",
 					resource_type: "environment",
 					resource_id: "new-env-id",
-					details: JSON.stringify({ name: "staging" }),
+					details: JSON.stringify({ name: "staging", displayName: null }),
 				})
 			);
 		});
@@ -104,22 +117,42 @@ describe("EnvironmentService", () => {
 			vi.mocked(mockRepo.getById).mockResolvedValue(makeEnv());
 			const service = createService(mockRepo);
 			const result = await service.update("env-1", "  production  ");
-			expect(mockRepo.update).toHaveBeenCalledWith("env-1", "production");
-			expect(result).toEqual({ id: "env-1", name: "production" });
+			expect(mockRepo.update).toHaveBeenCalledWith("env-1", "production", null);
+			expect(result).toEqual({ id: "env-1", name: "production", displayName: null });
+		});
+
+		it("updates the display name alongside the name", async () => {
+			vi.mocked(mockRepo.getById).mockResolvedValue(makeEnv());
+			const service = createService(mockRepo);
+			const result = await service.update("env-1", "production", "  Production (US)  ");
+			expect(mockRepo.update).toHaveBeenCalledWith("env-1", "production", "Production (US)");
+			expect(result?.displayName).toBe("Production (US)");
+		});
+
+		it("clears the display name when it is blanked out", async () => {
+			vi.mocked(mockRepo.getById).mockResolvedValue(makeEnv({ displayName: "Old label" }));
+			const service = createService(mockRepo);
+			await service.update("env-1", "production", "");
+			expect(mockRepo.update).toHaveBeenCalledWith("env-1", "production", null);
 		});
 
 		it("writes an environment.update audit entry with from/to names", async () => {
-			vi.mocked(mockRepo.getById).mockResolvedValue(makeEnv({ name: "prod-old" }));
+			vi.mocked(mockRepo.getById).mockResolvedValue(
+				makeEnv({ name: "prod-old", displayName: "Old label" })
+			);
 			const insert = vi.fn();
 			const service = createService(mockRepo, createAuditLogService(insert));
-			await service.update("env-1", "  production  ", "admin-1");
+			await service.update("env-1", "  production  ", "New label", "admin-1");
 			expect(insert).toHaveBeenCalledWith(
 				expect.objectContaining({
 					actor_user_id: "admin-1",
 					action: "environment.update",
 					resource_type: "environment",
 					resource_id: "env-1",
-					details: JSON.stringify({ from: "prod-old", to: "production" }),
+					details: JSON.stringify({
+						from: { name: "prod-old", displayName: "Old label" },
+						to: { name: "production", displayName: "New label" },
+					}),
 				})
 			);
 		});

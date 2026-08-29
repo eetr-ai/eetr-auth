@@ -3,6 +3,7 @@ import { IconButton, InlineDeleteConfirm, Td } from "@/components/ui";
 import type { Environment } from "@/lib/repositories/environment.repository";
 import { DateLine, TokenStatusGlyph, TokenTypeGlyph } from "./token-glyphs";
 import { maskToken, type TokenActivityItem } from "./types";
+import { environmentLabel } from "@/lib/repositories/environment.repository";
 
 /** Which destructive action a row is currently asking to confirm. */
 export type TokenAction = "revoke" | "delete";
@@ -84,7 +85,10 @@ export function TokenRow({
 						<div className="flex items-center gap-2">
 							<span className="truncate">{token.clientName ?? token.clientId}</span>
 							<span className="shrink-0 rounded-full bg-surface-sunken px-2 py-0.5 text-xs text-muted-foreground">
-								{envById[token.environmentId]?.name ?? token.environmentId}
+								{(() => {
+									const env = envById[token.environmentId];
+									return env ? environmentLabel(env) : token.environmentId;
+								})()}
 							</span>
 						</div>
 						<div className="truncate font-mono text-xs text-muted-foreground">

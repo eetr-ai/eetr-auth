@@ -4,6 +4,7 @@ import type { UserRecord } from "@/lib/repositories/admin.repository";
 import type { Environment } from "@/lib/repositories/environment.repository";
 import { UserAvatar } from "./user-avatar";
 import { VerificationStatus } from "./verification-status";
+import { environmentLabel } from "@/lib/repositories/environment.repository";
 
 interface UsersTableProps {
 	users: UserRecord[];
@@ -30,7 +31,7 @@ export function UsersTable({
 	onConfirmDelete,
 	onCancelDelete,
 }: UsersTableProps) {
-	const envById = new Map(environments.map((env) => [env.id, env.name]));
+	const envById = new Map(environments.map((env) => [env.id, environmentLabel(env)]));
 
 	return (
 		<Table minWidth="min-w-[760px]">

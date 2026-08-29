@@ -26,6 +26,8 @@ export enum SetupPageActionType {
 	SET_PASSWORD_POLICY_ERROR = "SET_PASSWORD_POLICY_ERROR",
 	SET_LOADING = "SET_LOADING",
 	SET_ENV_NAME = "SET_ENV_NAME",
+	SET_ENV_DISPLAY_NAME = "SET_ENV_DISPLAY_NAME",
+	SET_EDITING_ENV_DISPLAY_NAME = "SET_EDITING_ENV_DISPLAY_NAME",
 	SET_SCOPE_NAME = "SET_SCOPE_NAME",
 	SET_SCOPE_DISPLAY_NAME = "SET_SCOPE_DISPLAY_NAME",
 	SET_SCOPE_DESCRIPTION = "SET_SCOPE_DESCRIPTION",
@@ -61,6 +63,9 @@ export interface SetupPageState {
 	passwordPolicyError: string | null;
 	loading: boolean;
 	envName: string;
+	/** Optional label for the environment being added in the inline add-row. */
+	envDisplayName: string;
+	editingEnvDisplayName: string;
 	scopeName: string;
 	/** Consent-screen copy for the scope being added in the inline add-row. */
 	scopeDisplayName: string;
@@ -103,6 +108,8 @@ export const initialState: SetupPageState = {
 	passwordPolicyError: null,
 	loading: true,
 	envName: "",
+	envDisplayName: "",
+	editingEnvDisplayName: "",
 	scopeName: "",
 	scopeDisplayName: "",
 	scopeDescription: "",
@@ -153,6 +160,10 @@ export function reducer(
 			return { ...state, loading: (action.data as boolean | undefined) ?? false };
 		case SetupPageActionType.SET_ENV_NAME:
 			return { ...state, envName: (action.data as string) ?? "" };
+		case SetupPageActionType.SET_ENV_DISPLAY_NAME:
+			return { ...state, envDisplayName: (action.data as string) ?? "" };
+		case SetupPageActionType.SET_EDITING_ENV_DISPLAY_NAME:
+			return { ...state, editingEnvDisplayName: (action.data as string) ?? "" };
 		case SetupPageActionType.SET_SCOPE_NAME:
 			return { ...state, scopeName: (action.data as string) ?? "" };
 		case SetupPageActionType.SET_SCOPE_DISPLAY_NAME:

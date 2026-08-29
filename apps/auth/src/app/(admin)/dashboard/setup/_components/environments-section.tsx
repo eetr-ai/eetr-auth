@@ -10,14 +10,16 @@ import {
 	Input,
 	SectionCard,
 } from "@/components/ui";
-import type { Environment } from "@/lib/repositories/environment.repository";
+import { environmentLabel, type Environment } from "@/lib/repositories/environment.repository";
 import { SetupPageActionType } from "./state";
 
 interface EnvironmentsSectionProps {
 	environments: Environment[];
 	envName: string;
+	envDisplayName: string;
 	editingEnvId: string | null;
 	editingEnvName: string;
+	editingEnvDisplayName: string;
 	envError: string | null;
 	dispatch: (action: ReducerAction<SetupPageActionType>) => void;
 	onCreate: (e: FormEvent) => void;
@@ -28,15 +30,21 @@ interface EnvironmentsSectionProps {
 }
 
 /**
- * Environments are a single-field entity, so they keep a compact inline
- * add-row and inline rename rather than a side panel — an overlay to capture
- * one text input would cost more screen than it saves.
+ * Environments keep a compact inline add-row and inline edit rather than a side
+ * panel — an overlay to capture two short text inputs would cost more screen
+ * than it saves.
+ *
+ * `name` is the identifier (JWT claim, token validation, activity log) and the
+ * display name is only a label, so the row shows the label with the identifier
+ * beneath it whenever the two differ.
  */
 export function EnvironmentsSection({
 	environments,
 	envName,
+	envDisplayName,
 	editingEnvId,
 	editingEnvName,
+	editingEnvDisplayName,
 	envError,
 	dispatch,
 	onCreate,
@@ -50,19 +58,29 @@ export function EnvironmentsSection({
 	return (
 		<SectionCard title="Environments" icon={Layers}>
 			<Banner variant="error" message={envError} />
-			<form onSubmit={onCreate} className="mb-4 flex gap-2">
+			<form onSubmit={onCreate} className="mb-4 flex flex-col gap-2">
+				<div className="flex gap-2">
+					<Input
+						type="text"
+						value={envName}
+						onChange={(e) =>
+							dispatch({ type: SetupPageActionType.SET_ENV_NAME, data: e.target.value })
+						}
+						placeholder="Environment name"
+						className="flex-1"
+					/>
+					<Button type="submit" icon={Plus} loading={saving}>
+						Add
+					</Button>
+				</div>
 				<Input
 					type="text"
-					value={envName}
+					value={envDisplayName}
 					onChange={(e) =>
-						dispatch({ type: SetupPageActionType.SET_ENV_NAME, data: e.target.value })
+						dispatch({ type: SetupPageActionType.SET_ENV_DISPLAY_NAME, data: e.target.value })
 					}
-					placeholder="Environment name"
-					className="flex-1"
+					placeholder="Display name (optional)"
 				/>
-				<Button type="submit" icon={Plus} loading={saving}>
-					Add
-				</Button>
 			</form>
 
 			{environments.length === 0 ? (
@@ -76,7 +94,7 @@ export function EnvironmentsSection({
 					{environments.map((env) => (
 						<li key={env.id} className="flex items-center justify-between gap-2 px-3 py-2">
 							{editingEnvId === env.id ? (
-								<form onSubmit={onUpdate} className="flex flex-1 gap-2">
+								<form onSubmit={onUpdate} className="flex flex-1 flex-col gap-2">
 									<Input
 										type="text"
 										value={editingEnvName}
@@ -86,33 +104,58 @@ export function EnvironmentsSection({
 												data: e.target.value,
 											})
 										}
-										className="flex-1 px-2 py-1 text-sm"
+										className="px-2 py-1 text-sm"
 										autoFocus
 									/>
-									<button
-										type="submit"
-										disabled={saving}
-										className="rounded-full border border-border px-2 py-1 text-sm hover:bg-surface-hover disabled:opacity-50"
-									>
-										Save
-									</button>
-									<button
-										type="button"
-										onClick={() => {
-											dispatch({ type: SetupPageActionType.SET_EDITING_ENV_ID, data: null });
-											dispatch({ type: SetupPageActionType.SET_EDITING_ENV_NAME, data: "" });
-										}}
-										className="rounded-full border border-border px-2 py-1 text-sm hover:bg-surface-hover"
-									>
-										Cancel
-									</button>
+									<Input
+										type="text"
+										value={editingEnvDisplayName}
+										onChange={(e) =>
+											dispatch({
+												type: SetupPageActionType.SET_EDITING_ENV_DISPLAY_NAME,
+												data: e.target.value,
+											})
+										}
+										placeholder="Display name (optional)"
+										className="px-2 py-1 text-sm"
+									/>
+									<div className="flex gap-2">
+										<button
+											type="submit"
+											disabled={saving}
+											className="rounded-full border border-border px-2 py-1 text-sm hover:bg-surface-hover disabled:opacity-50"
+										>
+											Save
+										</button>
+										<button
+											type="button"
+											onClick={() => {
+												dispatch({ type: SetupPageActionType.SET_EDITING_ENV_ID, data: null });
+												dispatch({ type: SetupPageActionType.SET_EDITING_ENV_NAME, data: "" });
+												dispatch({
+													type: SetupPageActionType.SET_EDITING_ENV_DISPLAY_NAME,
+													data: "",
+												});
+											}}
+											className="rounded-full border border-border px-2 py-1 text-sm hover:bg-surface-hover"
+										>
+											Cancel
+										</button>
+									</div>
 								</form>
 							) : (
 								<>
-									<span className="min-w-0 truncate font-medium">{env.name}</span>
+									<div className="min-w-0">
+										<span className="block truncate font-medium">{environmentLabel(env)}</span>
+										{env.displayName?.trim() && (
+											<span className="block truncate font-mono text-xs text-muted-foreground">
+												{env.name}
+											</span>
+										)}
+									</div>
 									{confirmingDeleteId === env.id ? (
 										<InlineDeleteConfirm
-											label={`Delete "${env.name}"?`}
+											label={`Delete "${environmentLabel(env)}"?`}
 											busy={saving}
 											onConfirm={() => {
 												onDelete(env.id);
@@ -124,7 +167,7 @@ export function EnvironmentsSection({
 										<div className="flex shrink-0 gap-1">
 											<IconButton
 												type="button"
-												aria-label={`Edit ${env.name}`}
+												aria-label={`Edit ${environmentLabel(env)}`}
 												title="Edit"
 												disabled={saving}
 												onClick={() => {
@@ -133,6 +176,10 @@ export function EnvironmentsSection({
 														type: SetupPageActionType.SET_EDITING_ENV_NAME,
 														data: env.name,
 													});
+													dispatch({
+														type: SetupPageActionType.SET_EDITING_ENV_DISPLAY_NAME,
+														data: env.displayName ?? "",
+													});
 												}}
 											>
 												<Pencil className="h-4 w-4" />
@@ -140,7 +187,7 @@ export function EnvironmentsSection({
 											<IconButton
 												type="button"
 												variant="danger"
-												aria-label={`Delete ${env.name}`}
+												aria-label={`Delete ${environmentLabel(env)}`}
 												title="Delete"
 												disabled={saving}
 												onClick={() => setConfirmingDeleteId(env.id)}

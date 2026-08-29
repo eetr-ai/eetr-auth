@@ -46,6 +46,7 @@ import { BasicSection } from "./_components/basic-section";
 import { EnvironmentsSection } from "./_components/environments-section";
 import { ScopesSection } from "./_components/scopes-section";
 import { PasswordPoliciesSection } from "./_components/password-policies-section";
+import { environmentLabel } from "@/lib/repositories/environment.repository";
 
 const { Provider: SetupPageStateProvider, useContextAccessors: useSetupPageState } =
 	bootstrapProvider<SetupPageState, ReducerAction<SetupPageActionType>>(
@@ -71,6 +72,8 @@ function SetupPageContent() {
 		passwordPolicyError,
 		loading,
 		envName,
+		envDisplayName,
+		editingEnvDisplayName,
 		scopeName,
 		scopeDisplayName,
 		scopeDescription,
@@ -101,7 +104,7 @@ function SetupPageContent() {
 
 	const logoInputRef = useRef<HTMLInputElement>(null);
 
-	const envById = new Map(environments.map((e) => [e.id, e.name]));
+	const envById = new Map(environments.map((e) => [e.id, environmentLabel(e)]));
 
 	/**
 	 * `silent` skips the full-page spinner. Post-mutation refreshes must be
@@ -164,8 +167,9 @@ function SetupPageContent() {
 		if (!name) return;
 		dispatch({ type: SetupPageActionType.SET_ENV_SAVING, data: true });
 		try {
-			await createEnvironment(name);
+			await createEnvironment(name, envDisplayName);
 			dispatch({ type: SetupPageActionType.SET_ENV_NAME, data: "" });
+			dispatch({ type: SetupPageActionType.SET_ENV_DISPLAY_NAME, data: "" });
 			await load({ silent: true });
 		} catch (err) {
 			dispatch({
@@ -185,10 +189,15 @@ function SetupPageContent() {
 		try {
 			// The action resolves to the updated Environment, or null when the id no
 			// longer exists — say so rather than leaving the row silently in edit mode.
-			const result = await updateEnvironment(editingEnvId, editingEnvName.trim());
+			const result = await updateEnvironment(
+				editingEnvId,
+				editingEnvName.trim(),
+				editingEnvDisplayName
+			);
 			if (result) {
 				dispatch({ type: SetupPageActionType.SET_EDITING_ENV_ID, data: null });
 				dispatch({ type: SetupPageActionType.SET_EDITING_ENV_NAME, data: "" });
+				dispatch({ type: SetupPageActionType.SET_EDITING_ENV_DISPLAY_NAME, data: "" });
 				await load({ silent: true });
 			} else {
 				dispatch({
@@ -552,8 +561,10 @@ function SetupPageContent() {
 						saving={envSaving}
 						environments={environments}
 						envName={envName}
+						envDisplayName={envDisplayName}
 						editingEnvId={editingEnvId}
 						editingEnvName={editingEnvName}
+						editingEnvDisplayName={editingEnvDisplayName}
 						envError={envError}
 						dispatch={dispatch}
 						onCreate={handleCreateEnv}

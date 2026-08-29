@@ -5,6 +5,7 @@ import type { UserRecord } from "@/lib/repositories/admin.repository";
 import type { Environment } from "@/lib/repositories/environment.repository";
 import { UserAvatar } from "./user-avatar";
 import type { UserDraft } from "./user-draft";
+import { environmentLabel } from "@/lib/repositories/environment.repository";
 
 interface UserFormProps {
 	/** Links the panel footer's submit button to this form via the `form` attribute. */
@@ -165,7 +166,7 @@ export function UserForm({
 									onChange={() => toggleEnvironment(env.id)}
 									className="rounded-chip border-border"
 								/>
-								<span>{env.name}</span>
+								<span>{environmentLabel(env)}</span>
 							</label>
 						))}
 					</div>

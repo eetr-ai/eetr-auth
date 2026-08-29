@@ -1,5 +1,6 @@
 import type { Environment } from "@/lib/repositories/environment.repository";
 import type { TokenActivityRequestType } from "@/lib/repositories/token-activity-log.repository";
+import { environmentLabel } from "@/lib/repositories/environment.repository";
 
 const REQUEST_TYPES: { value: TokenActivityRequestType; label: string }[] = [
 	{ value: "authorize", label: "Authorize" },
@@ -64,8 +65,11 @@ export function LogsFilters({ filters, environments, onChange, onApply }: LogsFi
 				>
 					<option value="">All</option>
 					{environments.map((env) => (
+						// The VALUE must stay env.name: token_activity_log stores the environment
+						// name, not its id, so that is what the query filters on. Only the label
+						// is humanized.
 						<option key={env.id} value={env.name}>
-							{env.name}
+							{environmentLabel(env)}
 						</option>
 					))}
 				</select>

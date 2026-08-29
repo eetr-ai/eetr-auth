@@ -53,8 +53,8 @@ class InMemoryEnvironmentRepo implements EnvironmentRepository {
 		return this.environments.get(id) ?? null;
 	}
 
-	async create(id: string, name: string): Promise<void> {
-		this.environments.set(id, { id, name });
+	async create(id: string, name: string, displayName: string | null = null): Promise<void> {
+		this.environments.set(id, { id, name, displayName });
 	}
 
 	async update(id: string, name: string): Promise<void> {
@@ -469,7 +469,7 @@ function buildHarness(options?: {
 		isDynamic: isPublic,
 	} satisfies Client;
 
-	const envRepo = new InMemoryEnvironmentRepo(new Map([["env-1", { id: "env-1", name: "production" }]]));
+	const envRepo = new InMemoryEnvironmentRepo(new Map([["env-1", { id: "env-1", name: "production", displayName: null }]]));
 	const clientRepo = new InMemoryClientRepo([client]);
 	void clientRepo.setRedirectUris(client.id, ["https://client.example.com/callback"]);
 	const grants = new Map<string, ClientScopeGrant[]>([

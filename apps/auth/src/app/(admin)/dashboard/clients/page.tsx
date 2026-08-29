@@ -39,6 +39,7 @@ import { ClientForm } from "./_components/client-form";
 import { ClientsTable, type ClientTypeFilter } from "./_components/clients-table";
 import { ClientTokens } from "./_components/client-tokens";
 import { SecretReveal } from "./_components/secret-reveal";
+import { environmentLabel } from "@/lib/repositories/environment.repository";
 
 /** The form lives in the panel body; its submit button lives in the panel footer. */
 const FORM_ID = "client-form";
@@ -314,7 +315,7 @@ export default function ClientsPage() {
 						<option value="">All</option>
 						{environments.map((env) => (
 							<option key={env.id} value={env.id}>
-								{env.name}
+								{environmentLabel(env)}
 							</option>
 						))}
 					</Select>

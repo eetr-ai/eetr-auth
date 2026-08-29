@@ -3,6 +3,7 @@ import { Banner, IconButton, Input, Select } from "@/components/ui";
 import type { Environment } from "@/lib/repositories/environment.repository";
 import type { Scope } from "@/lib/repositories/scope.repository";
 import type { ClientDraft } from "./client-draft";
+import { environmentLabel } from "@/lib/repositories/environment.repository";
 
 interface ClientFormProps {
 	/** Links the panel footer's submit button to this form via the `form` attribute. */
@@ -83,7 +84,7 @@ export function ClientForm({
 						<option value="">Select an environment</option>
 						{environments.map((env) => (
 							<option key={env.id} value={env.id}>
-								{env.name}
+								{environmentLabel(env)}
 							</option>
 						))}
 					</Select>

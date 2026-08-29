@@ -110,7 +110,7 @@ describe("TokenActivityLogService", () => {
 				expiresAt: null,
 				name: null,
 			});
-			vi.mocked(envRepo.getById).mockResolvedValue({ id: "env-1", name: "staging" });
+			vi.mocked(envRepo.getById).mockResolvedValue({ id: "env-1", name: "staging", displayName: null });
 
 			const service = createService(logRepo, clientRepo, envRepo);
 			await service.logActivity({
@@ -138,7 +138,7 @@ describe("TokenActivityLogService", () => {
 				expiresAt: null,
 				name: null,
 			});
-			vi.mocked(envRepo.getById).mockResolvedValue({ id: "env-2", name: "dev" });
+			vi.mocked(envRepo.getById).mockResolvedValue({ id: "env-2", name: "dev", displayName: null });
 
 			const service = createService(logRepo, clientRepo, envRepo);
 			await service.logActivity({
