@@ -1,0 +1,167 @@
+---
+title: API keys
+description: Long-lived per-client credentials, bound to a user, that CI/CD exchanges for a short-lived access token.
+icon: KeyRound
+---
+
+## Why
+
+A CI pipeline that needs a token today has to use the `client_credentials` grant: every job
+carries the client's `client_id` **and** `client_secret`, and makes a token call before it can
+make an API call. That has three problems.
+
+- The client secret is the *client's* credential. Handing it to a pipeline means every pipeline
+  holding it can do everything the client can, and taking access away from one of them means
+  rotating the secret for all of them.
+- There is nothing to expire. A client secret lives until someone rotates it.
+- The resulting token has no subject, so nothing in the audit trail says which person stood
+  behind the machine.
+
+An **API key** fixes all three. It is a long-lived credential issued *for* a client, bound to a
+user, individually revocable, optionally expiring, and optionally narrower than the client
+itself.
+
+| | `client_credentials` | API key |
+|---|---|---|
+| What the caller ships | `client_id` + `client_secret` | one opaque key |
+| Revoke one pipeline | rotate the secret for everyone | revoke that key |
+| Expiry | none | optional, per key |
+| Token `sub` | empty | the bound user |
+| Scopes | everything the client is granted | a subset, chosen per key |
+
+## The credential
+
+A key is presented as three underscore-separated parts:
+
+```
+eak_3f2a9c1b4d5e6f70_a1b2c3…
+│   │                │
+│   │                └─ secret — 32 random bytes, hashed at rest, shown once
+│   └─ key id — 8 random bytes, stored in the clear
+└─ fixed prefix
+```
+
+The middle segment exists because an Argon2id digest is not searchable: unlike a client secret,
+which arrives next to its `client_id`, an API key has to carry its own lookup handle. That
+handle is safe to display, log, and use to address the key in the admin API — only the secret
+half is a credential.
+
+<Callout type="warn" title="The secret is shown exactly once">
+  It is displayed in the dashboard immediately after creation and returned once from the create
+  endpoint. There is no way to recover it afterwards — issue a new key and revoke the old one.
+</Callout>
+
+Keys are hashed with the same [argon-hasher Worker](/docs/architecture/argon-hasher) and the same
+`HASH_METHOD` policy as user passwords, so production is always Argon2id and
+[local development](/docs/getting-started/local-development) works without the Rust Worker running.
+
+## Binding to a user
+
+Every key names a user, and that user's id becomes the `sub` of every token the key mints. The
+binding is mandatory: a machine token that nobody is accountable for is exactly what this feature
+exists to avoid.
+
+Two consequences follow:
+
+- Deleting the user deletes their keys — a departed employee's pipelines stop, rather than
+  quietly continuing to mint tokens in their name.
+- A [test user](/docs/features/clients#test-clients-and-test-users) may only be bound to a test
+  client, the same confinement that applies to interactive sign-in.
+
+## Scopes are a snapshot
+
+A key may hold any subset of the scopes its client is granted; selecting none at creation means
+"all of them, as of now".
+
+That subset is **frozen at issue time**. A key does not pick up scopes granted to the client
+later, so widening a client never silently widens the keys already in the wild. Conversely, when
+a scope is ungranted from the client it disappears from every key that held it — and a key whose
+scopes have all been ungranted mints nothing at all, rather than falling back to whatever the
+client happens to hold now.
+
+A request may narrow further at exchange time, but never widen: asking for a scope the key does
+not hold is an `invalid_scope` error, not a grant.
+
+## Managing keys
+
+From the dashboard: **Clients → (select a client) → API keys**. Create one by choosing the user,
+an optional name and expiry, and the scopes it may mint. Revoke from the same list.
+
+Or through the [Admin API](/docs/features/admin#admin-api):
+
+```bash
+# Issue a key for a client, bound to a user, narrowed to one scope
+curl -X POST https://auth.example.com/api/admin/clients/$CLIENT_ID/api-keys \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"ci-bot","name":"deploy pipeline","expiresAt":"2027-01-01T00:00:00Z","scopes":["api"]}'
+```
+
+```bash
+# List (never returns secrets) and revoke
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  https://auth.example.com/api/admin/clients/$CLIENT_ID/api-keys
+
+curl -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN" \
+  https://auth.example.com/api/admin/clients/$CLIENT_ID/api-keys/$KEY_ID
+```
+
+Revocation is a soft delete: the record survives so the audit trail still resolves, and revoking
+twice keeps the original timestamp. It takes effect on the next exchange — access tokens already
+minted live out their remaining hour.
+
+## Exchanging a key for a token
+
+```bash
+curl -X POST https://auth.example.com/api/token/api-key \
+  -H "Authorization: Bearer $EETR_API_KEY"
+```
+
+```json
+{
+  "token_type": "Bearer",
+  "access_token": "eyJhbGciOiJSUzI1NiIs…",
+  "expires_in": 3600,
+  "scope": "api"
+}
+```
+
+The key may also be sent as an `api_key` field in a form-encoded or JSON body; the
+`Authorization` header wins if both are present. Optional `scope` narrows the token, and
+`resource` sets the audience (RFC 8707).
+
+There is deliberately **no `refresh_token`**. The API key is already the long-lived credential —
+a second one would widen the blast radius without shortening any path.
+
+This endpoint is not an OAuth grant and does not live on `/api/token`: it authenticates with a
+single opaque credential rather than a client id and secret, so keeping it separate leaves the
+token endpoint spec-clean.
+
+<Callout type="info" title="Every failure looks the same">
+  Malformed, unknown, revoked, expired, and wrong-secret all return the same
+  `401 invalid_client`. The endpoint is unauthenticated and an attacker controls the whole input,
+  so a more specific message would turn it into an oracle for enumerating valid key ids. The real
+  reason is in the activity log, under request type **API key**.
+</Callout>
+
+### From the client library
+
+```ts
+import { exchangeApiKey } from "@eetr/eetr-auth-client";
+
+const token = await exchangeApiKey(
+  { apiKey: process.env.EETR_API_KEY! },
+  { apiKeyEndpoint: "https://auth.example.com/api/token/api-key" }
+);
+```
+
+`listClientApiKeys`, `createClientApiKey`, and `revokeClientApiKey` cover the management side.
+See the [client library](/docs/client-library).
+
+## What gets recorded
+
+- **Admin audit log** — `api_key.create` (with the key id, bound user, and scopes; never the
+  secret) and `api_key.revoke`.
+- **Token activity log** — one `api_key` row per exchange, successful or not.
+- **`last_used_at`** on the key itself, stamped on each successful exchange, so an unused key is
+  easy to spot and retire.

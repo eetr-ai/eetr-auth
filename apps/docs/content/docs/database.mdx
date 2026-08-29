@@ -76,12 +76,15 @@ The database is organized around users, OAuth clients, tokens, and environments:
     users ||--o{ user_consents : granted
     clients ||--o{ user_consents : consented_to
     clients ||--o{ client_claims : injects
+    clients ||--o{ api_keys : issues
+    users ||--o{ api_keys : bound_to
+    api_keys ||--o{ api_key_scopes : limited_to
     password_policies ||--o{ password_policy_environments : assigned_to
 `} />
 
 Key tables include `users`, `user_totp` (encrypted TOTP secrets), `clients`, `environments`,
-`scopes`, `user_consents`, `client_claims`, `authorization_codes`, `tokens`, `refresh_tokens`, `passkeys`,
-`password_policies`, and `token_activity_log`.
+`scopes`, `user_consents`, `client_claims`, `api_keys`, `authorization_codes`, `tokens`, `refresh_tokens`,
+`passkeys`, `password_policies`, and `token_activity_log`.
 
 `client_claims` holds the static custom claims a client injects into its access tokens, with a
 `value_type` so a numeric or boolean claim keeps its JSON type in the JWT.
@@ -89,6 +92,13 @@ Key tables include `users`, `user_totp` (encrypted TOTP secrets), `clients`, `en
 `user_consents` records what an end user has authorized: one row per (user, client) holding the
 accumulated union of consented scope names. The authorize flow skips the consent screen when that
 set already covers every requested scope, and deleting a row withdraws consent.
+
+`api_keys` holds the long-lived [API keys](/docs/features/api-keys) a machine caller exchanges for
+an access token. `key_id` is stored in the clear as a lookup handle — an Argon2id digest is not
+searchable — and only the secret half is hashed into `key_hash`. `user_id` is mandatory and becomes
+the minted token's `sub`; both it and `client_id` cascade on delete, so a key never outlives either.
+`api_key_scopes` keys on `client_scopes(id)` like `token_scopes`, so ungranting a scope from the
+client removes it from every key that held it.
 
 `users.is_test_user` and `clients.is_test` are the passwordless
 [test user / test client](/docs/features/clients#test-clients) pair. A test user stores the empty

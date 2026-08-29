@@ -22,6 +22,7 @@ All paths are relative to your issuer base URL (e.g. `https://auth.yourdomain.co
 | POST | `/api/authorize/complete` | Completes the authorization step |
 | POST | `/api/token` | Token endpoint (all grant types) |
 | POST | `/api/token/validate` | Token introspection (optional audience binding) |
+| POST | `/api/token/api-key` | Exchange a long-lived API key for an access token |
 | GET | `/api/userinfo` | OIDC UserInfo (requires `openid` scope) |
 | POST | `/api/register` | Dynamic Client Registration (RFC 7591) |
 
@@ -55,6 +56,9 @@ All paths are relative to your issuer base URL (e.g. `https://auth.yourdomain.co
 |---|---|---|
 | GET/POST | `/api/admin/users` | List / create users |
 | GET/PATCH/DELETE | `/api/admin/users/[id]` | Read / update / delete a user |
+| GET/DELETE | `/api/admin/users/[id]/consents` | List / revoke a user's granted consents |
+| GET/POST | `/api/admin/clients/[clientId]/api-keys` | List / issue a client's API keys |
+| DELETE | `/api/admin/clients/[clientId]/api-keys/[keyId]` | Revoke an API key |
 | POST | `/api/admin/site-logo` | Stage the site logo; applied when Site identity is saved |
 
 <Callout type="warn" title="Protect the admin endpoints">

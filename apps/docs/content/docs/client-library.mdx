@@ -63,6 +63,7 @@ const user = await getUserInfo(tokens.access_token, discovery.userinfo_endpoint)
 | **JWT** | `validateJwt`, `validateIdToken`, `decodeJwtPayload` |
 | **UserInfo** | `getUserInfo`, `toUserProfile` |
 | **Admin API** | `getAdminUser`, `createAdminUser`, `updateAdminUser`, `deleteAdminUser`, `listUserConsents`, `revokeUserConsent` |
+| **API keys** | `exchangeApiKey`, `listClientApiKeys`, `createClientApiKey`, `revokeClientApiKey` |
 | **Passkeys** | `listPasskeys`, `renamePasskey`, `removePasskey` |
 | **Scopes** | `OIDCScope`, `STANDARD_OIDC_SCOPES`, `resolveScopeParam` |
 
