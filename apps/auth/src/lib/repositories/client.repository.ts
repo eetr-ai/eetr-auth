@@ -1,3 +1,4 @@
+import type { ClientClaim } from "./client-claim.repository";
 export interface Client {
 	id: string;
 	clientId: string;
@@ -29,6 +30,7 @@ export interface ClientRow {
 export interface ClientWithDetails extends Client {
 	redirectUris: string[];
 	scopeIds: string[];
+	claims: ClientClaim[];
 }
 
 export interface ClientRepository {

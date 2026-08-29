@@ -25,6 +25,7 @@ import type { UserRecord, UserRepository } from "@/lib/repositories/admin.reposi
 import { OauthAuthorizationService } from "@/lib/services/oauth-authorization.service";
 import type { ConsentService } from "@/lib/services/consent.service";
 import { OauthTokenService } from "@/lib/services/oauth-token.service";
+import { ClientClaimService } from "@/lib/services/client-claim.service";
 import { OAuthServiceError } from "@/lib/services/oauth.types";
 
 type StoredAccessToken = {
@@ -506,6 +507,14 @@ function buildHarness(options?: {
 		refreshTokenRepo,
 		envRepo,
 		userRepo,
+		// Real service over an empty in-memory repo: these tests exercise the opaque-token
+		// path, so no custom claims apply, but the wiring stays honest.
+		clientClaimService: new ClientClaimService({
+			clientClaimRepo: {
+				listByClient: async () => [],
+				setClientClaims: async () => {},
+			},
+		}),
 		env,
 	});
 

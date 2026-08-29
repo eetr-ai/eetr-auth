@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	cleanClaims,
 	cleanRedirectUris,
 	draftFromClient,
 	emptyDraft,
@@ -83,11 +84,67 @@ describe("draftFromClient", () => {
 			scopeIds: [],
 			tokenEndpointAuthMethod: "client_secret_basic",
 			isDynamic: false,
+			claims: [],
 		};
 		const draft = draftFromClient(client);
 		expect(draft.redirectUris).toEqual([""]);
 		expect(draft.name).toBe("");
 		// …and that blank row must not read as an unsaved edit.
 		expect(isClientDraftDirty(draft, draft)).toBe(false);
+	});
+});
+
+describe("cleanClaims", () => {
+	it("trims names and drops rows that were never filled in", () => {
+		expect(
+			cleanClaims([
+				{ claimName: "  tenant  ", claimValue: "acme", valueType: "string" },
+				{ claimName: "   ", claimValue: "", valueType: "string" },
+			])
+		).toEqual([{ claimName: "tenant", claimValue: "acme", valueType: "string" }]);
+	});
+});
+
+describe("isClientDraftDirty — custom claims", () => {
+	const withClaims = (claims: ClientDraft["claims"]): ClientDraft => ({ ...baseline, claims });
+
+	it("ignores a blank claim row", () => {
+		// Clicking "Add claim" is scaffolding, not an edit.
+		expect(
+			isClientDraftDirty(
+				withClaims([{ claimName: "  ", claimValue: "", valueType: "string" }]),
+				baseline
+			)
+		).toBe(false);
+	});
+
+	it("ignores a reorder, since claim order is not persisted", () => {
+		const a = withClaims([
+			{ claimName: "tenant", claimValue: "acme", valueType: "string" },
+			{ claimName: "tier", claimValue: "3", valueType: "number" },
+		]);
+		const b = withClaims([
+			{ claimName: "tier", claimValue: "3", valueType: "number" },
+			{ claimName: "tenant", claimValue: "acme", valueType: "string" },
+		]);
+		expect(isClientDraftDirty(a, b)).toBe(false);
+	});
+
+	it("is dirty when a claim value changes", () => {
+		expect(
+			isClientDraftDirty(
+				withClaims([{ claimName: "tenant", claimValue: "beta", valueType: "string" }]),
+				withClaims([{ claimName: "tenant", claimValue: "acme", valueType: "string" }])
+			)
+		).toBe(true);
+	});
+
+	it("is dirty when only the value type changes", () => {
+		expect(
+			isClientDraftDirty(
+				withClaims([{ claimName: "tier", claimValue: "3", valueType: "number" }]),
+				withClaims([{ claimName: "tier", claimValue: "3", valueType: "string" }])
+			)
+		).toBe(true);
 	});
 });

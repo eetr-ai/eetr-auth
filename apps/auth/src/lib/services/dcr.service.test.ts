@@ -19,6 +19,7 @@ function createClientServiceMock(): { create: ReturnType<typeof vi.fn> } & Clien
 			isDynamic: params.isDynamic ?? false,
 			redirectUris: params.redirectUris ?? [],
 			scopeIds: params.scopeIds ?? [],
+			claims: [],
 		},
 		clientSecret: params.tokenEndpointAuthMethod === "none" ? "" : "generated-secret",
 	}));

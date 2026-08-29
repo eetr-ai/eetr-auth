@@ -10,6 +10,8 @@ import { TokenRepositoryD1 } from "./src/lib/repositories/token.repository.d1";
 import { RefreshTokenRepositoryD1 } from "./src/lib/repositories/refresh-token.repository.d1";
 import { EnvironmentRepositoryD1 } from "./src/lib/repositories/environment.repository.d1";
 import { UserRepositoryD1 } from "./src/lib/repositories/admin.repository.d1";
+import { ClientClaimRepositoryD1 } from "./src/lib/repositories/client-claim.repository.d1";
+import { ClientClaimService } from "./src/lib/services/client-claim.service";
 import { TokenActivityLogRepositoryD1 } from "./src/lib/repositories/token-activity-log.repository.d1";
 import { DcrRateLimitRepositoryD1 } from "./src/lib/repositories/dcr-rate-limit.repository.d1";
 
@@ -70,6 +72,10 @@ const worker = {
 				refreshTokenRepo: new RefreshTokenRepositoryD1(db),
 				envRepo: new EnvironmentRepositoryD1(db),
 				userRepo: new UserRepositoryD1(db),
+				// Only used when minting tokens; the cron path just cleans up artifacts.
+				clientClaimService: new ClientClaimService({
+					clientClaimRepo: new ClientClaimRepositoryD1(db),
+				}),
 			});
 			const result = await oauthTokenService.cleanupTokenArtifacts(false);
 

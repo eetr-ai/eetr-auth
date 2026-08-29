@@ -5,6 +5,7 @@ import type { AuthorizationCodeRepository } from "@/lib/repositories/authorizati
 import type { TokenRepository } from "@/lib/repositories/token.repository";
 import type { RefreshTokenRepository } from "@/lib/repositories/refresh-token.repository";
 import type { EnvironmentRepository } from "@/lib/repositories/environment.repository";
+import type { ClientClaimService } from "./client-claim.service";
 import type { ClientScopeGrant } from "@/lib/repositories/token.repository";
 import type {
 	RefreshTokenActivity,
@@ -156,6 +157,8 @@ export interface OauthTokenServiceDeps {
 	 * settings instead of only the environment default.
 	 */
 	siteRepo?: SiteSettingsRepository;
+	/** Supplies the client's static custom claims to merge into minted access tokens. */
+	clientClaimService: ClientClaimService;
 	env: CloudflareEnv;
 }
 
@@ -168,8 +171,9 @@ export class OauthTokenService {
 	private readonly envRepo: EnvironmentRepository;
 	private readonly userRepo: UserRepository;
 	private readonly siteRepo?: SiteSettingsRepository;
+	private readonly clientClaimService: ClientClaimService;
 
-	constructor({ clientRepo, authorizationCodeRepo, tokenRepo, refreshTokenRepo, envRepo, userRepo, siteRepo, env }: OauthTokenServiceDeps) {
+	constructor({ clientRepo, authorizationCodeRepo, tokenRepo, refreshTokenRepo, envRepo, userRepo, siteRepo, clientClaimService, env }: OauthTokenServiceDeps) {
 		this.clientRepo = clientRepo;
 		this.authorizationCodeRepo = authorizationCodeRepo;
 		this.tokenRepo = tokenRepo;
@@ -177,6 +181,7 @@ export class OauthTokenService {
 		this.envRepo = envRepo;
 		this.userRepo = userRepo;
 		this.siteRepo = siteRepo;
+		this.clientClaimService = clientClaimService;
 		this.env = env;
 	}
 
@@ -398,7 +403,13 @@ export class OauthTokenService {
 
 		const privateKey = await importPKCS8(params.privateKeyPem, "RS256");
 		const scopeStr = params.scopeNames.join(" ");
-		const payload: Record<string, string | undefined> = {
+		// Custom claims are spread FIRST so the issuer-owned claims below always win. The
+		// service already filters reserved names, so this is defence in depth rather than
+		// the only guard -- but it means no configuration can forge scope, client_id, or
+		// environment even if a row reaches the database another way.
+		const customClaims = await this.clientClaimService.getTokenClaims(params.clientId);
+		const payload: Record<string, unknown> = {
+			...customClaims,
 			scope: scopeStr || undefined,
 			client_id: params.clientIdentifier,
 		};
