@@ -179,6 +179,16 @@ export class ApiKeyService {
 		return { apiKey: created, presentedKey: generated.presented };
 	}
 
+	/**
+	 * Find a key by its public handle *within a client*. Scoping the lookup to the client
+	 * means an admin caller addressing `/clients/{a}/api-keys/{keyId}` can never reach a key
+	 * belonging to client `b`, even though key ids are globally unique.
+	 */
+	async getByKeyIdForClient(clientRowId: string, keyId: string): Promise<ApiKey | null> {
+		const keys = await this.apiKeyRepo.listByClient(clientRowId);
+		return keys.find((key) => key.keyId === keyId) ?? null;
+	}
+
 	async revoke(id: string, actorUserId: string | null): Promise<ApiKey | null> {
 		const existing = await this.apiKeyRepo.getById(id);
 		if (!existing) {

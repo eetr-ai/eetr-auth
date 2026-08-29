@@ -193,6 +193,57 @@ export function getOpenApiDocument(serverUrl?: string) {
 					},
 				},
 			},
+			"/api/token/api-key": {
+				post: {
+					tags: ["OAuth"],
+					summary: "Exchange a long-lived API key for an access token",
+					description:
+						"Exchanges an API key (`eak_<keyId>_<secret>`) for a short-lived access token. Intended for CI/CD and other machine callers, which would otherwise ship a client_id + client_secret and run a client_credentials call before every request.\n\nNot an OAuth grant: it authenticates with a single opaque credential, so it lives outside `/api/token`. The key may be sent as `Authorization: Bearer <key>` or in a form-encoded or JSON body.\n\nThe minted token carries the bound user as `sub`. No `refresh_token` is returned -- the API key is itself the long-lived credential. An optional `scope` may narrow the key's scopes, but never widen them.",
+					requestBody: {
+						required: false,
+						content: {
+							"application/x-www-form-urlencoded": {
+								schema: { $ref: "#/components/schemas/ApiKeyTokenRequest" },
+							},
+							"application/json": {
+								schema: { $ref: "#/components/schemas/ApiKeyTokenRequest" },
+							},
+						},
+					},
+					responses: {
+						"200": {
+							description: "Access token",
+							content: {
+								"application/json": {
+									schema: {
+										type: "object",
+										required: ["token_type", "access_token", "expires_in"],
+										properties: {
+											token_type: { type: "string", example: "Bearer" },
+											access_token: { type: "string" },
+											expires_in: { type: "integer", example: 3600 },
+											scope: { type: "string" },
+										},
+									},
+								},
+							},
+						},
+						"400": {
+							description: "Missing api_key, or requested scopes exceed the key's",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"401": {
+							description:
+								"Invalid API key. Malformed, unknown, revoked, expired, and wrong-secret all return this same response so the endpoint cannot be used to enumerate key ids.",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+					},
+				},
+			},
 			"/api/token/validate": {
 				post: {
 					tags: ["OAuth"],
@@ -740,6 +791,220 @@ export function getOpenApiDocument(serverUrl?: string) {
 					},
 				},
 			},
+			"/api/admin/clients/{clientId}/api-keys": {
+				get: {
+					tags: ["Admin"],
+					summary: "List a client's API keys",
+					description:
+						"Admin API endpoint. Requires a bearer JWT whose client is configured in Setup > Admin API. Returns every API key issued for the client, including revoked and expired ones. The secret is never returned -- it is shown only once, at creation.",
+					security: [{ bearerAuth: [] }],
+					parameters: [
+						{
+							name: "clientId",
+							in: "path",
+							required: true,
+							schema: { type: "string" },
+							description: "The client's public client_id.",
+						},
+					],
+					responses: {
+						"200": {
+							description: "API keys for the client",
+							content: {
+								"application/json": {
+									schema: {
+										type: "object",
+										required: ["apiKeys"],
+										properties: {
+											apiKeys: {
+												type: "array",
+												items: { $ref: "#/components/schemas/ApiKey" },
+											},
+										},
+									},
+								},
+							},
+						},
+						"401": {
+							description: "Invalid token",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"403": {
+							description: "Token client is not configured as an admin API client",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"404": {
+							description: "Client not found",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+					},
+				},
+				post: {
+					tags: ["Admin"],
+					summary: "Issue an API key for a client",
+					description:
+						"Admin API endpoint. Requires a bearer JWT whose client is configured in Setup > Admin API. The key is bound to a user, whose id becomes the `sub` of every token it mints.\n\n`scopes` must be a subset of the scopes granted to the client; omitting it grants all of them. The subset is a snapshot taken at issue time -- the key does not pick up scopes granted to the client later.\n\nThe full credential is returned exactly once in the `apiKey` field and cannot be recovered afterwards.",
+					security: [{ bearerAuth: [] }],
+					parameters: [
+						{
+							name: "clientId",
+							in: "path",
+							required: true,
+							schema: { type: "string" },
+							description: "The client's public client_id.",
+						},
+					],
+					requestBody: {
+						required: true,
+						content: {
+							"application/json": {
+								schema: {
+									type: "object",
+									required: ["userId"],
+									properties: {
+										userId: {
+											type: "string",
+											description:
+												"Internal user UUID or username of the user to bind the key to. `username` is accepted as an alias.",
+										},
+										name: {
+											type: "string",
+											nullable: true,
+											description: "Human-readable label, e.g. the pipeline that uses it.",
+										},
+										expiresAt: {
+											type: "string",
+											format: "date-time",
+											nullable: true,
+											description: "ISO timestamp. Omit or null for a key that never expires.",
+										},
+										scopes: {
+											type: "array",
+											items: { type: "string" },
+											description:
+												"Subset of the client's granted scopes. Omit for all of them.",
+										},
+									},
+								},
+							},
+						},
+					},
+					responses: {
+						"201": {
+							description: "API key created. The secret is returned only here.",
+							content: {
+								"application/json": {
+									schema: {
+										allOf: [
+											{ $ref: "#/components/schemas/ApiKey" },
+											{
+												type: "object",
+												required: ["apiKey"],
+												properties: {
+													apiKey: {
+														type: "string",
+														description:
+															"The full credential, `eak_<keyId>_<secret>`. Shown once.",
+														example: "eak_3f2a9c1b4d5e6f70_a1b2...",
+													},
+												},
+											},
+										],
+									},
+								},
+							},
+						},
+						"400": {
+							description:
+								"Missing userId, malformed expiresAt, or a scope the client was not granted",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"401": {
+							description: "Invalid token",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"403": {
+							description: "Token client is not configured as an admin API client",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"404": {
+							description: "Client or user not found",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+					},
+				},
+			},
+			"/api/admin/clients/{clientId}/api-keys/{keyId}": {
+				delete: {
+					tags: ["Admin"],
+					summary: "Revoke an API key",
+					description:
+						"Admin API endpoint. Requires a bearer JWT whose client is configured in Setup > Admin API. Revocation is immediate: the key stops minting tokens on the next exchange. Already-issued access tokens live out their remaining TTL.\n\nThis is a soft delete -- the record survives so the audit trail still resolves -- and is idempotent, so retrying keeps the original revocation timestamp.",
+					security: [{ bearerAuth: [] }],
+					parameters: [
+						{
+							name: "clientId",
+							in: "path",
+							required: true,
+							schema: { type: "string" },
+							description: "The client's public client_id.",
+						},
+						{
+							name: "keyId",
+							in: "path",
+							required: true,
+							schema: { type: "string" },
+							description: "The key's public handle (the middle segment of the credential).",
+						},
+					],
+					responses: {
+						"200": {
+							description: "Key revoked",
+							content: {
+								"application/json": {
+									schema: {
+										type: "object",
+										required: ["ok"],
+										properties: { ok: { type: "boolean", example: true } },
+									},
+								},
+							},
+						},
+						"401": {
+							description: "Invalid token",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"403": {
+							description: "Token client is not configured as an admin API client",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"404": {
+							description: "Client or key not found",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+					},
+				},
+			},
 			"/api/admin/users/{id}/consents": {
 				get: {
 					tags: ["Admin"],
@@ -1163,6 +1428,47 @@ export function getOpenApiDocument(serverUrl?: string) {
 					properties: {
 						error: { type: "string" },
 						error_description: { type: "string" },
+					},
+				},
+				ApiKeyTokenRequest: {
+					type: "object",
+					properties: {
+						api_key: {
+							type: "string",
+							description:
+								"The full credential, `eak_<keyId>_<secret>`. May be omitted when sent as `Authorization: Bearer <key>`, which takes precedence. `apiKey` is accepted as an alias.",
+						},
+						scope: {
+							type: "string",
+							description:
+								"Space-delimited subset of the key's scopes. Omit for all of them. Scopes outside the key's set are rejected, never granted.",
+						},
+						resource: {
+							type: "string",
+							description: "RFC 8707 resource indicator; becomes the token's audience.",
+						},
+					},
+				},
+				ApiKey: {
+					type: "object",
+					required: ["keyId", "userId", "createdAt"],
+					properties: {
+						keyId: {
+							type: "string",
+							description:
+								"Public handle -- the middle segment of the credential. Safe to display and to log.",
+						},
+						name: { type: "string", nullable: true },
+						userId: {
+							type: "string",
+							description: "The bound user. Becomes the `sub` of every token this key mints.",
+						},
+						username: { type: "string" },
+						createdBy: { type: "string" },
+						createdAt: { type: "string", format: "date-time" },
+						expiresAt: { type: "string", format: "date-time", nullable: true },
+						revokedAt: { type: "string", format: "date-time", nullable: true },
+						lastUsedAt: { type: "string", format: "date-time", nullable: true },
 					},
 				},
 				OAuthTokenResponse: {
