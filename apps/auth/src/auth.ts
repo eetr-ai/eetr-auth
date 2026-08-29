@@ -78,6 +78,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 					return null;
 				}
 
+				// A test user is passwordless: its stored hash is the empty sentinel, which
+				// verifyPassword already rejects on shape. Refusing before the call makes the
+				// intent explicit in the log (rather than a generic password_invalid) and skips
+				// a pointless round-trip to the argon-hasher service.
+				if (user.isTestUser) {
+					signInAuthorizeLog({
+						outcome: "failure",
+						reason: "test_user_password_disabled",
+						userId: user.id,
+						username: user.username,
+					});
+					return null;
+				}
+
 				const verified = await verifyPassword(password, user.passwordHash, {
 					argonHasher: env.ARGON_HASHER,
 					hashMethod,
@@ -345,6 +359,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 							outcome: "failure",
 							provider: "passkey",
 							reason: "user_not_found",
+							userId,
+						})
+					);
+					return null;
+				}
+				// A test user has no credentials of its own. A passkey registered against one
+				// would be a durable, transferable credential for a passwordless account, so
+				// refuse it here as well as at registration time.
+				if (user.isTestUser) {
+					console.info(
+						JSON.stringify({
+							event: "sign_in_authorize",
+							ts: new Date().toISOString(),
+							outcome: "failure",
+							provider: "passkey",
+							reason: "test_user_passkey_disabled",
 							userId,
 						})
 					);

@@ -47,11 +47,24 @@ function createAuthorizationCodeRepoMock() {
 	} satisfies AuthorizationCodeRepository;
 }
 
-/** Defaults to granting the user the client's environment ("env-1") so happy paths pass. */
-function createUserRepoMock(environmentIds: string[] = ["env-1"]) {
+/**
+ * Defaults to granting the user the client's environment ("env-1") and to a normal
+ * (non-test) user, so happy paths pass.
+ */
+function createUserRepoMock(environmentIds: string[] = ["env-1"], isTestUser = false) {
 	return {
 		listTestUsersByEnvironment: vi.fn().mockResolvedValue([]),
 		getUserEnvironments: vi.fn().mockResolvedValue(environmentIds),
+		getById: vi.fn().mockResolvedValue({
+			id: "user-1",
+			username: "alice",
+			name: null,
+			email: null,
+			emailVerifiedAt: null,
+			avatarKey: null,
+			isAdmin: false,
+			isTestUser,
+		}),
 	} as unknown as UserRepository;
 }
 
@@ -225,6 +238,77 @@ describe("OauthAuthorizationService", () => {
 		await expect(service.authorize(baseParams)).rejects.toMatchObject({
 			code: "invalid_request",
 			message: "Invalid redirect_uri.",
+		});
+	});
+
+	describe("test users are confined to test clients", () => {
+		// The session a test user holds is an ordinary one, so nothing stops that browser
+		// from calling /api/authorize for a real client after signing in through the picker.
+		// This gate -- not the sign-in page -- is what makes that attempt fail.
+		it("refuses a test user against a non-test client", async () => {
+			const clientRepo = createClientRepoMock();
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient({ isTest: false }));
+			clientRepo.getRedirectUris.mockResolvedValue(["https://client.example.com/callback"]);
+			const service = createService({
+				clientRepo,
+				userRepo: createUserRepoMock(["env-1"], true),
+			});
+
+			await expect(service.authorize(baseParams)).rejects.toMatchObject({
+				code: "access_denied",
+				// Deliberately identical to the environment-gate message: which gate refused
+				// is not the client's business, and naming it would leak the account's nature.
+				message: "You do not have access to this application.",
+			});
+		});
+
+		it("allows a test user against a test client", async () => {
+			const clientRepo = createClientRepoMock();
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient({ isTest: true }));
+			// No redirect URIs registered → fails the next check, proving the gate passed.
+			clientRepo.getRedirectUris.mockResolvedValue([]);
+			const service = createService({
+				clientRepo,
+				userRepo: createUserRepoMock(["env-1"], true),
+			});
+
+			await expect(service.authorize(baseParams)).rejects.toMatchObject({
+				code: "invalid_request",
+				message: "Invalid redirect_uri.",
+			});
+		});
+
+		// A test client is a normal client; only the sign-in page it offers is different.
+		it("allows a normal user against a test client", async () => {
+			const clientRepo = createClientRepoMock();
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient({ isTest: true }));
+			clientRepo.getRedirectUris.mockResolvedValue([]);
+			const service = createService({
+				clientRepo,
+				userRepo: createUserRepoMock(["env-1"], false),
+			});
+
+			await expect(service.authorize(baseParams)).rejects.toMatchObject({
+				code: "invalid_request",
+				message: "Invalid redirect_uri.",
+			});
+		});
+
+		// The environment gate runs first and must keep doing so: a test user with no grant
+		// is refused even when the client it is aiming at happens to be a test client.
+		it("still enforces the environment grant for a test user on a test client", async () => {
+			const clientRepo = createClientRepoMock();
+			clientRepo.getByClientIdentifier.mockResolvedValue(
+				makeClient({ isTest: true, environmentId: "env-other" })
+			);
+			const service = createService({
+				clientRepo,
+				userRepo: createUserRepoMock(["env-1"], true),
+			});
+
+			await expect(service.authorize(baseParams)).rejects.toMatchObject({
+				code: "access_denied",
+			});
 		});
 	});
 

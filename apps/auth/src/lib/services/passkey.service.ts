@@ -106,6 +106,11 @@ export class PasskeyService {
 	}> {
 		const user = await this.userRepo.getById(userId);
 		if (!user) throw new Error("User not found");
+		// A test user is passwordless by construction and is meant to be reachable only via
+		// the one-click picker on a test client. A passkey would hand it a durable,
+		// transferable credential usable from the normal sign-in page, so refuse at the
+		// point the challenge is minted rather than only at assertion time.
+		if (user.isTestUser) throw new Error("Test users cannot register passkeys.");
 
 		const { rpId, rpName } = await this.getRpDetails();
 

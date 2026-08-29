@@ -747,6 +747,19 @@ export class OauthTokenService {
 					400
 				);
 			}
+			// A test user is passwordless -- anyone reaching a test client's sign-in page can
+			// become one -- so it must never hold a live grant on a real client. Re-checked
+			// here for the same reason as the environment check above: a 30-day refresh token
+			// would otherwise outlive the constraint. Same treatment, same generic message.
+			const subjectUser = await this.userRepo.getById(token.subject);
+			if (subjectUser?.isTestUser && !client.isTest) {
+				await this.refreshTokenRepo.revoke(token.id, nowIso);
+				throw new OAuthServiceError(
+					"invalid_grant",
+					"User no longer has access to this environment.",
+					400
+				);
+			}
 		}
 
 		step = Date.now();

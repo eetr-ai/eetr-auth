@@ -558,6 +558,67 @@ describe("OauthTokenService", () => {
 			expect(tokenRepo.createAccessToken).not.toHaveBeenCalled();
 		});
 
+		// A test user is passwordless, so it must not keep a live grant on a real client.
+		// The environment gate would not catch this on its own: an admin can legitimately
+		// grant a test user an environment that also contains real clients.
+		it("rejects the refresh when a test user holds a grant on a non-test client", async () => {
+			const clientRepo = createClientRepoMock();
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			// Environment access is intact -- only the test-user/test-client pairing fails.
+			const userRepo = createUserRepoMock(makeUser({ isTestUser: true }));
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient({ isTest: false }));
+			refreshTokenRepo.getByTokenId.mockResolvedValue(makeRefreshToken());
+			const service = createService({ clientRepo, tokenRepo, refreshTokenRepo, userRepo });
+
+			await expect(
+				service.exchange({
+					grantType: "refresh_token",
+					clientId: "client-app-id",
+					clientSecret: "plain-secret",
+					refreshToken: "rt_existing",
+				})
+			).rejects.toMatchObject({
+				code: "invalid_grant",
+				message: "User no longer has access to this environment.",
+				status: 400,
+			});
+			// Revoked, not merely refused: a 30-day token that keeps being presented would
+			// otherwise outlive the constraint it just failed.
+			expect(refreshTokenRepo.revoke).toHaveBeenCalledWith(
+				"refresh-row-1",
+				"2026-04-06T13:10:00.000Z"
+			);
+			expect(refreshTokenRepo.createRefreshToken).not.toHaveBeenCalled();
+			expect(tokenRepo.createAccessToken).not.toHaveBeenCalled();
+		});
+
+		it("allows a test user to refresh against a test client", async () => {
+			const clientRepo = createClientRepoMock();
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			const userRepo = createUserRepoMock(makeUser({ isTestUser: true }));
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient({ isTest: true }));
+			refreshTokenRepo.getByTokenId.mockResolvedValue(makeRefreshToken());
+			tokenRepo.getClientScopeGrants.mockResolvedValue([
+				makeGrant({ clientScopeId: "client-scope-read", scopeName: "read:users" }),
+			]);
+			const service = createService({ clientRepo, tokenRepo, refreshTokenRepo, userRepo });
+
+			const result = await service.exchange({
+				grantType: "refresh_token",
+				clientId: "client-app-id",
+				clientSecret: "plain-secret",
+				refreshToken: "rt_existing",
+			});
+
+			// Rotation revokes the presented token as a matter of course, so the proof that
+			// the gate passed is that a new pair was issued at all.
+			expect(result.access_token).toMatch(/^at_[0-9a-f]{64}$/);
+			expect(result.refresh_token).toMatch(/^rt_[0-9a-f]{64}$/);
+			expect(refreshTokenRepo.createRefreshToken).toHaveBeenCalled();
+		});
+
 		it("does not environment-gate client_credentials refresh (no subject)", async () => {
 			const clientRepo = createClientRepoMock();
 			const tokenRepo = createTokenRepoMock();

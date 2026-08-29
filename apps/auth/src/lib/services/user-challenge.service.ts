@@ -363,6 +363,16 @@ export class UserChallengeService {
 			await genericDone();
 			return;
 		}
+		// A test user has no password to reset, and completing a reset would give a
+		// passwordless account a real password -- quietly undoing the invariant that it can
+		// only ever be reached through a test client's picker. Treated exactly like an
+		// unknown address, silently, so this does not become an oracle for which accounts
+		// are test users.
+		if (user.isTestUser) {
+			logPasswordReset({ step: "request_ignored", reason: "test_user", emailMasked });
+			await genericDone();
+			return;
+		}
 
 		const site = await this.siteRepo.get();
 		const siteUrl = site?.siteUrl?.trim();
