@@ -1,5 +1,6 @@
 import { generateApiKey, parseApiKey } from "@/lib/auth/api-key-format";
-import { hashPasswordArgon2ViaService, verifyArgon2ViaService } from "@/lib/auth/password-hash";
+import { hashPassword, verifyPassword } from "@/lib/auth/password-hash";
+import type { HashMethod } from "@/lib/config/hash-method";
 import type { ApiKey, ApiKeyRepository } from "@/lib/repositories/api-key.repository";
 import type { Client, ClientRepository } from "@/lib/repositories/client.repository";
 import type { UserRecord, UserRepository } from "@/lib/repositories/admin.repository";
@@ -40,6 +41,12 @@ export interface ApiKeyServiceDeps {
 	tokenRepo: TokenRepository;
 	adminAuditLogService: AdminAuditLogService;
 	argonHasher?: Fetcher;
+	/**
+	 * Same policy as user passwords (see resolveHashMethod): `argon` everywhere real, and
+	 * `md5` only as the documented local-dev convenience that lets the stack run without
+	 * the Rust argon-hasher Worker. Production refuses `md5` outright.
+	 */
+	hashMethod?: HashMethod;
 }
 
 /**
@@ -59,6 +66,7 @@ export class ApiKeyService {
 	private readonly tokenRepo: TokenRepository;
 	private readonly adminAuditLogService: AdminAuditLogService;
 	private readonly argonHasher?: Fetcher;
+	private readonly hashMethod: HashMethod;
 
 	constructor(deps: ApiKeyServiceDeps) {
 		this.apiKeyRepo = deps.apiKeyRepo;
@@ -67,16 +75,13 @@ export class ApiKeyService {
 		this.tokenRepo = deps.tokenRepo;
 		this.adminAuditLogService = deps.adminAuditLogService;
 		this.argonHasher = deps.argonHasher;
+		// Default argon (fail closed), matching hashPassword/verifyPassword: a caller that
+		// forgets to pass hashMethod gets the strong path, which then requires the binding.
+		this.hashMethod = deps.hashMethod ?? "argon";
 	}
 
-	private requireHasher(): Fetcher {
-		// Fail closed: without the binding we can neither hash nor verify, and silently
-		// falling back to a weaker digest for a long-lived credential would be worse than
-		// refusing the operation.
-		if (!this.argonHasher) {
-			throw new Error("API keys require the ARGON_HASHER binding");
-		}
-		return this.argonHasher;
+	private hashOptions() {
+		return { argonHasher: this.argonHasher, hashMethod: this.hashMethod };
 	}
 
 	async list(clientRowId: string): Promise<ApiKey[]> {
@@ -118,8 +123,6 @@ export class ApiKeyService {
 		params: CreateApiKeyParams,
 		actorUserId: string | null
 	): Promise<CreateApiKeyResult> {
-		const hasher = this.requireHasher();
-
 		const client = await this.clientRepo.getById(params.clientRowId);
 		if (!client) {
 			throw new Error("Client not found");
@@ -139,7 +142,7 @@ export class ApiKeyService {
 
 		const grants = await this.resolveScopeGrants(params.clientRowId, params.scopeNames);
 		const generated = generateApiKey();
-		const keyHash = await hashPasswordArgon2ViaService(generated.secret, hasher);
+		const keyHash = await hashPassword(generated.secret, this.hashOptions());
 		const id = crypto.randomUUID();
 
 		await this.apiKeyRepo.create(
@@ -215,8 +218,6 @@ export class ApiKeyService {
 	 * every failure raises the same error regardless of which check tripped.
 	 */
 	async authenticate(presentedKey: string): Promise<AuthenticatedApiKey> {
-		const hasher = this.requireHasher();
-
 		const parsed = parseApiKey(presentedKey);
 		if (!parsed) {
 			throw invalidApiKey();
@@ -233,9 +234,14 @@ export class ApiKeyService {
 			throw invalidApiKey();
 		}
 
-		const ok = await verifyArgon2ViaService(parsed.secret, stored.keyHash, hasher);
-		if (!ok) {
+		const verification = await verifyPassword(parsed.secret, stored.keyHash, this.hashOptions());
+		if (!verification.ok) {
 			throw invalidApiKey();
+		}
+		if (verification.rehash) {
+			// Row was stored under a weaker HASH_METHOD; upgrade it now that we hold the
+			// plaintext, exactly as authenticateClient does for legacy client secrets.
+			await this.apiKeyRepo.updateHash(stored.id, verification.rehash);
 		}
 
 		// The key row survives its client/user only via FK cascade, so these are defence in

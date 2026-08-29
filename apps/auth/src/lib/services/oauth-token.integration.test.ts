@@ -467,10 +467,9 @@ class InMemoryUserRepo implements UserRepository {
  */
 function fakeArgonHasher(): Fetcher {
 	return {
-		fetch: async (request: Request) => {
-			const url = new URL(request.url);
-			const body = (await request.json()) as { password: string; hash?: string };
-			if (url.pathname === "/hash") {
+		fetch: async (url: string, init: RequestInit) => {
+			const body = JSON.parse(String(init.body)) as { password: string; hash?: string };
+			if (new URL(url).pathname === "/hash") {
 				return Response.json({ hash: `$argon2id$fake$${body.password}` });
 			}
 			return Response.json({ valid: body.hash === `$argon2id$fake$${body.password}` });
@@ -527,6 +526,13 @@ class InMemoryApiKeyRepo implements ApiKeyRepository {
 		const row = this.rows.get(id);
 		if (row && !row.revokedAt) {
 			this.rows.set(id, { ...row, revokedAt });
+		}
+	}
+
+	async updateHash(id: string, keyHash: string): Promise<void> {
+		const row = this.rows.get(id);
+		if (row) {
+			this.rows.set(id, { ...row, keyHash });
 		}
 	}
 

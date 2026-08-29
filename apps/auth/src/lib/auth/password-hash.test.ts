@@ -9,10 +9,12 @@ describe("hashPassword", () => {
 	});
 
 	it("uses the argon hasher service in argon mode", async () => {
-		const fetch = vi.fn(async (request: Request) => {
-			expect(request.url).toBe("https://argon-hasher.internal/hash");
-			expect(request.method).toBe("POST");
-			expect(await request.json()).toEqual({ password: "password" });
+		// The binding is called with a URL + init, never a Request object: under `next dev`
+		// it is a cross-realm stub that would stringify a Request to "[object Request]".
+		const fetch = vi.fn(async (url: string, init: RequestInit) => {
+			expect(url).toBe("https://argon-hasher.internal/hash");
+			expect(init.method).toBe("POST");
+			expect(JSON.parse(String(init.body))).toEqual({ password: "password" });
 
 			return Response.json({ hash: "$argon2id$v=19$m=19456,t=2,p=1$abc$def" });
 		});
@@ -83,9 +85,9 @@ describe("verifyPassword", () => {
 	});
 
 	it("verifies an Argon2 stored hash through the hasher service", async () => {
-		const fetch = vi.fn(async (request: Request) => {
-			expect(request.url).toBe("https://argon-hasher.internal/verify");
-			expect(await request.json()).toEqual({
+		const fetch = vi.fn(async (url: string, init: RequestInit) => {
+			expect(url).toBe("https://argon-hasher.internal/verify");
+			expect(JSON.parse(String(init.body))).toEqual({
 				password: "password",
 				hash: "$argon2id$v=19$m=19456,t=2,p=1$abc$def",
 			});
@@ -103,9 +105,9 @@ describe("verifyPassword", () => {
 	});
 
 	it("upgrades a matching legacy MD5 hash to Argon2 in argon mode", async () => {
-		const fetch = vi.fn(async (request: Request) => {
-			expect(request.url).toBe("https://argon-hasher.internal/hash");
-			expect(await request.json()).toEqual({ password: "password" });
+		const fetch = vi.fn(async (url: string, init: RequestInit) => {
+			expect(url).toBe("https://argon-hasher.internal/hash");
+			expect(JSON.parse(String(init.body))).toEqual({ password: "password" });
 
 			return Response.json({ hash: "$argon2id$v=19$m=19456,t=2,p=1$upgrade$newhash" });
 		});

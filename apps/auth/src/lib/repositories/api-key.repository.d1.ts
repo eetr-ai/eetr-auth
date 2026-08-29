@@ -125,6 +125,10 @@ export class ApiKeyRepositoryD1 implements ApiKeyRepository {
 			.run();
 	}
 
+	async updateHash(id: string, keyHash: string): Promise<void> {
+		await this.db.prepare("UPDATE api_keys SET key_hash = ? WHERE id = ?").bind(keyHash, id).run();
+	}
+
 	async touchLastUsed(id: string, lastUsedAt: string): Promise<void> {
 		await this.db
 			.prepare("UPDATE api_keys SET last_used_at = ? WHERE id = ?")

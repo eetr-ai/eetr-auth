@@ -51,11 +51,16 @@ export interface ApiKeyRepository {
 	getByKeyId(keyId: string): Promise<ApiKeyWithHash | null>;
 	create(row: ApiKeyRow, clientScopeIds: string[]): Promise<void>;
 	revoke(id: string, revokedAt: string): Promise<void>;
+	/**
+	 * Lazy re-hash, mirroring ClientRepository.updateSecret: a row stored under an older
+	 * HASH_METHOD is upgraded in place the first time it verifies successfully.
+	 */
+	updateHash(id: string, keyHash: string): Promise<void>;
 	touchLastUsed(id: string, lastUsedAt: string): Promise<void>;
 	/**
-	 * The key's scope subset. Empty means "no subset recorded" -- the caller treats that as
-	 * all of the client's current grants. Rows disappear on their own when a scope is
-	 * ungranted from the client (ON DELETE CASCADE from client_scopes).
+	 * The key's scope subset, always materialized at creation. Empty therefore means every
+	 * scope it held has since been ungranted from the client and cascaded away (ON DELETE
+	 * CASCADE from client_scopes) -- never "unset, so grant everything".
 	 */
 	getScopeGrants(apiKeyId: string): Promise<ClientScopeGrant[]>;
 }

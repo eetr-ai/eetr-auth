@@ -137,6 +137,7 @@ export function getServices(ctx: RequestContext): Services {
 		tokenRepo,
 		adminAuditLogService,
 		argonHasher: ctx.env.ARGON_HASHER,
+		hashMethod,
 	});
 	const clientService = new ClientService({
 		clientClaimService,

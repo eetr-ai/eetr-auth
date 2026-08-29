@@ -16,10 +16,9 @@ import { isOAuthServiceError } from "@/lib/services/oauth.types";
  * secret half reached the hasher without running real Argon2.
  */
 function createArgonHasherMock(): Fetcher {
-	const fetch = vi.fn(async (request: Request) => {
-		const url = new URL(request.url);
-		const body = (await request.json()) as { password: string; hash?: string };
-		if (url.pathname === "/hash") {
+	const fetch = vi.fn(async (url: string, init: RequestInit) => {
+		const body = JSON.parse(String(init.body)) as { password: string; hash?: string };
+		if (new URL(url).pathname === "/hash") {
 			return Response.json({ hash: `$argon2id$fake$${body.password}` });
 		}
 		return Response.json({ valid: body.hash === `$argon2id$fake$${body.password}` });
@@ -96,6 +95,7 @@ function createHarness(options: { argonHasher?: Fetcher | undefined } = {}): Har
 		getByKeyId: vi.fn().mockResolvedValue(null),
 		create: vi.fn(),
 		revoke: vi.fn(),
+		updateHash: vi.fn(),
 		touchLastUsed: vi.fn(),
 		getScopeGrants: vi.fn().mockResolvedValue([]),
 	} as unknown as ApiKeyRepository;
@@ -234,7 +234,9 @@ describe("ApiKeyService", () => {
 			expect(auditRow.details).not.toContain(secret);
 		});
 
-		it("fails closed when the hashing service is unavailable", async () => {
+		it("fails closed when argon is in force but the hashing service is unavailable", async () => {
+			// Defaulting to argon (rather than degrading to MD5) is what makes a missing
+			// binding an error instead of a silently weaker digest.
 			const { service } = createHarness({ argonHasher: undefined });
 			await expect(
 				service.create({ clientRowId: "client-row-1", userId: "user-1" }, "admin")

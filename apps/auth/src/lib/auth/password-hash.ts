@@ -29,13 +29,14 @@ export async function hashPasswordArgon2ViaService(
 	plain: string,
 	argonHasher: Fetcher
 ): Promise<string> {
-	const hashRes = await argonHasher.fetch(
-		new Request(ARGON_HASHER_HASH_URL, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ password: plain }),
-		})
-	);
+	// URL + init rather than a Request object: under `next dev` the binding is a local
+	// stub whose fetch comes from another realm, and a cross-realm Request stringifies to
+	// "[object Request]" instead of being read. Both forms are equivalent in workerd.
+	const hashRes = await argonHasher.fetch(ARGON_HASHER_HASH_URL, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ password: plain }),
+	});
 	if (!hashRes.ok) {
 		const text = await hashRes.text().catch(() => "");
 		throw new Error(
@@ -69,25 +70,17 @@ export async function hashPassword(plain: string, options?: HashPasswordOptions)
 	return md5(plain);
 }
 
-/**
- * Verify a plaintext against an Argon2id PHC string via the hashing worker.
- *
- * Exported for credentials this system always generates itself (API keys), which have no
- * legacy MD5 rows and so must NOT go through {@link verifyPassword} -- its MD5 match and
- * silent upgrade path only make sense for user passwords imported from an older store.
- */
-export async function verifyArgon2ViaService(
+async function verifyArgon2ViaHasherService(
 	plain: string,
 	storedHash: string,
 	argonHasher: Fetcher
 ): Promise<boolean> {
-	const verifyRes = await argonHasher.fetch(
-		new Request(ARGON_HASHER_VERIFY_URL, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ password: plain, hash: storedHash }),
-		})
-	);
+	// See the note in hashPasswordArgon2ViaService on why this is not a Request object.
+	const verifyRes = await argonHasher.fetch(ARGON_HASHER_VERIFY_URL, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ password: plain, hash: storedHash }),
+	});
 	if (!verifyRes.ok) {
 		logPasswordVerify({
 			step: "argon2_hasher",
@@ -165,7 +158,7 @@ export async function verifyPassword(
 
 	if (isArgon2StoredHash(storedHash)) {
 		logPasswordVerify({ step: "route", path: "argon2_service" });
-		const ok = await verifyArgon2ViaService(plain, storedHash, hasher);
+		const ok = await verifyArgon2ViaHasherService(plain, storedHash, hasher);
 		if (ok) {
 			logPasswordVerify({ step: "done", outcome: "argon2_match" });
 			return { ok: true };
