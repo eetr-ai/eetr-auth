@@ -166,6 +166,37 @@ export class RefreshTokenRepositoryD1 implements RefreshTokenRepository {
 		return (result.results ?? []).map((row) => row.access_token_id);
 	}
 
+	async revokeAllForSubjectAndClient(
+		subject: string,
+		clientId: string,
+		revokedAt: string
+	): Promise<string[]> {
+		// Collect the bound access tokens BEFORE revoking, so the returned set is the same
+		// one the UPDATE below acts on. Reading after would race a concurrent rotation.
+		const bound = await this.db
+			.prepare(
+				[
+					"SELECT DISTINCT access_token_id FROM refresh_tokens",
+					"WHERE subject = ? AND client_id = ? AND revoked_at IS NULL",
+					"  AND access_token_id IS NOT NULL",
+				].join(" ")
+			)
+			.bind(subject, clientId)
+			.all<{ access_token_id: string }>();
+
+		await this.db
+			.prepare(
+				[
+					"UPDATE refresh_tokens SET revoked_at = ?",
+					"WHERE subject = ? AND client_id = ? AND revoked_at IS NULL",
+				].join(" ")
+			)
+			.bind(revokedAt, subject, clientId)
+			.run();
+
+		return (bound.results ?? []).map((row) => row.access_token_id);
+	}
+
 	async listRefreshTokenActivity(clientId?: string): Promise<RefreshTokenActivity[]> {
 		const nowIso = new Date().toISOString();
 		const query = clientId

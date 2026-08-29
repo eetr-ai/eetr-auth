@@ -64,7 +64,32 @@ export default async function OAuthConfirmPage() {
 			scope,
 		])
 	);
-	const consentScopes = effectiveScopeNames.map((name) => ({
+	// Skip the screen when the user has already consented to everything being asked for.
+	// `prompt=consent` (OIDC) always forces it, which is how a client re-confirms on demand.
+	const forceConsent = pendingParams.prompt
+		?.split(/\s+/)
+		.map((value) => value.trim())
+		.includes("consent");
+	const unconsentedScopeNames = client
+		? await services.consentService.getUnconsentedScopeNames(
+				session.user.id,
+				client.id,
+				effectiveScopeNames
+			)
+		: effectiveScopeNames;
+
+	if (client && !forceConsent && unconsentedScopeNames.length === 0) {
+		redirect("/api/authorize/complete");
+	}
+
+	// Ask about what actually changed: on a re-authorization that adds a scope, list only
+	// the new one rather than re-presenting everything the user already agreed to.
+	const scopesToShow =
+		unconsentedScopeNames.length > 0 ? unconsentedScopeNames : effectiveScopeNames;
+	const isIncrementalConsent =
+		unconsentedScopeNames.length > 0 && unconsentedScopeNames.length < effectiveScopeNames.length;
+
+	const consentScopes = scopesToShow.map((name) => ({
 		name,
 		label: copyByName.get(name)?.displayName ?? null,
 		description: copyByName.get(name)?.description ?? null,
@@ -78,12 +103,23 @@ export default async function OAuthConfirmPage() {
 			<div className="mx-auto mt-16 w-full max-w-xl rounded-card border border-border bg-background p-8">
 				<h1 className="text-2xl font-semibold">Authorize {clientName}</h1>
 				<p className="mt-2 text-sm text-muted-foreground">
-					<span className="font-medium text-foreground">{clientName}</span> wants to access your
-					account. Choose which account should authorize it.
+					{isIncrementalConsent ? (
+						<>
+							<span className="font-medium text-foreground">{clientName}</span> is asking for
+							additional access to your account.
+						</>
+					) : (
+						<>
+							<span className="font-medium text-foreground">{clientName}</span> wants to access
+							your account. Choose which account should authorize it.
+						</>
+					)}
 				</p>
 
 				<div className="mt-6 rounded-card border border-border p-4">
-					<p className="text-sm font-medium">This will grant access to:</p>
+						<p className="text-sm font-medium">
+						{isIncrementalConsent ? "This will additionally grant access to:" : "This will grant access to:"}
+					</p>
 					{consentScopes.length > 0 ? (
 						<ul className="mt-3 flex flex-col gap-3">
 							{consentScopes.map((scope) => (

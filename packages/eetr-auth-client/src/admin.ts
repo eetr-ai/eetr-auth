@@ -23,6 +23,24 @@ export interface CreateUserParams {
   email?: string | null;
 }
 
+export interface AdminConsentRecord {
+  /** The client's public client_id. */
+  clientId: string;
+  clientName: string | null;
+  /** The scope names this user has consented to for that client. */
+  scopes: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RevokeConsentResult {
+  ok: boolean;
+  /** Access tokens force-expired as part of the revocation. */
+  accessTokensExpired: number;
+  /** Unused authorization codes dropped as part of the revocation. */
+  codesDeleted: number;
+}
+
 export interface UpdateUserParams {
   username?: string;
   password?: string;
@@ -38,6 +56,10 @@ function adminUsersUrl(baseUrl: string, idOrUsername?: string): string {
     return `${trimmed}/api/admin/users`;
   }
   return `${trimmed}/api/admin/users/${encodeURIComponent(idOrUsername)}`;
+}
+
+function adminUserConsentsUrl(baseUrl: string, idOrUsername: string): string {
+  return `${adminUsersUrl(baseUrl, idOrUsername)}/consents`;
 }
 
 async function parseError(res: Response): Promise<OAuthError> {
@@ -123,4 +145,45 @@ export async function deleteAdminUser(
   if (!res.ok) {
     throw await parseError(res);
   }
+}
+
+/**
+ * List the applications a user has authorized, with the scopes consented to for each.
+ * `idOrUsername` accepts either the internal UUID or the username.
+ */
+export async function listUserConsents(
+  idOrUsername: string,
+  config: AdminClientConfig
+): Promise<AdminConsentRecord[]> {
+  const res = await fetch(adminUserConsentsUrl(config.baseUrl, idOrUsername), {
+    headers: { Authorization: `Bearer ${config.accessToken}` },
+  });
+  if (!res.ok) {
+    throw await parseError(res);
+  }
+  const data = (await res.json()) as { consents: AdminConsentRecord[] };
+  return data.consents;
+}
+
+/**
+ * Withdraw a user's consent for one client, addressed by its public `client_id`.
+ *
+ * This also revokes that user's refresh tokens, access tokens, and unused authorization
+ * codes for the client, so access stops immediately rather than at token expiry.
+ */
+export async function revokeUserConsent(
+  idOrUsername: string,
+  clientId: string,
+  config: AdminClientConfig
+): Promise<RevokeConsentResult> {
+  const url = new URL(adminUserConsentsUrl(config.baseUrl, idOrUsername));
+  url.searchParams.set("client_id", clientId);
+  const res = await fetch(url.toString(), {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${config.accessToken}` },
+  });
+  if (!res.ok) {
+    throw await parseError(res);
+  }
+  return res.json() as Promise<RevokeConsentResult>;
 }

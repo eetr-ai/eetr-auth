@@ -32,6 +32,7 @@ function createAuthorizationCodeRepoMock() {
 		getByCodeId: vi.fn(),
 		// Default: the code is successfully consumed (won the single-use race).
 		markUsed: vi.fn().mockResolvedValue(true),
+		deleteUnusedForSubjectAndClient: vi.fn(),
 		deleteUsedOrExpired: vi.fn(),
 	} satisfies AuthorizationCodeRepository;
 }
@@ -61,6 +62,7 @@ function createRefreshTokenRepoMock() {
 		listRefreshTokenActivity: vi.fn(),
 		deleteByTokenId: vi.fn(),
 		deleteExpired: vi.fn(),
+		revokeAllForSubjectAndClient: vi.fn(),
 		deleteRevoked: vi.fn(),
 	} satisfies RefreshTokenRepository;
 }

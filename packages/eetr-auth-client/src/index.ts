@@ -51,10 +51,14 @@ export {
   createAdminUser,
   updateAdminUser,
   deleteAdminUser,
+  listUserConsents,
+  revokeUserConsent,
 } from "./admin.js";
 export type {
   AdminUserRecord,
   AdminClientConfig,
+  AdminConsentRecord,
+  RevokeConsentResult,
   CreateUserParams,
   UpdateUserParams,
 } from "./admin.js";

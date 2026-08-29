@@ -5,6 +5,7 @@ import type { UserRepository } from "@/lib/repositories/admin.repository";
 import { OAuthServiceError } from "./oauth.types";
 import { normalizeResourceParam } from "./resource-indicator";
 import { matchRegisteredRedirectUri } from "./loopback-uri";
+import type { ConsentService } from "./consent.service";
 
 const AUTHORIZATION_CODE_TTL_SECONDS = 300;
 
@@ -39,6 +40,7 @@ export interface OauthAuthorizationServiceDeps {
 	tokenRepo: TokenRepository;
 	authorizationCodeRepo: AuthorizationCodeRepository;
 	userRepo: UserRepository;
+	consentService: ConsentService;
 }
 
 export class OauthAuthorizationService {
@@ -46,17 +48,20 @@ export class OauthAuthorizationService {
 	private readonly tokenRepo: TokenRepository;
 	private readonly authorizationCodeRepo: AuthorizationCodeRepository;
 	private readonly userRepo: UserRepository;
+	private readonly consentService: ConsentService;
 
 	constructor({
 		clientRepo,
 		tokenRepo,
 		authorizationCodeRepo,
 		userRepo,
+		consentService,
 	}: OauthAuthorizationServiceDeps) {
 		this.clientRepo = clientRepo;
 		this.tokenRepo = tokenRepo;
 		this.authorizationCodeRepo = authorizationCodeRepo;
 		this.userRepo = userRepo;
+		this.consentService = consentService;
 	}
 
 
@@ -183,6 +188,15 @@ export class OauthAuthorizationService {
 				resource,
 			},
 			grants.map((grant) => grant.clientScopeId)
+		);
+
+		// Record consent only once the code exists: a request that failed validation above
+		// never reaches here, so a rejected authorize cannot leave consent behind. The
+		// resolved grants -- not the raw request -- are the authoritative set.
+		await this.consentService.record(
+			params.subject,
+			client.id,
+			grants.map((grant) => grant.scopeName)
 		);
 
 		const redirect = new URL(redirectUri);

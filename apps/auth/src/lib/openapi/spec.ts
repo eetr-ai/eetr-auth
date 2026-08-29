@@ -740,6 +740,145 @@ export function getOpenApiDocument(serverUrl?: string) {
 					},
 				},
 			},
+			"/api/admin/users/{id}/consents": {
+				get: {
+					tags: ["Admin"],
+					summary: "List a user's granted consents",
+					description:
+						"Admin API endpoint. Requires a bearer JWT whose client is configured in Setup > Admin API. Returns the applications this user has authorized and the scopes consented to for each. The `id` path parameter accepts either the internal user UUID or the username.",
+					security: [{ bearerAuth: [] }],
+					parameters: [
+						{
+							name: "id",
+							in: "path",
+							required: true,
+							schema: { type: "string" },
+							description: "Internal user UUID or username.",
+						},
+					],
+					responses: {
+						"200": {
+							description: "Consents for the user",
+							content: {
+								"application/json": {
+									schema: {
+										type: "object",
+										required: ["consents"],
+										properties: {
+											consents: {
+												type: "array",
+												items: {
+													type: "object",
+													required: ["clientId", "scopes", "createdAt", "updatedAt"],
+													properties: {
+														clientId: {
+															type: "string",
+															description: "The client's public client_id.",
+														},
+														clientName: { type: "string", nullable: true },
+														scopes: { type: "array", items: { type: "string" } },
+														createdAt: { type: "string", format: "date-time" },
+														updatedAt: { type: "string", format: "date-time" },
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						"400": {
+							description: "Missing path parameter",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"401": {
+							description: "Invalid token",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"403": {
+							description: "Token client is not configured as an admin API client",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"404": {
+							description: "User not found",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+					},
+				},
+				delete: {
+					tags: ["Admin"],
+					summary: "Revoke a user's consent for one client",
+					description:
+						"Admin API endpoint. Requires a bearer JWT whose client is configured in Setup > Admin API. Deletes the consent record and revokes the user's refresh tokens, access tokens, and unused authorization codes for that client, so revocation takes effect immediately rather than at token expiry.",
+					security: [{ bearerAuth: [] }],
+					parameters: [
+						{
+							name: "id",
+							in: "path",
+							required: true,
+							schema: { type: "string" },
+							description: "Internal user UUID or username.",
+						},
+						{
+							name: "client_id",
+							in: "query",
+							required: true,
+							schema: { type: "string" },
+							description: "The public client_id of the application to revoke.",
+						},
+					],
+					responses: {
+						"200": {
+							description: "Consent revoked",
+							content: {
+								"application/json": {
+									schema: {
+										type: "object",
+										required: ["ok", "accessTokensExpired", "codesDeleted"],
+										properties: {
+											ok: { type: "boolean" },
+											accessTokensExpired: { type: "integer" },
+											codesDeleted: { type: "integer" },
+										},
+									},
+								},
+							},
+						},
+						"400": {
+							description: "Missing path or query parameter",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"401": {
+							description: "Invalid token",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"403": {
+							description: "Token client is not configured as an admin API client",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+						"404": {
+							description: "User or client not found",
+							content: {
+								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
+							},
+						},
+					},
+				},
+			},
 			"/api/auth/passkey/challenge": {
 				post: {
 					tags: ["OAuth"],

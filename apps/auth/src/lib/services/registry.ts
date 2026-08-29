@@ -16,6 +16,7 @@ import { TokenActivityLogRepositoryD1 } from "@/lib/repositories/token-activity-
 import { AdminAuditLogRepositoryD1 } from "@/lib/repositories/admin-audit-log.repository.d1";
 import { SiteAdminApiClientsRepositoryD1 } from "@/lib/repositories/site-admin-api-clients.repository.d1";
 import { DcrRateLimitRepositoryD1 } from "@/lib/repositories/dcr-rate-limit.repository.d1";
+import { ConsentRepositoryD1 } from "@/lib/repositories/consent.repository.d1";
 import { resolveHashMethod } from "@/lib/config/hash-method";
 import { getAvatarCdnBaseUrl } from "@/lib/users/profile";
 import { UserService } from "./user.service";
@@ -34,6 +35,7 @@ import { PasskeyService } from "./passkey.service";
 import { TransactionalEmailService } from "./transactional-email.service";
 import { DcrService } from "./dcr.service";
 import { DcrRateLimitService } from "./dcr-rate-limit.service";
+import { ConsentService } from "./consent.service";
 import type { AssetBucket } from "@/lib/uploads/staged-upload";
 
 export interface Services {
@@ -52,6 +54,7 @@ export interface Services {
 	passkeyService: PasskeyService;
 	dcrService: DcrService;
 	dcrRateLimitService: DcrRateLimitService;
+	consentService: ConsentService;
 }
 
 function resolveOptionalEnvString(env: Record<string, unknown>, key: string): string | null {
@@ -94,6 +97,7 @@ export function getServices(ctx: RequestContext): Services {
 	const adminAuditLogRepo = new AdminAuditLogRepositoryD1(db);
 	const adminClientsRepo = new SiteAdminApiClientsRepositoryD1(db);
 	const dcrRateLimitRepo = new DcrRateLimitRepositoryD1(db);
+	const consentRepo = new ConsentRepositoryD1(db);
 	const avatarCdnBaseUrl = getAvatarCdnBaseUrl(resolvedEnv);
 	const hashMethod = resolveHashMethod(resolvedEnv);
 	const adminAuditLogService = new AdminAuditLogService({ logRepo: adminAuditLogRepo });
@@ -110,6 +114,13 @@ export function getServices(ctx: RequestContext): Services {
 		authUrl: resolveOptionalEnvString(resolvedEnv, "AUTH_URL") ?? "",
 	});
 	const transactionalEmailService = new TransactionalEmailService(ctx);
+	const consentService = new ConsentService({
+		consentRepo,
+		refreshTokenRepo,
+		tokenRepo,
+		authorizationCodeRepo,
+		adminAuditLogService,
+	});
 	const clientService = new ClientService({
 		clientRepo,
 		adminAuditLogService,
@@ -135,11 +146,13 @@ export function getServices(ctx: RequestContext): Services {
 		}),
 		clientService,
 		siteSettingsService,
+		consentService,
 		oauthAuthorizationService: new OauthAuthorizationService({
 			clientRepo,
 			tokenRepo,
 			authorizationCodeRepo,
 			userRepo,
+			consentService,
 		}),
 		oauthTokenService: new OauthTokenService({
 			clientRepo,

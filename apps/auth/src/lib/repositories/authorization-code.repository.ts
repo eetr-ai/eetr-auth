@@ -44,5 +44,11 @@ export interface AuthorizationCodeRepository {
 	 * issue tokens only when this returns true.
 	 */
 	markUsed(id: string, usedAt: string): Promise<boolean>;
+	/**
+	 * Delete still-unused codes issued to `subject` for `clientId`. Used when consent is
+	 * withdrawn, so a code minted moments earlier cannot still be exchanged for a token.
+	 * Returns how many were deleted.
+	 */
+	deleteUnusedForSubjectAndClient(subject: string, clientId: string): Promise<number>;
 	deleteUsedOrExpired(nowIso: string): Promise<number>;
 }

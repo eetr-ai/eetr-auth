@@ -9,6 +9,8 @@ import {
 	updateUser,
 } from "@/app/actions/user-actions";
 import { listEnvironments } from "@/app/actions/environment-actions";
+import { listUserConsents, revokeUserConsent } from "@/app/actions/consent-actions";
+import type { ConsentWithClient } from "@/lib/repositories/consent.repository";
 import type { UserRecord } from "@/lib/repositories/admin.repository";
 import type { Environment } from "@/lib/repositories/environment.repository";
 import {
@@ -27,6 +29,7 @@ import {
 	type UserDraft,
 } from "./_components/user-draft";
 import { UserForm } from "./_components/user-form";
+import { UserConsents } from "./_components/user-consents";
 import { UsersTable } from "./_components/users-table";
 
 /** The form lives in the panel body; its submit button lives in the panel footer. */
@@ -50,6 +53,9 @@ export default function UsersPage() {
 		null,
 	);
 	const [confirmingDeleteUserId, setConfirmingDeleteUserId] = useState<string | null>(null);
+	const [consents, setConsents] = useState<ConsentWithClient[]>([]);
+	const [consentsLoading, setConsentsLoading] = useState(false);
+	const [revokingClientId, setRevokingClientId] = useState<string | null>(null);
 	const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
 	const dirty = isUserDraftDirty(draft, baseline);
@@ -60,6 +66,43 @@ export default function UsersPage() {
 	// Derived from `users` rather than snapshotted, so the silent refetch after an
 	// avatar upload refreshes the picture in the open panel.
 	const editingUser = editingId ? (users.find((user) => user.id === editingId) ?? null) : null;
+
+	// Consents belong to a saved user, so they load when the panel opens on an existing one
+	// and are cleared otherwise — a create panel has nothing to show.
+	useEffect(() => {
+		if (!panelOpen || !editingId) {
+			setConsents([]);
+			return;
+		}
+		let cancelled = false;
+		setConsentsLoading(true);
+		listUserConsents(editingId)
+			.then((rows) => {
+				if (!cancelled) setConsents(rows);
+			})
+			.catch(() => {
+				if (!cancelled) setConsents([]);
+			})
+			.finally(() => {
+				if (!cancelled) setConsentsLoading(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [panelOpen, editingId]);
+
+	const handleRevokeConsent = async (clientRowId: string) => {
+		if (!editingId) return;
+		setRevokingClientId(clientRowId);
+		try {
+			await revokeUserConsent(editingId, clientRowId);
+			setConsents(await listUserConsents(editingId));
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Failed to revoke consent");
+		} finally {
+			setRevokingClientId(null);
+		}
+	};
 
 	/**
 	 * `silent` skips the full-page spinner. Post-mutation refreshes must be
@@ -332,6 +375,14 @@ export default function UsersPage() {
 					error={error}
 					onSubmit={handleSubmit}
 				/>
+				{editingId && (
+					<UserConsents
+						consents={consents}
+						loading={consentsLoading}
+						revokingClientId={revokingClientId}
+						onRevoke={(clientRowId) => void handleRevokeConsent(clientRowId)}
+					/>
+				)}
 			</SidePanel>
 
 			<ConfirmDialog

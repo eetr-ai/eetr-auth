@@ -34,6 +34,9 @@ export const AUDIT_ACTION = {
 	scopeUpdate: "scope.update",
 	scopeDelete: "scope.delete",
 
+	// End-user consent (recorded at /authorize, withdrawn by an admin)
+	consentRevoke: "consent.revoke",
+
 	// Setup: password policies
 	passwordPolicyCreate: "password_policy.create",
 	passwordPolicyUpdate: "password_policy.update",
@@ -53,6 +56,7 @@ export const AUDIT_RESOURCE = {
 	client: "client",
 	environment: "environment",
 	scope: "scope",
+	consent: "consent",
 	passwordPolicy: "password_policy",
 	siteSettings: "site_settings",
 } as const;

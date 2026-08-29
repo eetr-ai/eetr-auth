@@ -62,7 +62,7 @@ const user = await getUserInfo(tokens.access_token, discovery.userinfo_endpoint)
 | **Introspection** | `introspectToken` (optional audience binding) |
 | **JWT** | `validateJwt`, `validateIdToken`, `decodeJwtPayload` |
 | **UserInfo** | `getUserInfo`, `toUserProfile` |
-| **Admin API** | `getAdminUser`, `createAdminUser`, `updateAdminUser`, `deleteAdminUser` |
+| **Admin API** | `getAdminUser`, `createAdminUser`, `updateAdminUser`, `deleteAdminUser`, `listUserConsents`, `revokeUserConsent` |
 | **Passkeys** | `listPasskeys`, `renamePasskey`, `removePasskey` |
 | **Scopes** | `OIDCScope`, `STANDARD_OIDC_SCOPES`, `resolveScopeParam` |
 

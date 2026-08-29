@@ -40,6 +40,29 @@ exact redirect URI. At `/api/token`, the client proves possession with the `code
 - Pass a `resource` parameter to bind the token's audience — see
   [resource indicators](/docs/features/tokens#resource-indicators-rfc-8707).
 
+### Consent
+
+Consent is **recorded**, not re-asked every time. When an authorization succeeds, the scopes actually
+granted are stored against the (user, client) pair, accumulating across authorizations.
+
+- If every requested scope is already consented to, the consent screen is **skipped** and the user
+  goes straight back to the client.
+- If the request adds a scope the user has not seen before, the screen is shown and lists **only the
+  new scopes** — not everything already agreed to.
+- `prompt=consent` always shows the screen, even when nothing new is being requested.
+- A request with no `scope` means "everything this client is granted", and the screen lists that
+  resolved set rather than a vague catch-all.
+
+Scopes are described to the user with the [consent copy](/docs/features/clients#consent-copy)
+configured on each scope.
+
+<Callout type="info" title="Revoking consent">
+  Admins can list and withdraw a user's consents from **Dashboard → Users** (the user side panel) or
+  via `GET` / `DELETE /api/admin/users/{id}/consents` — see the [admin surface](/docs/features/admin).
+  Revoking also revokes that user's refresh tokens, access tokens, and unused authorization codes for
+  the client, so access stops immediately rather than at token expiry.
+</Callout>
+
 ## Client Credentials
 
 Machine-to-machine access for backend services. The client authenticates with its `client_id` and
