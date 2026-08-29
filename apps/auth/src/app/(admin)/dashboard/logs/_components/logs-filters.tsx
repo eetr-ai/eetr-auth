@@ -8,6 +8,7 @@ const REQUEST_TYPES: { value: TokenActivityRequestType; label: string }[] = [
 	{ value: "validate", label: "Validate" },
 	{ value: "cleanup", label: "Cleanup" },
 	{ value: "admin_api", label: "Admin API" },
+	{ value: "api_key", label: "API key" },
 ];
 
 export interface LogsFiltersState {

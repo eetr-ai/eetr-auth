@@ -29,13 +29,14 @@ export async function hashPasswordArgon2ViaService(
 	plain: string,
 	argonHasher: Fetcher
 ): Promise<string> {
-	const hashRes = await argonHasher.fetch(
-		new Request(ARGON_HASHER_HASH_URL, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ password: plain }),
-		})
-	);
+	// URL + init rather than a Request object: under `next dev` the binding is a local
+	// stub whose fetch comes from another realm, and a cross-realm Request stringifies to
+	// "[object Request]" instead of being read. Both forms are equivalent in workerd.
+	const hashRes = await argonHasher.fetch(ARGON_HASHER_HASH_URL, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ password: plain }),
+	});
 	if (!hashRes.ok) {
 		const text = await hashRes.text().catch(() => "");
 		throw new Error(
@@ -74,13 +75,12 @@ async function verifyArgon2ViaHasherService(
 	storedHash: string,
 	argonHasher: Fetcher
 ): Promise<boolean> {
-	const verifyRes = await argonHasher.fetch(
-		new Request(ARGON_HASHER_VERIFY_URL, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ password: plain, hash: storedHash }),
-		})
-	);
+	// See the note in hashPasswordArgon2ViaService on why this is not a Request object.
+	const verifyRes = await argonHasher.fetch(ARGON_HASHER_VERIFY_URL, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ password: plain, hash: storedHash }),
+	});
 	if (!verifyRes.ok) {
 		logPasswordVerify({
 			step: "argon2_hasher",

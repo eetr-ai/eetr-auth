@@ -6,6 +6,7 @@ import type { TokenRepository } from "@/lib/repositories/token.repository";
 import type { RefreshTokenRepository } from "@/lib/repositories/refresh-token.repository";
 import type { EnvironmentRepository } from "@/lib/repositories/environment.repository";
 import type { ClientClaimService } from "./client-claim.service";
+import type { ApiKeyService } from "./api-key.service";
 import type { ClientScopeGrant } from "@/lib/repositories/token.repository";
 import type {
 	RefreshTokenActivity,
@@ -79,7 +80,11 @@ export interface OAuthTokenResponse {
 	token_type: "Bearer";
 	access_token: string;
 	expires_in: number;
-	refresh_token: string;
+	/**
+	 * Omitted for the API-key exchange: the API key is itself the long-lived credential,
+	 * so handing back a second long-lived secret would widen the blast radius for nothing.
+	 */
+	refresh_token?: string;
 	scope?: string;
 	id_token?: string;
 }
@@ -159,6 +164,12 @@ export interface OauthTokenServiceDeps {
 	siteRepo?: SiteSettingsRepository;
 	/** Supplies the client's static custom claims to merge into minted access tokens. */
 	clientClaimService: ClientClaimService;
+	/**
+	 * Verifies long-lived API keys for {@link OauthTokenService.exchangeApiKey}. Optional
+	 * so callers that only need the OAuth grants (and existing test fixtures) can omit it;
+	 * the exchange refuses rather than proceeding when it is absent.
+	 */
+	apiKeyService?: ApiKeyService;
 	env: CloudflareEnv;
 }
 
@@ -172,8 +183,9 @@ export class OauthTokenService {
 	private readonly userRepo: UserRepository;
 	private readonly siteRepo?: SiteSettingsRepository;
 	private readonly clientClaimService: ClientClaimService;
+	private readonly apiKeyService?: ApiKeyService;
 
-	constructor({ clientRepo, authorizationCodeRepo, tokenRepo, refreshTokenRepo, envRepo, userRepo, siteRepo, clientClaimService, env }: OauthTokenServiceDeps) {
+	constructor({ clientRepo, authorizationCodeRepo, tokenRepo, refreshTokenRepo, envRepo, userRepo, siteRepo, clientClaimService, apiKeyService, env }: OauthTokenServiceDeps) {
 		this.clientRepo = clientRepo;
 		this.authorizationCodeRepo = authorizationCodeRepo;
 		this.tokenRepo = tokenRepo;
@@ -182,6 +194,7 @@ export class OauthTokenService {
 		this.userRepo = userRepo;
 		this.siteRepo = siteRepo;
 		this.clientClaimService = clientClaimService;
+		this.apiKeyService = apiKeyService;
 		this.env = env;
 	}
 
@@ -254,6 +267,11 @@ export class OauthTokenService {
 		authTime?: string | null;
 		/** RFC 8707: audience to bind the access token to (falls back to the client_id). */
 		resource?: string | null;
+		/**
+		 * Defaults to true so every existing grant is unchanged. The API-key exchange passes
+		 * false: its long-lived credential is the API key itself.
+		 */
+		issueRefreshToken?: boolean;
 	}): Promise<OAuthTokenResponse> {
 		const env = this.env as unknown as Record<string, unknown>;
 		// Prefer ctx.env; in next dev, .env.local is in process.env but may not be merged into ctx.env
@@ -296,6 +314,7 @@ export class OauthTokenService {
 
 		const t0 = Date.now();
 		const now = new Date();
+		const issueRefreshToken = params.issueRefreshToken !== false;
 		const accessToken = generateOpaqueSecret("at");
 		const refreshToken = generateOpaqueSecret("rt");
 		const accessTokenId = crypto.randomUUID();
@@ -315,29 +334,31 @@ export class OauthTokenService {
 		);
 		logTokenStep("issue_create_access_token", t0);
 
-		await this.refreshTokenRepo.createRefreshToken(
-			{
-				id: refreshTokenId,
-				refresh_token_id: refreshToken,
-				client_id: params.clientId,
-				subject: params.subject,
-				access_token_id: accessTokenId,
-				expires_at: refreshExpiresAt.toISOString(),
-				revoked_at: null,
-				rotated_from_id: params.rotatedFromRefreshTokenId ?? null,
-				created_at: now.toISOString(),
-				resource: params.resource ?? null,
-			},
-			params.clientScopeIds
-		);
-		logTokenStep("issue_create_refresh_token", t0);
+		if (issueRefreshToken) {
+			await this.refreshTokenRepo.createRefreshToken(
+				{
+					id: refreshTokenId,
+					refresh_token_id: refreshToken,
+					client_id: params.clientId,
+					subject: params.subject,
+					access_token_id: accessTokenId,
+					expires_at: refreshExpiresAt.toISOString(),
+					revoked_at: null,
+					rotated_from_id: params.rotatedFromRefreshTokenId ?? null,
+					created_at: now.toISOString(),
+					resource: params.resource ?? null,
+				},
+				params.clientScopeIds
+			);
+			logTokenStep("issue_create_refresh_token", t0);
+		}
 		logTokenStep("issue_token_pair_total", t0);
 
 		return {
 			token_type: "Bearer",
 			access_token: accessToken,
 			expires_in: ACCESS_TOKEN_TTL_SECONDS,
-			refresh_token: refreshToken,
+			...(issueRefreshToken ? { refresh_token: refreshToken } : {}),
 			scope: scopesToString(params.scopeNames),
 		};
 	}
@@ -358,9 +379,11 @@ export class OauthTokenService {
 		nonce?: string | null;
 		authTime?: string | null;
 		resource?: string | null;
+		issueRefreshToken?: boolean;
 	}): Promise<OAuthTokenResponse> {
 		const t0 = Date.now();
 		const now = new Date();
+		const issueRefreshToken = params.issueRefreshToken !== false;
 		const jti = crypto.randomUUID();
 		const accessTokenRowId = crypto.randomUUID();
 		const refreshToken = generateOpaqueSecret("rt");
@@ -442,22 +465,24 @@ export class OauthTokenService {
 		);
 		logTokenStep("issue_create_access_token", t0);
 
-		await this.refreshTokenRepo.createRefreshToken(
-			{
-				id: refreshTokenId,
-				refresh_token_id: refreshToken,
-				client_id: params.clientId,
-				subject: params.subject,
-				access_token_id: accessTokenRowId,
-				expires_at: refreshExpiresAt.toISOString(),
-				revoked_at: null,
-				rotated_from_id: params.rotatedFromRefreshTokenId ?? null,
-				created_at: now.toISOString(),
-				resource: params.resource ?? null,
-			},
-			params.clientScopeIds
-		);
-		logTokenStep("issue_create_refresh_token", t0);
+		if (issueRefreshToken) {
+			await this.refreshTokenRepo.createRefreshToken(
+				{
+					id: refreshTokenId,
+					refresh_token_id: refreshToken,
+					client_id: params.clientId,
+					subject: params.subject,
+					access_token_id: accessTokenRowId,
+					expires_at: refreshExpiresAt.toISOString(),
+					revoked_at: null,
+					rotated_from_id: params.rotatedFromRefreshTokenId ?? null,
+					created_at: now.toISOString(),
+					resource: params.resource ?? null,
+				},
+				params.clientScopeIds
+			);
+			logTokenStep("issue_create_refresh_token", t0);
+		}
 
 		// OIDC: when the `openid` scope was granted on an interactive (authorization_code)
 		// exchange, also mint a signed id_token using the same key/kid as the access token.
@@ -484,7 +509,7 @@ export class OauthTokenService {
 			token_type: "Bearer",
 			access_token: accessTokenJwt,
 			expires_in: ACCESS_TOKEN_TTL_SECONDS,
-			refresh_token: refreshToken,
+			...(issueRefreshToken ? { refresh_token: refreshToken } : {}),
 			scope: scopesToString(params.scopeNames),
 			...(idToken ? { id_token: idToken } : {}),
 		};
@@ -586,6 +611,60 @@ export class OauthTokenService {
 		});
 		logTokenStep("client_credentials_total", t0);
 		return result;
+	}
+
+	/**
+	 * Exchange a long-lived API key for a short-lived access token.
+	 *
+	 * Deliberately not an OAuth grant on /api/token: it authenticates with a single opaque
+	 * credential instead of client_id + client_secret, so it lives at its own endpoint and
+	 * the OAuth token endpoint stays spec-clean.
+	 *
+	 * Unlike client_credentials the token carries a real `sub` -- the user the key is bound
+	 * to -- so machine-issued tokens stay attributable to a person.
+	 */
+	async exchangeApiKey(params: {
+		apiKey: string | null;
+		scope?: string | null;
+		resource?: string | null;
+	}): Promise<{ response: OAuthTokenResponse; apiKeyRowId: string; clientId: string }> {
+		const t0 = Date.now();
+		logTokenStep("api_key_start", t0);
+		if (!this.apiKeyService) {
+			throw new OAuthServiceError("server_error", "API keys are not configured.", 500);
+		}
+		if (!params.apiKey) {
+			throw new OAuthServiceError("invalid_request", "Missing api_key.", 400);
+		}
+
+		const authenticated = await this.apiKeyService.authenticate(params.apiKey);
+		logTokenStep("api_key_authenticate", t0);
+
+		const resource = normalizeResourceParam(params.resource);
+		// A request may narrow the key's scopes further, but never widen them: the grants
+		// checked here are the key's snapshot, not the client's current set.
+		const requestedScopes = parseScopeParam(params.scope);
+		const selected = this.selectScopeGrants(
+			authenticated.scopeGrants,
+			requestedScopes,
+			"Requested scopes are not allowed for this API key."
+		);
+
+		const response = await this.issueTokenPair({
+			clientId: authenticated.client.id,
+			clientScopeIds: selected.map((grant) => grant.clientScopeId),
+			scopeNames: selected.map((grant) => grant.scopeName),
+			subject: authenticated.user.id,
+			clientIdentifier: authenticated.client.clientId,
+			resource,
+			issueRefreshToken: false,
+		});
+		logTokenStep("api_key_total", t0);
+		return {
+			response,
+			apiKeyRowId: authenticated.apiKey.id,
+			clientId: authenticated.client.clientId,
+		};
 	}
 
 	private async exchangeAuthorizationCode(params: TokenRequestParams): Promise<OAuthTokenResponse> {

@@ -18,6 +18,7 @@ import { SiteAdminApiClientsRepositoryD1 } from "@/lib/repositories/site-admin-a
 import { DcrRateLimitRepositoryD1 } from "@/lib/repositories/dcr-rate-limit.repository.d1";
 import { ConsentRepositoryD1 } from "@/lib/repositories/consent.repository.d1";
 import { ClientClaimRepositoryD1 } from "@/lib/repositories/client-claim.repository.d1";
+import { ApiKeyRepositoryD1 } from "@/lib/repositories/api-key.repository.d1";
 import { resolveHashMethod } from "@/lib/config/hash-method";
 import { getAvatarCdnBaseUrl } from "@/lib/users/profile";
 import { UserService } from "./user.service";
@@ -38,6 +39,7 @@ import { DcrService } from "./dcr.service";
 import { DcrRateLimitService } from "./dcr-rate-limit.service";
 import { ConsentService } from "./consent.service";
 import { ClientClaimService } from "./client-claim.service";
+import { ApiKeyService } from "./api-key.service";
 import type { AssetBucket } from "@/lib/uploads/staged-upload";
 
 export interface Services {
@@ -58,6 +60,7 @@ export interface Services {
 	dcrRateLimitService: DcrRateLimitService;
 	consentService: ConsentService;
 	clientClaimService: ClientClaimService;
+	apiKeyService: ApiKeyService;
 }
 
 function resolveOptionalEnvString(env: Record<string, unknown>, key: string): string | null {
@@ -102,6 +105,7 @@ export function getServices(ctx: RequestContext): Services {
 	const dcrRateLimitRepo = new DcrRateLimitRepositoryD1(db);
 	const consentRepo = new ConsentRepositoryD1(db);
 	const clientClaimRepo = new ClientClaimRepositoryD1(db);
+	const apiKeyRepo = new ApiKeyRepositoryD1(db);
 	const avatarCdnBaseUrl = getAvatarCdnBaseUrl(resolvedEnv);
 	const hashMethod = resolveHashMethod(resolvedEnv);
 	const adminAuditLogService = new AdminAuditLogService({ logRepo: adminAuditLogRepo });
@@ -125,6 +129,15 @@ export function getServices(ctx: RequestContext): Services {
 		tokenRepo,
 		authorizationCodeRepo,
 		adminAuditLogService,
+	});
+	const apiKeyService = new ApiKeyService({
+		apiKeyRepo,
+		clientRepo,
+		userRepo,
+		tokenRepo,
+		adminAuditLogService,
+		argonHasher: ctx.env.ARGON_HASHER,
+		hashMethod,
 	});
 	const clientService = new ClientService({
 		clientClaimService,
@@ -154,6 +167,7 @@ export function getServices(ctx: RequestContext): Services {
 		siteSettingsService,
 		consentService,
 		clientClaimService,
+		apiKeyService,
 		oauthAuthorizationService: new OauthAuthorizationService({
 			clientRepo,
 			tokenRepo,
@@ -170,6 +184,7 @@ export function getServices(ctx: RequestContext): Services {
 			userRepo,
 			siteRepo,
 			clientClaimService,
+			apiKeyService,
 			env: ctx.env,
 		}),
 		tokenActivityLogService: new TokenActivityLogService({

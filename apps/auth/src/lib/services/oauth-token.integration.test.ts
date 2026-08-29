@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { exportPKCS8, generateKeyPair } from "jose";
+import { decodeJwt, exportJWK, exportPKCS8, generateKeyPair } from "jose";
 
 import type {
 	AuthorizationCodeRepository,
@@ -25,6 +25,14 @@ import type { UserRecord, UserRepository } from "@/lib/repositories/admin.reposi
 import { OauthAuthorizationService } from "@/lib/services/oauth-authorization.service";
 import type { ConsentService } from "@/lib/services/consent.service";
 import { OauthTokenService } from "@/lib/services/oauth-token.service";
+import { ApiKeyService } from "@/lib/services/api-key.service";
+import { AdminAuditLogService } from "@/lib/services/admin-audit-log.service";
+import type {
+	ApiKey,
+	ApiKeyRepository,
+	ApiKeyRow,
+	ApiKeyWithHash,
+} from "@/lib/repositories/api-key.repository";
 import { ClientClaimService } from "@/lib/services/client-claim.service";
 import { OAuthServiceError } from "@/lib/services/oauth.types";
 
@@ -453,6 +461,106 @@ class InMemoryUserRepo implements UserRepository {
 	async deleteWithAudit(): Promise<void> {}
 }
 
+/**
+ * Stands in for the argon-hasher Worker: a reversible "digest" so the real
+ * hash-then-verify round trip runs without paying for Argon2 in a unit test.
+ */
+function fakeArgonHasher(): Fetcher {
+	return {
+		fetch: async (url: string, init: RequestInit) => {
+			const body = JSON.parse(String(init.body)) as { password: string; hash?: string };
+			if (new URL(url).pathname === "/hash") {
+				return Response.json({ hash: `$argon2id$fake$${body.password}` });
+			}
+			return Response.json({ valid: body.hash === `$argon2id$fake$${body.password}` });
+		},
+	} as unknown as Fetcher;
+}
+
+class InMemoryApiKeyRepo implements ApiKeyRepository {
+	private readonly rows = new Map<string, ApiKeyWithHash>();
+	private readonly scopesByKeyId = new Map<string, string[]>();
+
+	constructor(private readonly grants: Map<string, ClientScopeGrant[]>) {}
+
+	private strip(row: ApiKeyWithHash): ApiKey {
+		const copy: Partial<ApiKeyWithHash> = { ...row };
+		delete copy.keyHash;
+		return copy as ApiKey;
+	}
+
+	async listByClient(clientId: string): Promise<ApiKey[]> {
+		return [...this.rows.values()]
+			.filter((row) => row.clientId === clientId)
+			.map((row) => this.strip(row));
+	}
+
+	async getById(id: string): Promise<ApiKey | null> {
+		const row = this.rows.get(id);
+		return row ? this.strip(row) : null;
+	}
+
+	async getByKeyId(keyId: string): Promise<ApiKeyWithHash | null> {
+		return [...this.rows.values()].find((row) => row.keyId === keyId) ?? null;
+	}
+
+	async create(row: ApiKeyRow, clientScopeIds: string[]): Promise<void> {
+		this.rows.set(row.id, {
+			id: row.id,
+			keyId: row.key_id,
+			keyHash: row.key_hash,
+			clientId: row.client_id,
+			userId: row.user_id,
+			userDisplay: row.user_id,
+			name: row.name,
+			createdBy: row.created_by ?? "(deleted user)",
+			createdAt: row.created_at,
+			expiresAt: row.expires_at,
+			revokedAt: null,
+			lastUsedAt: null,
+		});
+		this.scopesByKeyId.set(row.id, clientScopeIds);
+	}
+
+	async revoke(id: string, revokedAt: string): Promise<void> {
+		const row = this.rows.get(id);
+		if (row && !row.revokedAt) {
+			this.rows.set(id, { ...row, revokedAt });
+		}
+	}
+
+	async updateHash(id: string, keyHash: string): Promise<void> {
+		const row = this.rows.get(id);
+		if (row) {
+			this.rows.set(id, { ...row, keyHash });
+		}
+	}
+
+	async touchLastUsed(id: string, lastUsedAt: string): Promise<void> {
+		const row = this.rows.get(id);
+		if (row) {
+			this.rows.set(id, { ...row, lastUsedAt });
+		}
+	}
+
+	async getScopeGrants(apiKeyId: string): Promise<ClientScopeGrant[]> {
+		const ids = new Set(this.scopesByKeyId.get(apiKeyId) ?? []);
+		// Mirrors the ON DELETE CASCADE from client_scopes: a link whose grant is gone
+		// simply does not come back.
+		return [...this.grants.values()].flat().filter((grant) => ids.has(grant.clientScopeId));
+	}
+
+	/** Test hook: drop a client scope, as ungranting it from the client would. */
+	ungrantClientScope(clientScopeId: string) {
+		for (const [keyId, ids] of this.scopesByKeyId) {
+			this.scopesByKeyId.set(
+				keyId,
+				ids.filter((id) => id !== clientScopeId)
+			);
+		}
+	}
+}
+
 function buildHarness(options?: {
 	env?: CloudflareEnv;
 	user?: UserRecord;
@@ -507,6 +615,18 @@ function buildHarness(options?: {
 		} satisfies UserRecord);
 	const userRepo = new InMemoryUserRepo(new Map([[user.id, user]]));
 
+	const apiKeyRepo = new InMemoryApiKeyRepo(grants);
+	const apiKeyService = new ApiKeyService({
+		apiKeyRepo,
+		clientRepo,
+		userRepo,
+		tokenRepo,
+		adminAuditLogService: new AdminAuditLogService({
+			logRepo: { insert: async () => {}, listLogs: async () => ({ rows: [], total: 0 }) },
+		}),
+		argonHasher: fakeArgonHasher(),
+	});
+
 	const tokenService = new OauthTokenService({
 		clientRepo,
 		authorizationCodeRepo,
@@ -514,6 +634,7 @@ function buildHarness(options?: {
 		refreshTokenRepo,
 		envRepo,
 		userRepo,
+		apiKeyService,
 		// Real service over an empty in-memory repo: these tests exercise the opaque-token
 		// path, so no custom claims apply, but the wiring stays honest.
 		clientClaimService: new ClientClaimService({
@@ -535,7 +656,7 @@ function buildHarness(options?: {
 		consentService: { record: async () => {} } as unknown as ConsentService,
 	});
 
-	return { client, tokenService, authorizationService };
+	return { client, tokenService, authorizationService, apiKeyService, apiKeyRepo, user };
 }
 
 async function toS256Challenge(value: string): Promise<string> {
@@ -1024,5 +1145,165 @@ describe("OAuth stateful flows", () => {
 			Buffer.from(pair.access_token.split(".")[1], "base64url").toString("utf8")
 		).sub as string;
 		expect(accessSub).toBe(user.id);
+	});
+	describe("API key exchange", () => {
+		/** JWT mode, so the minted token's claims can actually be inspected. */
+		async function buildJwtHarness(extra?: Parameters<typeof buildHarness>[0]) {
+			const { privateKey, publicKey } = await generateKeyPair("RS256", { extractable: true });
+			const privateKeyPem = await exportPKCS8(privateKey);
+			// Publishing the matching JWKS means validateAccessToken runs the real signature
+			// verification rather than the jti fallback, which cannot report a subject.
+			const publicJwk = await exportJWK(publicKey);
+			return buildHarness({
+				...extra,
+				env: {
+					ISSUER_BASE_URL: "https://auth.example.com",
+					JWT_PRIVATE_KEY: privateKeyPem,
+					JWT_KID: "kid-from-env",
+					JWT_JWKS_JSON: JSON.stringify({
+						keys: [{ ...publicJwk, kid: "kid-from-env", alg: "RS256", use: "sig" }],
+					}),
+				} as unknown as CloudflareEnv,
+			});
+		}
+
+		it("mints a JWT whose sub is the bound user, with no refresh token", async () => {
+			const { tokenService, apiKeyService, user } = await buildJwtHarness();
+			const { presentedKey } = await apiKeyService.create(
+				{ clientRowId: "client-row-1", userId: user.id, name: "ci" },
+				"admin"
+			);
+
+			const { response } = await tokenService.exchangeApiKey({ apiKey: presentedKey });
+
+			expect(response.token_type).toBe("Bearer");
+			// The API key is the long-lived credential; a second one would add risk, not value.
+			expect(response.refresh_token).toBeUndefined();
+			expect(response).not.toHaveProperty("refresh_token");
+
+			const claims = decodeJwt(response.access_token);
+			// Unlike client_credentials (sub ""), an API-key token names a real person.
+			expect(claims.sub).toBe(user.id);
+			expect(claims.client_id).toBe("client-app-id");
+			expect(claims.iss).toBe("https://auth.example.com");
+			expect(claims.aud).toBe("client-app-id");
+			expect(claims.scope).toBe("read:users write:users");
+			expect(claims.environment).toBe("production");
+		});
+
+		it("carries only the scopes the key was issued with", async () => {
+			const { tokenService, apiKeyService, user } = await buildJwtHarness();
+			const { presentedKey } = await apiKeyService.create(
+				{ clientRowId: "client-row-1", userId: user.id, scopeNames: ["read:users"] },
+				"admin"
+			);
+
+			const { response } = await tokenService.exchangeApiKey({ apiKey: presentedKey });
+
+			expect(response.scope).toBe("read:users");
+			expect(decodeJwt(response.access_token).scope).toBe("read:users");
+		});
+
+		it("lets a request narrow the key's scopes but never widen them", async () => {
+			const { tokenService, apiKeyService, user } = await buildJwtHarness();
+			const { presentedKey } = await apiKeyService.create(
+				{ clientRowId: "client-row-1", userId: user.id, scopeNames: ["read:users"] },
+				"admin"
+			);
+
+			await expect(
+				tokenService.exchangeApiKey({ apiKey: presentedKey, scope: "read:users" })
+			).resolves.toMatchObject({ response: { scope: "read:users" } });
+
+			// write:users is granted to the CLIENT but not to this key.
+			await expect(
+				tokenService.exchangeApiKey({ apiKey: presentedKey, scope: "write:users" })
+			).rejects.toMatchObject({ code: "invalid_scope", status: 400 });
+		});
+
+		it("binds the audience to an RFC 8707 resource when one is requested", async () => {
+			const { tokenService, apiKeyService, user } = await buildJwtHarness();
+			const { presentedKey } = await apiKeyService.create(
+				{ clientRowId: "client-row-1", userId: user.id },
+				"admin"
+			);
+
+			const { response } = await tokenService.exchangeApiKey({
+				apiKey: presentedKey,
+				resource: "https://api.example.com",
+			});
+
+			expect(decodeJwt(response.access_token).aud).toBe("https://api.example.com");
+		});
+
+		it("produces a token that validates like any other access token", async () => {
+			const { tokenService, apiKeyService, user } = await buildJwtHarness();
+			const { presentedKey } = await apiKeyService.create(
+				{ clientRowId: "client-row-1", userId: user.id },
+				"admin"
+			);
+
+			const { response } = await tokenService.exchangeApiKey({ apiKey: presentedKey });
+
+			await expect(
+				tokenService.validateAccessToken(response.access_token, ["read:users"], "production")
+			).resolves.toMatchObject({ active: true, subject: user.id });
+		});
+
+		it("stops minting once the key is revoked", async () => {
+			const { tokenService, apiKeyService, user } = await buildJwtHarness();
+			const { apiKey, presentedKey } = await apiKeyService.create(
+				{ clientRowId: "client-row-1", userId: user.id },
+				"admin"
+			);
+			await expect(tokenService.exchangeApiKey({ apiKey: presentedKey })).resolves.toBeDefined();
+
+			await apiKeyService.revoke(apiKey.id, "admin");
+
+			await expect(tokenService.exchangeApiKey({ apiKey: presentedKey })).rejects.toMatchObject({
+				code: "invalid_client",
+				status: 401,
+			});
+		});
+
+		it("mints nothing once every scope it held is ungranted from the client", async () => {
+			const { tokenService, apiKeyService, apiKeyRepo, user } = await buildJwtHarness();
+			const { presentedKey } = await apiKeyService.create(
+				{ clientRowId: "client-row-1", userId: user.id, scopeNames: ["read:users"] },
+				"admin"
+			);
+
+			apiKeyRepo.ungrantClientScope("client-scope-read");
+
+			const { response } = await tokenService.exchangeApiKey({ apiKey: presentedKey });
+			// Crucially NOT "write:users" -- a narrowed key must never re-widen to whatever
+			// the client happens to hold now.
+			expect(response.scope).toBeUndefined();
+			expect(decodeJwt(response.access_token).scope).toBeUndefined();
+		});
+
+		it("rejects a missing key with invalid_request, not a 401", async () => {
+			const { tokenService } = await buildJwtHarness();
+			await expect(tokenService.exchangeApiKey({ apiKey: null })).rejects.toMatchObject({
+				code: "invalid_request",
+				status: 400,
+			});
+		});
+
+		it("refuses a credential whose handle does not resolve to a stored key", async () => {
+			const { tokenService, apiKeyService, user } = await buildJwtHarness();
+			const { presentedKey } = await apiKeyService.create(
+				{ clientRowId: "client-row-1", userId: user.id },
+				"admin"
+			);
+
+			// exchangeApiKey derives the client from the key row, so cross-client presentation
+			// is not expressible here; tampering with the handle is what this covers.
+			const [prefix, , secret] = presentedKey.split("_");
+			const forged = `${prefix}_${"0".repeat(16)}_${secret}`;
+			await expect(tokenService.exchangeApiKey({ apiKey: forged })).rejects.toMatchObject({
+				code: "invalid_client",
+			});
+		});
 	});
 });

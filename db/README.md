@@ -2,6 +2,8 @@
 
 As of version `0.1.0`, the auth app uses versioned schema patches. The current released schema version is `0.6.0`.
 
+Patch `0.6.0.sql` also adds `api_keys` and `api_key_scopes` (see [API keys](../apps/docs/content/docs/features/api-keys.mdx)).
+
 `schema.sql` seeds the default OIDC scopes `openid`, `profile`, and `email` (idempotent `INSERT OR IGNORE`) so a fresh install can perform OpenID Connect out of the box. Patch `0.4.2.sql` backfills them for existing databases, and `0.6.0.sql` backfills their consent-screen copy (`display_name` / `description`). Seeding only defines the scopes — an admin still grants them to individual clients.
 
 `client_claims` holds static custom JWT claims per client; `value_type` preserves the JSON type so a numeric claim mints as a number.

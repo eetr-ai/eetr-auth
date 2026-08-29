@@ -28,6 +28,7 @@ export {
   getUserInfo,
   buildAuthorizationUrl,
   registerClient,
+  exchangeApiKey,
 } from "./api.js";
 export type {
   GrantType,
@@ -39,6 +40,8 @@ export type {
   RegisterClientParams,
   RegisterClientConfig,
   RegisterClientResponse,
+  ExchangeApiKeyParams,
+  ExchangeApiKeyConfig,
 } from "./api.js";
 
 export { TokenManager } from "./tokens.js";
@@ -53,6 +56,9 @@ export {
   deleteAdminUser,
   listUserConsents,
   revokeUserConsent,
+  listClientApiKeys,
+  createClientApiKey,
+  revokeClientApiKey,
 } from "./admin.js";
 export type {
   AdminUserRecord,
@@ -61,6 +67,9 @@ export type {
   RevokeConsentResult,
   CreateUserParams,
   UpdateUserParams,
+  ApiKeyRecord,
+  CreateApiKeyParams,
+  CreateApiKeyResult,
 } from "./admin.js";
 
 export { listPasskeys, renamePasskey, removePasskey } from "./passkeys.js";
