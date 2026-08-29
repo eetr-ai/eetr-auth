@@ -248,6 +248,12 @@ describe("exchangeApiKey", () => {
       (e: unknown) => e
     );
     expect(error).toBeInstanceOf(OAuthError);
-    expect(error).toMatchObject({ code: "invalid_client" });
+    // status and description are carried through, so a caller can distinguish a bad key
+    // (401) from a bad scope (400) without parsing the message.
+    expect(error).toMatchObject({
+      code: "invalid_client",
+      status: 401,
+      description: "Invalid API key.",
+    });
   });
 });

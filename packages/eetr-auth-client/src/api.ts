@@ -185,7 +185,9 @@ export async function exchangeApiKey(
   if (!res.ok) {
     throw new OAuthError(
       data.error ?? "server_error",
-      data.error_description ?? `API key exchange failed: ${res.status}`
+      data.error_description ?? `API key exchange failed: ${res.status}`,
+      res.status,
+      data.error_description
     );
   }
   return data;

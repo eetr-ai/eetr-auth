@@ -85,8 +85,14 @@ export class ApiKeyRepositoryD1 implements ApiKeyRepository {
 		return row ? { ...rowToApiKey(row), keyHash: row.key_hash } : null;
 	}
 
+	/**
+	 * One batch, deliberately: separate .run() calls each commit on their own, so a scope
+	 * insert failing after the key row landed would leave a key with a partial snapshot --
+	 * and an empty snapshot means "mints nothing", on a credential already shown to the
+	 * operator. Atomic here means the only outcomes are a whole key or no key.
+	 */
 	async create(row: ApiKeyRow, clientScopeIds: string[]): Promise<void> {
-		await this.db
+		const insertKey = this.db
 			.prepare(
 				[
 					"INSERT INTO api_keys",
@@ -104,17 +110,14 @@ export class ApiKeyRepositoryD1 implements ApiKeyRepository {
 				row.created_by,
 				row.created_at,
 				row.expires_at
-			)
-			.run();
-		for (const clientScopeId of clientScopeIds) {
-			if (!clientScopeId) continue;
-			await this.db
-				.prepare(
-					"INSERT INTO api_key_scopes (id, api_key_id, client_scope_id) VALUES (?, ?, ?)"
-				)
-				.bind(crypto.randomUUID(), row.id, clientScopeId)
-				.run();
-		}
+			);
+		const insertScope = this.db.prepare(
+			"INSERT INTO api_key_scopes (id, api_key_id, client_scope_id) VALUES (?, ?, ?)"
+		);
+		const scopeStatements = clientScopeIds
+			.filter(Boolean)
+			.map((clientScopeId) => insertScope.bind(crypto.randomUUID(), row.id, clientScopeId));
+		await this.db.batch([insertKey, ...scopeStatements]);
 	}
 
 	async revoke(id: string, revokedAt: string): Promise<void> {

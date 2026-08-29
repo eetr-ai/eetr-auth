@@ -91,6 +91,13 @@ export const POST = withAdminApiClientContext(async (req, _ctx, getServices, aut
 		return invalidRequest("Request body must be valid JSON.");
 	}
 
+	// req.json() resolves to null for the body `null`, and to a primitive for `5` or `"x"`.
+	// Reading properties off those throws a TypeError that escapes the try block below,
+	// turning an intended 400 into a 500.
+	if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+		return invalidRequest("Request body must be a JSON object.");
+	}
+
 	const body = payload as {
 		userId?: unknown;
 		user_id?: unknown;
@@ -136,7 +143,10 @@ export const POST = withAdminApiClientContext(async (req, _ctx, getServices, aut
 			return notFound("User not found");
 		}
 
-		const actorUserId = auth.subjectUserId ?? `client:${auth.adminClientRowId}`;
+		// api_keys.created_by is a FK to users(id), so the `client:<id>` label the sibling
+		// admin routes use for audit rows would fail the constraint outright. A
+		// client-credentials token has no subject; the calling client is recorded on the
+		// audit entry instead, where the column is free-form.
 		const result = await apiKeyService.create(
 			{
 				clientRowId: client.id,
@@ -145,7 +155,8 @@ export const POST = withAdminApiClientContext(async (req, _ctx, getServices, aut
 				expiresAt: typeof expiresAtRaw === "string" ? expiresAtRaw : null,
 				scopeNames: Array.isArray(body.scopes) ? (body.scopes as string[]) : undefined,
 			},
-			actorUserId
+			auth.subjectUserId,
+			{ viaAdminClientRowId: auth.adminClientRowId }
 		);
 
 		// The only time the full credential is ever returned. It is not recoverable later.

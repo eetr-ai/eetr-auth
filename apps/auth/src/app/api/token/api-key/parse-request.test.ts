@@ -90,6 +90,34 @@ describe("parseApiKeyRequest", () => {
 		expect(await parseApiKeyRequest(req)).toEqual({ apiKey: null, scope: null, resource: null });
 	});
 
+	it("returns a null key for a JSON body of literal null, rather than throwing", async () => {
+		// JSON.parse("null") succeeds, so this slips past the parse guard; reading a
+		// property off it would throw outside every try block and cost the caller its 400.
+		const req = asNextRequest(
+			new Request("https://auth.example/api/token/api-key", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: "null",
+			})
+		);
+		expect(await parseApiKeyRequest(req)).toEqual({ apiKey: null, scope: null, resource: null });
+	});
+
+	it.each([
+		["a JSON string", '"just-a-string"'],
+		["a JSON number", "5"],
+		["a JSON array", "[1,2]"],
+	])("returns a null key for %s body", async (_label, body) => {
+		const req = asNextRequest(
+			new Request("https://auth.example/api/token/api-key", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body,
+			})
+		);
+		expect((await parseApiKeyRequest(req)).apiKey).toBeNull();
+	});
+
 	it("treats an empty api_key as absent", async () => {
 		const parsed = await parseApiKeyRequest(formRequest({ api_key: "" }));
 		expect(parsed.apiKey).toBeNull();

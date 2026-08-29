@@ -52,8 +52,11 @@ export const DELETE = withAdminApiClientContext(async (req, _ctx, getServices, a
 			return notFound("API key not found");
 		}
 
-		const actorUserId = auth.subjectUserId ?? `client:${auth.adminClientRowId}`;
-		await apiKeyService.revoke(apiKey.id, actorUserId);
+		// A client-credentials token has no subject; pass null rather than a synthetic user
+		// id, and name the calling client in the audit details instead.
+		await apiKeyService.revoke(apiKey.id, auth.subjectUserId, {
+			viaAdminClientRowId: auth.adminClientRowId,
+		});
 		return NextResponse.json({ ok: true }, { status: 200 });
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Unexpected error.";

@@ -106,6 +106,8 @@ function createHarness(options: { argonHasher?: Fetcher | undefined } = {}): Har
 
 	const userRepo = {
 		getById: vi.fn().mockResolvedValue(createUser()),
+		// The client fixture lives in env-1, so the bound user has access by default.
+		getUserEnvironments: vi.fn().mockResolvedValue(["env-1"]),
 	} as unknown as UserRepository;
 
 	const tokenRepo = {
@@ -174,6 +176,40 @@ describe("ApiKeyService", () => {
 
 			const [, clientScopeIds] = vi.mocked(apiKeyRepo.create).mock.calls[0];
 			expect(clientScopeIds).toEqual(["cs-read"]);
+		});
+
+		it("deduplicates repeated scope names", async () => {
+			const { service, apiKeyRepo } = harness;
+			vi.mocked(apiKeyRepo.getById).mockResolvedValue(createStoredKey());
+
+			await service.create(
+				{ clientRowId: "client-row-1", userId: "user-1", scopeNames: ["read", "read"] },
+				"admin"
+			);
+
+			// api_key_scopes is UNIQUE(api_key_id, client_scope_id): a repeat would abort the
+			// insert after the key row was already written.
+			const [, clientScopeIds] = vi.mocked(apiKeyRepo.create).mock.calls[0];
+			expect(clientScopeIds).toEqual(["cs-read"]);
+		});
+
+		it("normalizes an offset expiry to canonical UTC", async () => {
+			const { service, apiKeyRepo } = harness;
+			vi.mocked(apiKeyRepo.getById).mockResolvedValue(createStoredKey());
+
+			await service.create(
+				{
+					clientRowId: "client-row-1",
+					userId: "user-1",
+					expiresAt: "2026-08-29T01:00:00+10:00",
+				},
+				"admin"
+			);
+
+			// Stored verbatim, this string sorts AFTER a Zulu "now" of 2026-08-28T20:00:00Z,
+			// so authenticate()'s lexicographic comparison would keep honouring an expired key.
+			const [row] = vi.mocked(apiKeyRepo.create).mock.calls[0];
+			expect(row.expires_at).toBe("2026-08-28T15:00:00.000Z");
 		});
 
 		it("refuses a scope the client was never granted", async () => {
@@ -365,6 +401,16 @@ describe("ApiKeyService", () => {
 			await expect(harness.service.authenticate(presented)).resolves.toMatchObject({
 				user: { isTestUser: true },
 			});
+		});
+
+		it("rejects once the user loses access to the client's environment", async () => {
+			const presented = seedValidKey(harness);
+			await expect(harness.service.authenticate(presented)).resolves.toBeDefined();
+
+			// Revoking environment access must stop the key immediately -- an API key
+			// outlives the refresh token that already gets this re-check.
+			vi.mocked(harness.userRepo.getUserEnvironments).mockResolvedValue(["some-other-env"]);
+			await expect(harness.service.authenticate(presented)).rejects.toThrow("Invalid API key.");
 		});
 
 		it("reports every failure as the same 401 invalid_client, giving away nothing", async () => {

@@ -454,10 +454,12 @@ export default function ClientsPage() {
 							error={error}
 							onSubmit={handleSubmit}
 						/>
+						{/* baseline, not draft: the service validates a key's scopes against the
+						    SAVED grants, so offering an unsaved tick would fail on create. */}
 						<ClientApiKeys
 							clientId={editingId}
 							scopes={scopes}
-							grantedScopeIds={draft.scopeIds}
+							grantedScopeIds={baseline.scopeIds}
 						/>
 						<ClientTokens
 							clientId={editingId}

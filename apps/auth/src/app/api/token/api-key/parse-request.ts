@@ -29,7 +29,11 @@ export async function parseApiKeyRequest(req: NextRequest): Promise<ApiKeyReques
 	let body: Record<string, unknown> = {};
 	try {
 		if (contentType.includes("application/json")) {
-			body = (await req.json()) as Record<string, unknown>;
+			// JSON.parse("null") succeeds, so the catch below never fires for a `null` body.
+			// Without this check the property reads at the end would throw a TypeError
+			// outside every try block, costing the caller its 400 and its activity-log row.
+			const json: unknown = await req.json();
+			body = typeof json === "object" && json !== null ? (json as Record<string, unknown>) : {};
 		} else {
 			const form = await req.formData();
 			body = Object.fromEntries(form.entries());

@@ -874,14 +874,12 @@ export function getOpenApiDocument(serverUrl?: string) {
 												"Internal user UUID or username of the user to bind the key to. `username` is accepted as an alias.",
 										},
 										name: {
-											type: "string",
-											nullable: true,
+											type: ["string", "null"],
 											description: "Human-readable label, e.g. the pipeline that uses it.",
 										},
 										expiresAt: {
-											type: "string",
+											type: ["string", "null"],
 											format: "date-time",
-											nullable: true,
 											description: "ISO timestamp. Omit or null for a key that never expires.",
 										},
 										scopes: {
@@ -1040,7 +1038,7 @@ export function getOpenApiDocument(serverUrl?: string) {
 															type: "string",
 															description: "The client's public client_id.",
 														},
-														clientName: { type: "string", nullable: true },
+														clientName: { type: ["string", "null"] },
 														scopes: { type: "array", items: { type: "string" } },
 														createdAt: { type: "string", format: "date-time" },
 														updatedAt: { type: "string", format: "date-time" },
@@ -1458,7 +1456,7 @@ export function getOpenApiDocument(serverUrl?: string) {
 							description:
 								"Public handle -- the middle segment of the credential. Safe to display and to log.",
 						},
-						name: { type: "string", nullable: true },
+						name: { type: ["string", "null"] },
 						userId: {
 							type: "string",
 							description: "The bound user. Becomes the `sub` of every token this key mints.",
@@ -1466,9 +1464,9 @@ export function getOpenApiDocument(serverUrl?: string) {
 						username: { type: "string" },
 						createdBy: { type: "string" },
 						createdAt: { type: "string", format: "date-time" },
-						expiresAt: { type: "string", format: "date-time", nullable: true },
-						revokedAt: { type: "string", format: "date-time", nullable: true },
-						lastUsedAt: { type: "string", format: "date-time", nullable: true },
+						expiresAt: { type: ["string", "null"], format: "date-time" },
+						revokedAt: { type: ["string", "null"], format: "date-time" },
+						lastUsedAt: { type: ["string", "null"], format: "date-time" },
 					},
 				},
 				OAuthTokenResponse: {

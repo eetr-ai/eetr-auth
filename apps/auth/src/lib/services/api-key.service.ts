@@ -26,6 +26,17 @@ export interface CreateApiKeyResult {
 	presentedKey: string;
 }
 
+/**
+ * Who performed an admin action, when the caller is a machine.
+ *
+ * A client-credentials admin token has no subject, and `api_keys.created_by` is a FK to
+ * users(id) -- so the acting client cannot be smuggled in there as a synthetic id. It is
+ * carried separately and lands in the audit entry's free-form details.
+ */
+export interface ActorContext {
+	viaAdminClientRowId?: string | null;
+}
+
 /** Everything the token exchange needs, resolved from a verified credential. */
 export interface AuthenticatedApiKey {
 	apiKey: ApiKey;
@@ -103,7 +114,11 @@ export class ApiKeyService {
 		scopeNames: string[] | undefined
 	): Promise<ClientScopeGrant[]> {
 		const allGrants = await this.tokenRepo.getClientScopeGrants(clientRowId);
-		const requested = (scopeNames ?? []).map((s) => s.trim()).filter((s) => s.length > 0);
+		// Deduplicated: api_key_scopes is UNIQUE(api_key_id, client_scope_id), so a repeated
+		// name would abort the insert *after* the key row is written.
+		const requested = [
+			...new Set((scopeNames ?? []).map((s) => s.trim()).filter((s) => s.length > 0)),
+		];
 		if (requested.length === 0) {
 			return allGrants;
 		}
@@ -121,7 +136,8 @@ export class ApiKeyService {
 
 	async create(
 		params: CreateApiKeyParams,
-		actorUserId: string | null
+		actorUserId: string | null,
+		actor?: ActorContext
 	): Promise<CreateApiKeyResult> {
 		const client = await this.clientRepo.getById(params.clientRowId);
 		if (!client) {
@@ -136,8 +152,16 @@ export class ApiKeyService {
 		if (user.isTestUser && !client.isTest) {
 			throw new Error("A test user can only be bound to a test client");
 		}
-		if (params.expiresAt != null && Number.isNaN(Date.parse(params.expiresAt))) {
-			throw new Error("expiresAt must be a valid ISO timestamp");
+		// Normalized to canonical UTC. authenticate() compares expiry to an ISO string
+		// lexicographically, so storing an offset form like 2026-08-29T01:00:00+10:00
+		// verbatim would sort it as if it expired 10 hours later than it actually does.
+		let expiresAt: string | null = null;
+		if (params.expiresAt != null) {
+			const parsedExpiry = Date.parse(params.expiresAt);
+			if (Number.isNaN(parsedExpiry)) {
+				throw new Error("expiresAt must be a valid ISO timestamp");
+			}
+			expiresAt = new Date(parsedExpiry).toISOString();
 		}
 
 		const grants = await this.resolveScopeGrants(params.clientRowId, params.scopeNames);
@@ -155,7 +179,7 @@ export class ApiKeyService {
 				name: params.name?.trim() || null,
 				created_by: actorUserId,
 				created_at: new Date().toISOString(),
-				expires_at: params.expiresAt ?? null,
+				expires_at: expiresAt,
 			},
 			grants.map((grant) => grant.clientScopeId)
 		);
@@ -171,7 +195,10 @@ export class ApiKeyService {
 				clientId: client.clientId,
 				userId: params.userId,
 				scopes: grants.map((grant) => grant.scopeName),
-				expiresAt: params.expiresAt ?? null,
+				expiresAt,
+				...(actor?.viaAdminClientRowId
+					? { viaAdminClientRowId: actor.viaAdminClientRowId }
+					: {}),
 			},
 		});
 
@@ -192,7 +219,11 @@ export class ApiKeyService {
 		return keys.find((key) => key.keyId === keyId) ?? null;
 	}
 
-	async revoke(id: string, actorUserId: string | null): Promise<ApiKey | null> {
+	async revoke(
+		id: string,
+		actorUserId: string | null,
+		actor?: ActorContext
+	): Promise<ApiKey | null> {
 		const existing = await this.apiKeyRepo.getById(id);
 		if (!existing) {
 			return null;
@@ -206,7 +237,13 @@ export class ApiKeyService {
 			action: AUDIT_ACTION.apiKeyRevoke,
 			resourceType: AUDIT_RESOURCE.apiKey,
 			resourceId: id,
-			details: { keyId: existing.keyId, clientId: existing.clientId },
+			details: {
+				keyId: existing.keyId,
+				clientId: existing.clientId,
+				...(actor?.viaAdminClientRowId
+					? { viaAdminClientRowId: actor.viaAdminClientRowId }
+					: {}),
+			},
 		});
 		return this.apiKeyRepo.getById(id);
 	}
@@ -258,6 +295,15 @@ export class ApiKeyService {
 			throw invalidApiKey();
 		}
 		if (user.isTestUser && !client.isTest) {
+			throw invalidApiKey();
+		}
+		// Re-check environment access on every exchange, for the same reason the refresh
+		// grant does (see OauthTokenService.exchangeRefreshToken): the minted token names
+		// this user as its subject, and an API key is longer-lived than the 30-day refresh
+		// token that already gets this treatment. Without it, revoking a user's access to
+		// the client's environment would leave their key minting tokens indefinitely.
+		const userEnvironmentIds = await this.userRepo.getUserEnvironments(user.id);
+		if (!userEnvironmentIds.includes(client.environmentId)) {
 			throw invalidApiKey();
 		}
 

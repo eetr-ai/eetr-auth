@@ -1290,14 +1290,15 @@ describe("OAuth stateful flows", () => {
 			});
 		});
 
-		it("refuses a key issued for one client when presented as another's", async () => {
+		it("refuses a credential whose handle does not resolve to a stored key", async () => {
 			const { tokenService, apiKeyService, user } = await buildJwtHarness();
 			const { presentedKey } = await apiKeyService.create(
 				{ clientRowId: "client-row-1", userId: user.id },
 				"admin"
 			);
 
-			// Tampering with the handle breaks the pairing; the secret no longer verifies.
+			// exchangeApiKey derives the client from the key row, so cross-client presentation
+			// is not expressible here; tampering with the handle is what this covers.
 			const [prefix, , secret] = presentedKey.split("_");
 			const forged = `${prefix}_${"0".repeat(16)}_${secret}`;
 			await expect(tokenService.exchangeApiKey({ apiKey: forged })).rejects.toMatchObject({
