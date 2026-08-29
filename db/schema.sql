@@ -139,6 +139,29 @@ CREATE TABLE IF NOT EXISTS client_scopes (
 CREATE INDEX IF NOT EXISTS idx_client_scopes_client_id ON client_scopes(client_id);
 CREATE INDEX IF NOT EXISTS idx_client_scopes_scope_id ON client_scopes(scope_id);
 
+-- Custom JWT claims a client injects into the access tokens it is issued.
+--
+-- Values are static per client: whatever an admin configured is what every access token
+-- for that client carries. `value_type` says how to decode `claim_value` when minting, so
+-- a numeric or boolean claim lands in the JWT as a number or boolean rather than a string.
+-- 'json' holds a serialized object/array for structured claims.
+--
+-- Claim names that would collide with a registered or protocol claim (iss, sub, aud, exp,
+-- iat, nbf, jti, scope, client_id, environment, ...) are rejected by the service, not by a
+-- constraint here -- the reserved set is application knowledge and changes with the code.
+CREATE TABLE IF NOT EXISTS client_claims (
+  id TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL,
+  claim_name TEXT NOT NULL,
+  claim_value TEXT NOT NULL,
+  value_type TEXT NOT NULL DEFAULT 'string'
+    CHECK (value_type IN ('string', 'number', 'boolean', 'json')),
+  UNIQUE(client_id, claim_name),
+  FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_client_claims_client_id ON client_claims(client_id);
+
 -- Recorded end-user consent. One row per (user, client) holding the accumulated union of
 -- the scope NAMES that user has consented to for that client, space-delimited and sorted.
 --

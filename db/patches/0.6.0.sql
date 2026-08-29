@@ -8,6 +8,9 @@
 --   * Recorded end-user consent (user_consents): one row per (user, client) holding the
 --     accumulated union of consented scope names. Lets the authorize flow skip the consent
 --     screen when nothing new is being requested, and lets an admin list and revoke consent.
+--   * Custom JWT claims per client (client_claims): static key/value pairs injected into
+--     the access tokens that client is issued. value_type preserves the JSON type so a
+--     numeric claim is a number in the JWT, not a string.
 --   * Human-readable label for environments:
 --       - environments.display_name, admin-UI only.
 --     environments.name stays the stable identifier -- it is the `environment` JWT claim, the
@@ -67,5 +70,22 @@ CREATE TABLE IF NOT EXISTS user_consents (
 
 CREATE INDEX IF NOT EXISTS idx_user_consents_user_id ON user_consents(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_consents_client_id ON user_consents(client_id);
+
+-- Static custom JWT claims per client, injected into that client's access tokens.
+-- `value_type` says how to decode `claim_value` when minting, so a numeric or boolean
+-- claim lands in the JWT with its real type. Reserved claim names are rejected by the
+-- service rather than by a constraint here.
+CREATE TABLE IF NOT EXISTS client_claims (
+  id TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL,
+  claim_name TEXT NOT NULL,
+  claim_value TEXT NOT NULL,
+  value_type TEXT NOT NULL DEFAULT 'string'
+    CHECK (value_type IN ('string', 'number', 'boolean', 'json')),
+  UNIQUE(client_id, claim_name),
+  FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_client_claims_client_id ON client_claims(client_id);
 
 UPDATE schema_metadata SET value = '0.6.0' WHERE key = 'schema_version';

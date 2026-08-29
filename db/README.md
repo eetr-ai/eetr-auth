@@ -4,6 +4,8 @@ As of version `0.1.0`, the auth app uses versioned schema patches. The current r
 
 `schema.sql` seeds the default OIDC scopes `openid`, `profile`, and `email` (idempotent `INSERT OR IGNORE`) so a fresh install can perform OpenID Connect out of the box. Patch `0.4.2.sql` backfills them for existing databases, and `0.6.0.sql` backfills their consent-screen copy (`display_name` / `description`). Seeding only defines the scopes — an admin still grants them to individual clients.
 
+`client_claims` holds static custom JWT claims per client; `value_type` preserves the JSON type so a numeric claim mints as a number.
+
 Two columns are identifiers rather than labels and must not be repurposed as display text: `environments.name` is the `environment` JWT claim, the `environmentName` field on `POST /api/token/validate`, and the denormalized value in `token_activity_log.environment_name`; `scopes.scope_name` is the protocol token clients send in `scope`. Both have a nullable `display_name` alongside them for the human-facing label.
 
 - **`schema.sql`** – The complete authoritative snapshot of the current schema.

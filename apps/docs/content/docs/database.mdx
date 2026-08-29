@@ -75,12 +75,16 @@ The database is organized around users, OAuth clients, tokens, and environments:
     environments ||--o{ users_environments : grants
     users ||--o{ user_consents : granted
     clients ||--o{ user_consents : consented_to
+    clients ||--o{ client_claims : injects
     password_policies ||--o{ password_policy_environments : assigned_to
 `} />
 
 Key tables include `users`, `user_totp` (encrypted TOTP secrets), `clients`, `environments`,
-`scopes`, `user_consents`, `authorization_codes`, `tokens`, `refresh_tokens`, `passkeys`,
+`scopes`, `user_consents`, `client_claims`, `authorization_codes`, `tokens`, `refresh_tokens`, `passkeys`,
 `password_policies`, and `token_activity_log`.
+
+`client_claims` holds the static custom claims a client injects into its access tokens, with a
+`value_type` so a numeric or boolean claim keeps its JSON type in the JWT.
 
 `user_consents` records what an end user has authorized: one row per (user, client) holding the
 accumulated union of consented scope names. The authorize flow skips the consent screen when that
