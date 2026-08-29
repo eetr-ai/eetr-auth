@@ -40,6 +40,7 @@ import {
 import { ClientForm } from "./_components/client-form";
 import { ClientsTable, type ClientTypeFilter } from "./_components/clients-table";
 import { ClientTokens } from "./_components/client-tokens";
+import { ClientApiKeys } from "./_components/client-api-keys";
 import { SecretReveal } from "./_components/secret-reveal";
 import { environmentLabel } from "@/lib/repositories/environment.repository";
 
@@ -452,6 +453,11 @@ export default function ClientsPage() {
 							readOnly={editingIsDynamic}
 							error={error}
 							onSubmit={handleSubmit}
+						/>
+						<ClientApiKeys
+							clientId={editingId}
+							scopes={scopes}
+							grantedScopeIds={draft.scopeIds}
 						/>
 						<ClientTokens
 							clientId={editingId}
