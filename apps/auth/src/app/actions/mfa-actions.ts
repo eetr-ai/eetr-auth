@@ -5,31 +5,10 @@ import { cookies } from "next/headers";
 import { onPublicServerAction } from "@/lib/context/on-public-server-action";
 import { EMAIL_VERIFICATION_CHALLENGE_COOKIE } from "@/lib/auth/email-verification-cookie";
 import { MFA_CHALLENGE_COOKIE } from "@/lib/auth/mfa-cookie";
-import {
-	decodePendingAuthorizationCookie,
-	getPendingCookieName,
-} from "@/lib/auth/oauth-pending-cookie";
+import { resolvePendingEnvironmentId } from "@/lib/auth/pending-client";
 import { summarizePasswordPolicyViolations } from "@/lib/auth/password-policy-validation";
-import type { ClientService } from "@/lib/services/client.service";
 const MFA_COOKIE_MAX_AGE = 600;
 const EMAIL_VERIFICATION_COOKIE_MAX_AGE = 600;
-
-/**
- * Environment of the OAuth client the user is signing in to, read from the pending
- * authorization cookie, or null for a non-OAuth (e.g. dashboard) sign-in or an unknown
- * client. Used to scope the password-complexity policy to the client's environment.
- */
-async function resolvePendingEnvironmentId(
-	clientService: ClientService,
-	env: Record<string, unknown>
-): Promise<string | null> {
-	const jar = await cookies();
-	const params = await decodePendingAuthorizationCookie(jar.get(getPendingCookieName())?.value, env);
-	const clientId = params?.client_id?.trim();
-	if (!clientId) return null;
-	const client = await clientService.getByClientIdentifier(clientId);
-	return client?.environmentId ?? null;
-}
 
 export async function clearSignInChallenge() {
 	const jar = await cookies();

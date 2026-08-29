@@ -16,10 +16,7 @@ import { EMAIL_VERIFICATION_CHALLENGE_COOKIE } from "@/lib/auth/email-verificati
 import { isEmailMfaGloballyEnabled } from "@/lib/auth/email-mfa-enablement";
 import { MFA_CHALLENGE_COOKIE } from "@/lib/auth/mfa-cookie";
 import { refreshAdminClaim } from "@/lib/auth/session-admin-refresh";
-import {
-	decodePendingAuthorizationCookie,
-	getPendingCookieName,
-} from "@/lib/auth/oauth-pending-cookie";
+import { resolvePendingEnvironmentId } from "@/lib/auth/pending-client";
 
 /** Structured sign-in logs (grep `sign_in_authorize`). Never includes password or OTP. */
 function signInAuthorizeLog(payload: Record<string, unknown>) {
@@ -129,14 +126,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 					// directly, bypassing beginSignInChallenge. A password that fails the applicable
 					// complexity policy must never mint a session. The interactive flow changes the
 					// password first, so it never trips this.
-					const pendingForPolicy = await decodePendingAuthorizationCookie(
-						(await cookies()).get(getPendingCookieName())?.value,
+					const policyEnvironmentId = await resolvePendingEnvironmentId(
+						clientService,
 						env as unknown as Record<string, unknown>
 					);
-					const policyClientId = pendingForPolicy?.client_id?.trim();
-					const policyEnvironmentId = policyClientId
-						? (await clientService.getByClientIdentifier(policyClientId))?.environmentId ?? null
-						: null;
 					const complexity = await passwordPolicyService.checkSignInPasswordComplexity({
 						userId: user.id,
 						isAdmin: user.isAdmin,
