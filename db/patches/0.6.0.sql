@@ -23,6 +23,14 @@
 --     INSERT and UPDATE alike: a test user can never be an admin (a passwordless dashboard
 --     admin would be critical), and a DCR-registered client can never be a test client
 --     (it is created by an unauthenticated caller).
+--   * Long-lived API keys (api_keys, api_key_scopes): a per-(client, user) credential a
+--     machine caller exchanges for a short-lived access token at POST /api/token/api-key,
+--     instead of shipping the client_secret and running a client_credentials call before
+--     every request. Presented as `eak_<key_id>_<secret>`: `key_id` is the clear-text
+--     lookup handle (an Argon2id digest is not searchable) and only `secret` is hashed,
+--     via the same argon-hasher service that stores user passwords. user_id is mandatory,
+--     so the minted JWT's `sub` always names a real person. api_key_scopes keys on
+--     client_scopes(id) like token_scopes, so ungranting a client scope cascades.
 --   * Human-readable label for environments:
 --       - environments.display_name, admin-UI only.
 --     environments.name stays the stable identifier -- it is the `environment` JWT claim, the
@@ -142,5 +150,59 @@ CREATE TABLE IF NOT EXISTS client_claims (
 );
 
 CREATE INDEX IF NOT EXISTS idx_client_claims_client_id ON client_claims(client_id);
+
+-- Long-lived API keys: a per-(client, user) credential that CI/CD and other machine
+-- callers exchange for a short-lived access token at POST /api/token/api-key, instead of
+-- shipping the client_secret and running a client_credentials call before every request.
+--
+-- The presented credential is `eak_<key_id>_<secret>`. Argon2id digests are not
+-- searchable, so `key_id` is the lookup handle: it is stored in the clear, indexed, and
+-- safe to show in the admin UI, while only `secret` is hashed into `key_hash` (the same
+-- argon-hasher service that stores user passwords -- NOT the HMAC scheme clients.client_secret
+-- uses, which is reversible-by-key and designed for a value we verify on every token call).
+--
+-- `user_id` is mandatory: the minted JWT's `sub` is that user, so every machine-issued
+-- token is attributable to a person. ON DELETE CASCADE on both FKs means deleting the
+-- client or the user destroys its keys rather than orphaning a live credential.
+--
+-- `revoked_at` is a soft delete: the row stays so the admin audit trail and the
+-- token_activity_log rows that reference this key still resolve.
+CREATE TABLE IF NOT EXISTS api_keys (
+  id TEXT PRIMARY KEY,
+  key_id TEXT NOT NULL UNIQUE,
+  key_hash TEXT NOT NULL,
+  -- clients.id (the internal row id), not clients.client_id.
+  client_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  name TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL,
+  -- NULL = never expires.
+  expires_at TEXT,
+  revoked_at TEXT,
+  last_used_at TEXT,
+  FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_keys_client_id ON api_keys(client_id);
+CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id);
+
+-- The scope subset a key may mint, keyed on client_scopes(id) exactly like token_scopes
+-- and refresh_token_scopes. Keying on the grant rather than the scope name means revoking
+-- a scope from the client cascades to every key that referenced it, so a key can never
+-- outlive its client's grant. No rows for a key = the key mints all of the client's
+-- current scopes.
+CREATE TABLE IF NOT EXISTS api_key_scopes (
+  id TEXT PRIMARY KEY,
+  api_key_id TEXT NOT NULL,
+  client_scope_id TEXT NOT NULL,
+  UNIQUE(api_key_id, client_scope_id),
+  FOREIGN KEY (api_key_id) REFERENCES api_keys(id) ON DELETE CASCADE,
+  FOREIGN KEY (client_scope_id) REFERENCES client_scopes(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_key_scopes_api_key_id ON api_key_scopes(api_key_id);
 
 UPDATE schema_metadata SET value = '0.6.0' WHERE key = 'schema_version';
