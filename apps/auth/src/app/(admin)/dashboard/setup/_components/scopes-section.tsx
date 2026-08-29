@@ -1,35 +1,36 @@
-import { useState, type FormEvent } from "react";
-import type { ReducerAction } from "@eetr/react-reducer-utils";
-import { Plus, Tag, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Pencil, Plus, Tag, Trash2 } from "lucide-react";
 import {
 	Banner,
 	Button,
 	EmptyState,
 	IconButton,
 	InlineDeleteConfirm,
-	Input,
 	SectionCard,
 } from "@/components/ui";
 import type { Scope } from "@/lib/repositories/scope.repository";
-import { SetupPageActionType } from "./state";
 
 interface ScopesSectionProps {
 	scopes: Scope[];
-	scopeName: string;
 	scopeError: string | null;
-	dispatch: (action: ReducerAction<SetupPageActionType>) => void;
-	onCreate: (e: FormEvent) => void;
+	onCreate: () => void;
+	onEdit: (scope: Scope) => void;
 	onDelete: (id: string) => void;
 	/** A mutation is in flight; disable the controls so it cannot be double-submitted. */
 	saving: boolean;
 }
 
+/**
+ * Listing only: create and edit happen in a side panel, because a scope is a
+ * multi-field entity (protocol token plus two fields of consent copy).
+ *
+ * Deleting stays a two-click inline confirm — deleting a record is never a dialog.
+ */
 export function ScopesSection({
 	scopes,
-	scopeName,
 	scopeError,
-	dispatch,
 	onCreate,
+	onEdit,
 	onDelete,
 	saving,
 }: ScopesSectionProps) {
@@ -37,36 +38,47 @@ export function ScopesSection({
 	const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
 	return (
-		<SectionCard title="Scopes" icon={Tag}>
-			<Banner variant="error" message={scopeError} />
-			<form onSubmit={onCreate} className="mb-4 flex gap-2">
-				<Input
-					type="text"
-					value={scopeName}
-					onChange={(e) =>
-						dispatch({
-							type: SetupPageActionType.SET_SCOPE_NAME,
-							data: e.target.value,
-						})
-					}
-					placeholder="Scope name"
-					className="flex-1"
-				/>
-				<Button type="submit" icon={Plus} loading={saving}>
-					Add
+		<SectionCard
+			title="Scopes"
+			icon={Tag}
+			action={
+				<Button type="button" icon={Plus} onClick={onCreate} disabled={saving}>
+					New scope
 				</Button>
-			</form>
+			}
+		>
+			<Banner variant="error" message={scopeError} />
+
 			{scopes.length === 0 ? (
 				<EmptyState
 					icon={Tag}
 					title="No scopes yet"
 					description="Scopes are the permissions a client can request during authorization."
+					action={
+						<Button type="button" icon={Plus} onClick={onCreate}>
+							New scope
+						</Button>
+					}
 				/>
 			) : (
 				<ul className="divide-y divide-border overflow-hidden rounded-card border border-border">
 					{scopes.map((scope) => (
-							<li key={scope.id} className="flex items-center justify-between gap-2 px-3 py-2">
-							<span className="min-w-0 truncate font-medium">{scope.scopeName}</span>
+						<li key={scope.id} className="flex items-center justify-between gap-2 px-3 py-2">
+							<div className="min-w-0">
+								<span className="block truncate font-medium">
+									{scope.displayName ?? scope.scopeName}
+								</span>
+								{scope.displayName && (
+									<span className="block truncate font-mono text-xs text-muted-foreground">
+										{scope.scopeName}
+									</span>
+								)}
+								{scope.description && (
+									<span className="block truncate text-sm text-muted-foreground">
+										{scope.description}
+									</span>
+								)}
+							</div>
 							{confirmingDeleteId === scope.id ? (
 								<InlineDeleteConfirm
 									label={`Delete "${scope.scopeName}"?`}
@@ -78,16 +90,27 @@ export function ScopesSection({
 									onCancel={() => setConfirmingDeleteId(null)}
 								/>
 							) : (
-								<IconButton
-									type="button"
-									variant="danger"
-									aria-label={`Delete ${scope.scopeName}`}
-									title="Delete"
-									disabled={saving}
-									onClick={() => setConfirmingDeleteId(scope.id)}
-								>
-									<Trash2 className="h-4 w-4" />
-								</IconButton>
+								<div className="flex shrink-0 gap-1">
+									<IconButton
+										type="button"
+										aria-label={`Edit ${scope.scopeName}`}
+										title="Edit"
+										disabled={saving}
+										onClick={() => onEdit(scope)}
+									>
+										<Pencil className="h-4 w-4" />
+									</IconButton>
+									<IconButton
+										type="button"
+										variant="danger"
+										aria-label={`Delete ${scope.scopeName}`}
+										title="Delete"
+										disabled={saving}
+										onClick={() => setConfirmingDeleteId(scope.id)}
+									>
+										<Trash2 className="h-4 w-4" />
+									</IconButton>
+								</div>
 							)}
 						</li>
 					))}

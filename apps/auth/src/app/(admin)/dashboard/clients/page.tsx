@@ -22,6 +22,7 @@ import {
 	updateClientName,
 	updateClientRedirectUris,
 	updateClientScopes,
+	updateClientClaims,
 } from "@/app/actions/client-actions";
 import { listEnvironments } from "@/app/actions/environment-actions";
 import { listScopes } from "@/app/actions/scope-actions";
@@ -29,6 +30,7 @@ import type { Client } from "@/lib/repositories/client.repository";
 import type { Environment } from "@/lib/repositories/environment.repository";
 import type { Scope } from "@/lib/repositories/scope.repository";
 import {
+	cleanClaims,
 	cleanRedirectUris,
 	draftFromClient,
 	emptyDraft,
@@ -39,6 +41,7 @@ import { ClientForm } from "./_components/client-form";
 import { ClientsTable, type ClientTypeFilter } from "./_components/clients-table";
 import { ClientTokens } from "./_components/client-tokens";
 import { SecretReveal } from "./_components/secret-reveal";
+import { environmentLabel } from "@/lib/repositories/environment.repository";
 
 /** The form lives in the panel body; its submit button lives in the panel footer. */
 const FORM_ID = "client-form";
@@ -207,10 +210,14 @@ export default function ClientsPage() {
 		setError(null);
 		try {
 			const uris = cleanRedirectUris(draft.redirectUris);
+			const claims = cleanClaims(draft.claims);
 			if (editingId) {
 				await updateClientName(editingId, draft.name.trim() || null);
 				await updateClientRedirectUris(editingId, uris);
 				await updateClientScopes(editingId, draft.scopeIds);
+				// Last: it is the only step that can reject on validation, and doing it after
+				// the others means a rejected claim does not also roll back a valid rename.
+				await updateClientClaims(editingId, claims);
 				await load({ silent: true });
 				closePanel();
 			} else {
@@ -225,6 +232,9 @@ export default function ClientsPage() {
 					scopeIds: draft.scopeIds.length > 0 ? draft.scopeIds : undefined,
 					expiresAt: draft.expiresAt.trim() || undefined,
 				});
+				if (claims.length > 0) {
+					await updateClientClaims(result.client.id, claims);
+				}
 				await load({ silent: true });
 				// Keep the panel open: the secret is shown exactly once.
 				setBaseline(draft);
@@ -314,7 +324,7 @@ export default function ClientsPage() {
 						<option value="">All</option>
 						{environments.map((env) => (
 							<option key={env.id} value={env.id}>
-								{env.name}
+								{environmentLabel(env)}
 							</option>
 						))}
 					</Select>

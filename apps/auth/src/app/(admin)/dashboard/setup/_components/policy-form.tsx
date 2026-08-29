@@ -1,6 +1,7 @@
 import { Banner, Input } from "@/components/ui";
 import type { Environment } from "@/lib/repositories/environment.repository";
 import { COUNT_FIELDS, type PolicyDraft } from "./policy-draft";
+import { environmentLabel } from "@/lib/repositories/environment.repository";
 
 interface PolicyFormProps {
 	/** Links the panel footer's submit button to this form via the `form` attribute. */
@@ -142,7 +143,7 @@ export function PolicyForm({
 										onChange={() => toggleEnvironment(env.id)}
 										className="rounded-chip border-border"
 									/>
-									<span>{env.name}</span>
+									<span>{environmentLabel(env)}</span>
 									{ownedByOther ? (
 										<span className="text-xs text-muted-foreground">(in {owner.name})</span>
 									) : null}

@@ -2,6 +2,7 @@ import { Pencil, Sparkles, Trash2 } from "lucide-react";
 import { IconButton, InlineDeleteConfirm, TBody, THead, Table, Td, Th } from "@/components/ui";
 import type { Client } from "@/lib/repositories/client.repository";
 import type { Environment } from "@/lib/repositories/environment.repository";
+import { environmentLabel } from "@/lib/repositories/environment.repository";
 
 export type ClientTypeFilter = "" | "dynamic" | "manual";
 
@@ -26,7 +27,7 @@ export function ClientsTable({
 	onConfirmDelete,
 	onCancelDelete,
 }: ClientsTableProps) {
-	const envById = new Map(environments.map((env) => [env.id, env.name]));
+	const envById = new Map(environments.map((env) => [env.id, environmentLabel(env)]));
 
 	return (
 		<Table minWidth="min-w-[840px]">

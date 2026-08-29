@@ -7,6 +7,8 @@ import type {
 } from "@/lib/repositories/client.repository";
 import type { AdminAuditLogService } from "./admin-audit-log.service";
 import { AUDIT_ACTION, AUDIT_RESOURCE } from "./audit-actions";
+import type { ClientClaimService } from "./client-claim.service";
+import type { ClientClaimInput } from "@/lib/repositories/client-claim.repository";
 
 function generateClientId(prefix: string): string {
 	const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -49,6 +51,7 @@ export interface CreateClientResult {
 export interface ClientServiceDeps {
 	clientRepo: ClientRepository;
 	adminAuditLogService: AdminAuditLogService;
+	clientClaimService: ClientClaimService;
 	env: CloudflareEnv;
 }
 
@@ -57,9 +60,12 @@ export class ClientService {
 	private readonly adminAuditLogService: AdminAuditLogService;
 	private readonly env: Record<string, unknown>;
 
-	constructor({ clientRepo, adminAuditLogService, env }: ClientServiceDeps) {
+	private readonly clientClaimService: ClientClaimService;
+
+	constructor({ clientRepo, adminAuditLogService, clientClaimService, env }: ClientServiceDeps) {
 		this.clientRepo = clientRepo;
 		this.adminAuditLogService = adminAuditLogService;
+		this.clientClaimService = clientClaimService;
 		this.env = env as unknown as Record<string, unknown>;
 	}
 
@@ -78,15 +84,39 @@ export class ClientService {
 	async getClientWithDetails(id: string): Promise<ClientWithDetails | null> {
 		const client = await this.clientRepo.getById(id);
 		if (!client) return null;
-		const [redirectUris, scopes] = await Promise.all([
+		const [redirectUris, scopes, claims] = await Promise.all([
 			this.clientRepo.getRedirectUris(id),
 			this.clientRepo.getClientScopes(id),
+			this.clientClaimService.listByClient(id),
 		]);
 		return {
 			...client,
 			redirectUris,
 			scopeIds: scopes.map((s) => s.scopeId),
+			claims,
 		};
+	}
+
+	/**
+	 * Replace the client's custom JWT claims. Validation (reserved names, value types)
+	 * lives in ClientClaimService, which throws on bad input rather than dropping it.
+	 */
+	async updateClaims(
+		id: string,
+		claims: ClientClaimInput[],
+		actorUserId: string | null = null
+	): Promise<boolean> {
+		const client = await this.clientRepo.getById(id);
+		if (!client) return false;
+		await this.clientClaimService.setClientClaims(id, claims);
+		await this.adminAuditLogService.logAction({
+			actorUserId,
+			action: AUDIT_ACTION.clientUpdate,
+			resourceType: AUDIT_RESOURCE.client,
+			resourceId: id,
+			details: { claims: claims.map((claim) => claim.claimName).sort() },
+		});
+		return true;
 	}
 
 	async create(params: CreateClientParams): Promise<CreateClientResult> {

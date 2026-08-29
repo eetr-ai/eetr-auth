@@ -1,3 +1,12 @@
+import type { ClientClaimValueType } from "@/lib/repositories/client-claim.repository";
+
+/** One editable custom-claim row. Blank names are scaffolding, not data. */
+export interface ClaimDraft {
+	claimName: string;
+	claimValue: string;
+	valueType: ClientClaimValueType;
+}
+
 export interface ClientDetails {
 	id: string;
 	clientId: string;
@@ -8,6 +17,7 @@ export interface ClientDetails {
 	scopeIds: string[];
 	tokenEndpointAuthMethod: string;
 	isDynamic: boolean;
+	claims: ClaimDraft[];
 }
 
 /** Form state for the client panel. One shape serves create and edit. */
@@ -18,6 +28,8 @@ export interface ClientDraft {
 	/** Kept as a list with blanks allowed so rows can be added before being typed. */
 	redirectUris: string[];
 	scopeIds: string[];
+	/** Custom JWT claims injected into this client's access tokens. */
+	claims: ClaimDraft[];
 	/** Create-only; blank means "no expiry". */
 	expiresAt: string;
 }
@@ -27,6 +39,7 @@ export const emptyDraft: ClientDraft = {
 	environmentId: "",
 	redirectUris: [""],
 	scopeIds: [],
+	claims: [],
 	expiresAt: "",
 };
 
@@ -37,6 +50,7 @@ export function draftFromClient(client: ClientDetails): ClientDraft {
 		// A trailing blank row would otherwise read as an unsaved edit.
 		redirectUris: client.redirectUris.length > 0 ? [...client.redirectUris] : [""],
 		scopeIds: [...client.scopeIds],
+		claims: client.claims.map((claim) => ({ ...claim })),
 		expiresAt: client.expiresAt ?? "",
 	};
 }
@@ -44,6 +58,13 @@ export function draftFromClient(client: ClientDetails): ClientDraft {
 /** Blank rows are UI scaffolding, not data. */
 export function cleanRedirectUris(uris: string[]): string[] {
 	return uris.map((uri) => uri.trim()).filter(Boolean);
+}
+
+/** Same idea for claims: a row with no name was never filled in. */
+export function cleanClaims(claims: ClaimDraft[]): ClaimDraft[] {
+	return claims
+		.map((claim) => ({ ...claim, claimName: claim.claimName.trim() }))
+		.filter((claim) => claim.claimName.length > 0);
 }
 
 /**
@@ -57,6 +78,10 @@ function clientSignature(draft: ClientDraft): string {
 		draft.environmentId,
 		cleanRedirectUris(draft.redirectUris),
 		[...draft.scopeIds].sort(),
+		// Sorted by name: claim order is not persisted, so a reorder is not a real edit.
+		cleanClaims(draft.claims)
+			.map((claim) => [claim.claimName, claim.claimValue, claim.valueType])
+			.sort((a, b) => a[0].localeCompare(b[0])),
 		draft.expiresAt.trim(),
 	]);
 }

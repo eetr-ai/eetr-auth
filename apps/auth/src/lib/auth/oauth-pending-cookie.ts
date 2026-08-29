@@ -12,6 +12,9 @@ export const AUTHORIZE_PARAM_KEYS = [
 	"nonce",
 	// RFC 8707 resource indicator — carried through the login/confirm round-trip.
 	"resource",
+	// OIDC prompt. Carried so `prompt=consent` can force the consent screen even when the
+	// user has already consented to everything being requested.
+	"prompt",
 ] as const;
 
 type AuthorizeParamKey = (typeof AUTHORIZE_PARAM_KEYS)[number];

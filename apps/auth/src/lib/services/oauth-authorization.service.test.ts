@@ -5,6 +5,7 @@ import type { ClientRepository, Client } from "@/lib/repositories/client.reposit
 import type { TokenRepository, ClientScopeGrant } from "@/lib/repositories/token.repository";
 import type { UserRepository } from "@/lib/repositories/admin.repository";
 import { OauthAuthorizationService } from "@/lib/services/oauth-authorization.service";
+import type { ConsentService } from "@/lib/services/consent.service";
 
 function createClientRepoMock() {
 	return {
@@ -41,6 +42,7 @@ function createAuthorizationCodeRepoMock() {
 		create: vi.fn(),
 		getByCodeId: vi.fn(),
 		markUsed: vi.fn(),
+		deleteUnusedForSubjectAndClient: vi.fn(),
 		deleteUsedOrExpired: vi.fn(),
 	} satisfies AuthorizationCodeRepository;
 }
@@ -52,17 +54,24 @@ function createUserRepoMock(environmentIds: string[] = ["env-1"]) {
 	} as unknown as UserRepository;
 }
 
+/** Consent recording is a side effect of authorize; stub it so these tests stay focused. */
+function createConsentServiceMock() {
+	return { record: vi.fn() } as unknown as ConsentService;
+}
+
 function createService(deps?: {
 	clientRepo?: ClientRepository;
 	tokenRepo?: TokenRepository;
 	authorizationCodeRepo?: AuthorizationCodeRepository;
 	userRepo?: UserRepository;
+	consentService?: ConsentService;
 }) {
 	return new OauthAuthorizationService({
 		clientRepo: deps?.clientRepo ?? createClientRepoMock(),
 		tokenRepo: deps?.tokenRepo ?? createTokenRepoMock(),
 		authorizationCodeRepo: deps?.authorizationCodeRepo ?? createAuthorizationCodeRepoMock(),
 		userRepo: deps?.userRepo ?? createUserRepoMock(),
+		consentService: deps?.consentService ?? createConsentServiceMock(),
 	});
 }
 

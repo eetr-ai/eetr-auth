@@ -23,7 +23,9 @@ import type {
 } from "@/lib/repositories/token.repository";
 import type { UserRecord, UserRepository } from "@/lib/repositories/admin.repository";
 import { OauthAuthorizationService } from "@/lib/services/oauth-authorization.service";
+import type { ConsentService } from "@/lib/services/consent.service";
 import { OauthTokenService } from "@/lib/services/oauth-token.service";
+import { ClientClaimService } from "@/lib/services/client-claim.service";
 import { OAuthServiceError } from "@/lib/services/oauth.types";
 
 type StoredAccessToken = {
@@ -52,8 +54,8 @@ class InMemoryEnvironmentRepo implements EnvironmentRepository {
 		return this.environments.get(id) ?? null;
 	}
 
-	async create(id: string, name: string): Promise<void> {
-		this.environments.set(id, { id, name });
+	async create(id: string, name: string, displayName: string | null = null): Promise<void> {
+		this.environments.set(id, { id, name, displayName });
 	}
 
 	async update(id: string, name: string): Promise<void> {
@@ -308,6 +310,27 @@ class InMemoryRefreshTokenRepo implements RefreshTokenRepository {
 		return this.refreshTokensByTokenId.delete(refreshTokenId);
 	}
 
+	async revokeAllForSubjectAndClient(
+		subject: string,
+		clientId: string,
+		revokedAt: string
+	): Promise<string[]> {
+		const accessTokenIds: string[] = [];
+		for (const stored of this.refreshTokensByTokenId.values()) {
+			if (
+				stored.row.subject === subject &&
+				stored.row.client_id === clientId &&
+				stored.row.revoked_at === null
+			) {
+				if (stored.row.access_token_id) {
+					accessTokenIds.push(stored.row.access_token_id);
+				}
+				stored.row.revoked_at = revokedAt;
+			}
+		}
+		return Array.from(new Set(accessTokenIds));
+	}
+
 	async deleteExpired(nowIso: string): Promise<number> {
 		let count = 0;
 		for (const [tokenId, stored] of this.refreshTokensByTokenId.entries()) {
@@ -372,6 +395,21 @@ class InMemoryAuthorizationCodeRepo implements AuthorizationCodeRepository {
 		return false;
 	}
 
+	async deleteUnusedForSubjectAndClient(subject: string, clientId: string): Promise<number> {
+		let count = 0;
+		for (const [codeId, stored] of this.codesByCodeId.entries()) {
+			if (
+				stored.row.subject === subject &&
+				stored.row.client_id === clientId &&
+				stored.row.used_at === null
+			) {
+				this.codesByCodeId.delete(codeId);
+				count += 1;
+			}
+		}
+		return count;
+	}
+
 	async deleteUsedOrExpired(nowIso: string): Promise<number> {
 		let count = 0;
 		for (const [codeId, stored] of this.codesByCodeId.entries()) {
@@ -432,7 +470,7 @@ function buildHarness(options?: {
 		isDynamic: isPublic,
 	} satisfies Client;
 
-	const envRepo = new InMemoryEnvironmentRepo(new Map([["env-1", { id: "env-1", name: "production" }]]));
+	const envRepo = new InMemoryEnvironmentRepo(new Map([["env-1", { id: "env-1", name: "production", displayName: null }]]));
 	const clientRepo = new InMemoryClientRepo([client]);
 	void clientRepo.setRedirectUris(client.id, ["https://client.example.com/callback"]);
 	const grants = new Map<string, ClientScopeGrant[]>([
@@ -469,6 +507,14 @@ function buildHarness(options?: {
 		refreshTokenRepo,
 		envRepo,
 		userRepo,
+		// Real service over an empty in-memory repo: these tests exercise the opaque-token
+		// path, so no custom claims apply, but the wiring stays honest.
+		clientClaimService: new ClientClaimService({
+			clientClaimRepo: {
+				listByClient: async () => [],
+				setClientClaims: async () => {},
+			},
+		}),
 		env,
 	});
 
@@ -477,6 +523,9 @@ function buildHarness(options?: {
 		tokenRepo,
 		authorizationCodeRepo,
 		userRepo,
+		// Consent recording is a side effect of authorize and has its own unit tests; this
+		// suite exercises the code -> token exchange, so a no-op keeps it in scope.
+		consentService: { record: async () => {} } as unknown as ConsentService,
 	});
 
 	return { client, tokenService, authorizationService };

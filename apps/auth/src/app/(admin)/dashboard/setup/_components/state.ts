@@ -2,6 +2,8 @@ import { ReducerAction } from "@eetr/react-reducer-utils";
 import type { SiteSettingsDto } from "@/lib/services/site-settings.service";
 import type { Environment } from "@/lib/repositories/environment.repository";
 import type { Scope } from "@/lib/repositories/scope.repository";
+import { emptyEnvironmentDraft, type EnvironmentDraft } from "./environment-draft";
+import { emptyScopeDraft, type ScopeDraft } from "./scope-draft";
 import type { PasswordPolicyWithEnvironments } from "@/lib/repositories/password-policy.repository";
 
 export interface ClientListItem {
@@ -25,10 +27,12 @@ export enum SetupPageActionType {
 	SET_PASSWORD_POLICIES = "SET_PASSWORD_POLICIES",
 	SET_PASSWORD_POLICY_ERROR = "SET_PASSWORD_POLICY_ERROR",
 	SET_LOADING = "SET_LOADING",
-	SET_ENV_NAME = "SET_ENV_NAME",
-	SET_SCOPE_NAME = "SET_SCOPE_NAME",
-	SET_EDITING_ENV_ID = "SET_EDITING_ENV_ID",
-	SET_EDITING_ENV_NAME = "SET_EDITING_ENV_NAME",
+	SET_ENV_PANEL = "SET_ENV_PANEL",
+	SET_ENV_DRAFT = "SET_ENV_DRAFT",
+	SET_ENV_CONFIRMING_DISCARD = "SET_ENV_CONFIRMING_DISCARD",
+	SET_SCOPE_PANEL = "SET_SCOPE_PANEL",
+	SET_SCOPE_DRAFT = "SET_SCOPE_DRAFT",
+	SET_SCOPE_CONFIRMING_DISCARD = "SET_SCOPE_CONFIRMING_DISCARD",
 	SET_ENV_ERROR = "SET_ENV_ERROR",
 	SET_ENV_SAVING = "SET_ENV_SAVING",
 	SET_SCOPE_ERROR = "SET_SCOPE_ERROR",
@@ -55,10 +59,19 @@ export interface SetupPageState {
 	passwordPolicies: PasswordPolicyWithEnvironments[];
 	passwordPolicyError: string | null;
 	loading: boolean;
-	envName: string;
-	scopeName: string;
-	editingEnvId: string | null;
-	editingEnvName: string;
+	/** Environment side panel. `editingId` is null while creating. */
+	envPanelOpen: boolean;
+	envEditingId: string | null;
+	envDraft: EnvironmentDraft;
+	/** The persisted projection the draft is compared against for the dirty guard. */
+	envBaseline: EnvironmentDraft;
+	envConfirmingDiscard: boolean;
+	/** Scope side panel. `editingId` is null while creating. */
+	scopePanelOpen: boolean;
+	scopeEditingId: string | null;
+	scopeDraft: ScopeDraft;
+	scopeBaseline: ScopeDraft;
+	scopeConfirmingDiscard: boolean;
 	envError: string | null;
 	/** In flight for an environment create/update/delete, to block double submits. */
 	envSaving: boolean;
@@ -90,10 +103,16 @@ export const initialState: SetupPageState = {
 	passwordPolicies: [],
 	passwordPolicyError: null,
 	loading: true,
-	envName: "",
-	scopeName: "",
-	editingEnvId: null,
-	editingEnvName: "",
+	envPanelOpen: false,
+	envEditingId: null,
+	envDraft: emptyEnvironmentDraft,
+	envBaseline: emptyEnvironmentDraft,
+	envConfirmingDiscard: false,
+	scopePanelOpen: false,
+	scopeEditingId: null,
+	scopeDraft: emptyScopeDraft,
+	scopeBaseline: emptyScopeDraft,
+	scopeConfirmingDiscard: false,
 	envError: null,
 	envSaving: false,
 	scopeError: null,
@@ -134,14 +153,44 @@ export function reducer(
 			return { ...state, passwordPolicyError: (action.data as string | null) ?? null };
 		case SetupPageActionType.SET_LOADING:
 			return { ...state, loading: (action.data as boolean | undefined) ?? false };
-		case SetupPageActionType.SET_ENV_NAME:
-			return { ...state, envName: (action.data as string) ?? "" };
-		case SetupPageActionType.SET_SCOPE_NAME:
-			return { ...state, scopeName: (action.data as string) ?? "" };
-		case SetupPageActionType.SET_EDITING_ENV_ID:
-			return { ...state, editingEnvId: (action.data as string | null) ?? null };
-		case SetupPageActionType.SET_EDITING_ENV_NAME:
-			return { ...state, editingEnvName: (action.data as string) ?? "" };
+		// Opening the panel sets draft and baseline together, so the dirty guard starts
+		// clean whether the panel opened to create or to edit.
+		case SetupPageActionType.SET_ENV_PANEL: {
+			const data = action.data as
+				| { open: boolean; editingId?: string | null; draft?: EnvironmentDraft }
+				| undefined;
+			const draft = data?.draft ?? state.envDraft;
+			return {
+				...state,
+				envPanelOpen: data?.open ?? false,
+				envEditingId: data?.editingId ?? null,
+				envDraft: draft,
+				envBaseline: data?.draft ? draft : state.envBaseline,
+				envConfirmingDiscard: false,
+			};
+		}
+		case SetupPageActionType.SET_ENV_DRAFT:
+			return { ...state, envDraft: action.data as EnvironmentDraft };
+		case SetupPageActionType.SET_ENV_CONFIRMING_DISCARD:
+			return { ...state, envConfirmingDiscard: Boolean(action.data) };
+		case SetupPageActionType.SET_SCOPE_PANEL: {
+			const data = action.data as
+				| { open: boolean; editingId?: string | null; draft?: ScopeDraft }
+				| undefined;
+			const draft = data?.draft ?? state.scopeDraft;
+			return {
+				...state,
+				scopePanelOpen: data?.open ?? false,
+				scopeEditingId: data?.editingId ?? null,
+				scopeDraft: draft,
+				scopeBaseline: data?.draft ? draft : state.scopeBaseline,
+				scopeConfirmingDiscard: false,
+			};
+		}
+		case SetupPageActionType.SET_SCOPE_DRAFT:
+			return { ...state, scopeDraft: action.data as ScopeDraft };
+		case SetupPageActionType.SET_SCOPE_CONFIRMING_DISCARD:
+			return { ...state, scopeConfirmingDiscard: Boolean(action.data) };
 		case SetupPageActionType.SET_ENV_ERROR:
 			return { ...state, envError: (action.data as string | null) ?? null };
 		case SetupPageActionType.SET_ENV_SAVING:

@@ -33,6 +33,12 @@ export interface SectionCardProps {
 	title: string;
 	icon: LucideIcon;
 	children: ReactNode;
+	/**
+	 * Optional action pinned to the right of the heading, usually the section's
+	 * create `<Button>`. Mirrors the CTA slot on `PageHeader`, so a card-scoped
+	 * listing gets the same affordance without inventing its own header layout.
+	 */
+	action?: ReactNode;
 	padding?: CardPadding;
 	className?: string;
 }
@@ -42,15 +48,19 @@ export function SectionCard({
 	title,
 	icon: Icon,
 	children,
+	action,
 	padding = "md",
 	className,
 }: SectionCardProps) {
 	return (
 		<section className={cn(cardBase, cardPadding[padding], className)}>
-			<h2 className="mb-4 flex items-center gap-2 text-lg font-medium">
-				<Icon className="h-5 w-5" />
-				{title}
-			</h2>
+			<div className="mb-4 flex items-center justify-between gap-2">
+				<h2 className="flex items-center gap-2 text-lg font-medium">
+					<Icon className="h-5 w-5" />
+					{title}
+				</h2>
+				{action}
+			</div>
 			{children}
 		</section>
 	);

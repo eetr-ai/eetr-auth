@@ -2,6 +2,7 @@
 
 import { auth } from "@/auth";
 import { onAdminServerAction } from "@/lib/context/on-server-action";
+import type { ClientClaimInput } from "@/lib/repositories/client-claim.repository";
 
 export async function listClients(environmentId?: string) {
 	return onAdminServerAction(async (_ctx, getServices) => {
@@ -53,6 +54,15 @@ export async function updateClientScopes(id: string, scopeIds: string[]) {
 	return onAdminServerAction(async (_ctx, getServices) => {
 		const { clientService } = getServices();
 		return clientService.updateScopes(id, scopeIds, actorUserId);
+	});
+}
+
+export async function updateClientClaims(id: string, claims: ClientClaimInput[]) {
+	const session = await auth();
+	const actorUserId = session?.user?.id ?? null;
+	return onAdminServerAction(async (_ctx, getServices) => {
+		const { clientService } = getServices();
+		return clientService.updateClaims(id, claims, actorUserId);
 	});
 }
 

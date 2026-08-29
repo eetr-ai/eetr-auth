@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Client, ClientRepository } from "@/lib/repositories/client.repository";
 import type { AdminAuditLogRepository } from "@/lib/repositories/admin-audit-log.repository";
 import { ClientService } from "@/lib/services/client.service";
+import type { ClientClaimService } from "@/lib/services/client-claim.service";
 import { AdminAuditLogService } from "@/lib/services/admin-audit-log.service";
 
 function createClientRepoMock() {
@@ -30,6 +31,11 @@ function createService(repo?: ClientRepository, env?: CloudflareEnv, adminAuditL
 	return new ClientService({
 		clientRepo: repo ?? createClientRepoMock(),
 		adminAuditLogService: adminAuditLogService ?? createAuditLogService(),
+		// Custom claims have their own suite; these tests cover the client surface.
+		clientClaimService: {
+			listByClient: vi.fn().mockResolvedValue([]),
+			setClientClaims: vi.fn(),
+		} as unknown as ClientClaimService,
 		env:
 			env ??
 			({

@@ -104,6 +104,57 @@ Additional capabilities:
 - Per-client scope allowlist.
 - Scope propagation through token rotation.
 
+## Custom JWT claims
+
+A client can define **static custom claims** that are injected into every access token it is
+issued. Configure them in the client side panel (`Dashboard → Clients`).
+
+Each claim has a name, a value, and a type — `string`, `number`, `boolean`, or `json` — so the claim
+lands in the JWT with its real JSON type rather than as a quoted string:
+
+| Name | Value | Type | In the token |
+| --- | --- | --- | --- |
+| `tenant` | `acme` | `string` | `"tenant": "acme"` |
+| `tier` | `3` | `number` | `"tier": 3` |
+| `beta` | `true` | `boolean` | `"beta": true` |
+| `roles` | `["admin","ops"]` | `json` | `"roles": ["admin","ops"]` |
+
+Values are static: the same claim set goes into every access token for that client, regardless of
+which user authorized it.
+
+<Callout type="warn" title="Reserved claims">
+  `iss`, `sub`, `aud`, `exp`, `nbf`, `iat`, `jti`, `scope`, `client_id`, and `environment` are owned
+  by the issuer and cannot be overridden — a client could otherwise forge its own identity, audience,
+  lifetime, or scope. They are rejected when saving, and filtered again at token-mint time, so a row
+  written directly to the database still cannot override them.
+</Callout>
+
+Custom claims apply to the **access token** only. The `id_token` remains a standard OIDC identity
+assertion, and a claim whose stored value no longer decodes to its declared type is dropped from the
+token rather than failing issuance.
+
+### Consent copy
+
+A scope can carry two optional fields of human-readable copy, edited in the admin dashboard under
+**Setup → Basic → Scopes**:
+
+| Field | Shown as | Example |
+| --- | --- | --- |
+| `display_name` | The line title on the consent screen | `Your email address` |
+| `description` | The explanation beneath it | `See your email address and whether it is verified.` |
+
+Both are optional. When neither is set the consent screen falls back to the raw protocol token
+(`read:users`), which is the behaviour every scope had before this existed. The three seeded OIDC
+scopes ship with copy already written.
+
+Copy is presentation only — it never appears in `scopes_supported`, in a token, or anywhere else in
+the protocol.
+
+<Callout type="warn" title="`scope_name` is not editable">
+  Only the copy can be changed after creation. `scope_name` is the token clients send in `scope`, so
+  renaming it would break every client already requesting it and every grant referencing it.
+</Callout>
+
 <Callout type="info" title="Scope resolution">
   Requesting a scope a client wasn't granted fails with `invalid_scope`. In the
   [client library](/docs/client-library), prefer the `OIDCScope` constants and the `scopes[]` array

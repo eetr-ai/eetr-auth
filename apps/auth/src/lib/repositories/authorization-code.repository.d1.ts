@@ -131,6 +131,19 @@ export class AuthorizationCodeRepositoryD1 implements AuthorizationCodeRepositor
 		return Number(result.meta.changes ?? 0) > 0;
 	}
 
+	async deleteUnusedForSubjectAndClient(subject: string, clientId: string): Promise<number> {
+		const result = await this.db
+			.prepare(
+				[
+					"DELETE FROM authorization_codes",
+					"WHERE subject = ? AND client_id = ? AND used_at IS NULL",
+				].join(" ")
+			)
+			.bind(subject, clientId)
+			.run();
+		return Number(result.meta.changes ?? 0);
+	}
+
 	async deleteUsedOrExpired(nowIso: string): Promise<number> {
 		const result = await this.db
 			.prepare(

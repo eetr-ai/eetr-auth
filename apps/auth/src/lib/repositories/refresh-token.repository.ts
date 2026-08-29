@@ -62,6 +62,19 @@ export interface RefreshTokenRepository {
 	 * access tokens issued across the family on detected reuse.
 	 */
 	listFamilyAccessTokenIds(rootId: string): Promise<string[]>;
+	/**
+	 * Revoke every still-active refresh token issued to `subject` for `clientId`, and
+	 * return the access-token row ids (tokens.id) bound to them so the caller can expire
+	 * those too. Used when consent is withdrawn.
+	 *
+	 * This is the only route from a user to their access tokens: `tokens` has no subject
+	 * column, so a user's access tokens are reachable only via refresh_tokens.subject.
+	 */
+	revokeAllForSubjectAndClient(
+		subject: string,
+		clientId: string,
+		revokedAt: string
+	): Promise<string[]>;
 	listRefreshTokenActivity(clientId?: string): Promise<RefreshTokenActivity[]>;
 	deleteByTokenId(refreshTokenId: string): Promise<boolean>;
 	deleteExpired(nowIso: string): Promise<number>;

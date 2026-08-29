@@ -37,8 +37,10 @@ export interface SidePanelProps {
  * Right-hand slide-in panel for multi-field create/edit forms. The listing stays
  * on the page behind it.
  *
- * Single-field entities should keep a compact inline add-row instead — a
+ * A genuinely single-field entity should keep a compact inline add-row instead — a
  * full-screen overlay to capture one text input costs more screen than it saves.
+ * The test is the entity, not the surface: once it grows a second field, or a field
+ * that needs explaining, it belongs in a panel.
  *
  * Note the panel is animated, and therefore a transformed element, so it forms a
  * containing block: anything `position: fixed` inside `children` resolves

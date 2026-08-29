@@ -1,10 +1,11 @@
 import type { ClientRepository } from "@/lib/repositories/client.repository";
-import type { TokenRepository } from "@/lib/repositories/token.repository";
+import type { ClientScopeGrant, TokenRepository } from "@/lib/repositories/token.repository";
 import type { AuthorizationCodeRepository } from "@/lib/repositories/authorization-code.repository";
 import type { UserRepository } from "@/lib/repositories/admin.repository";
 import { OAuthServiceError } from "./oauth.types";
 import { normalizeResourceParam } from "./resource-indicator";
 import { matchRegisteredRedirectUri } from "./loopback-uri";
+import type { ConsentService } from "./consent.service";
 
 const AUTHORIZATION_CODE_TTL_SECONDS = 300;
 
@@ -39,6 +40,7 @@ export interface OauthAuthorizationServiceDeps {
 	tokenRepo: TokenRepository;
 	authorizationCodeRepo: AuthorizationCodeRepository;
 	userRepo: UserRepository;
+	consentService: ConsentService;
 }
 
 export class OauthAuthorizationService {
@@ -46,17 +48,38 @@ export class OauthAuthorizationService {
 	private readonly tokenRepo: TokenRepository;
 	private readonly authorizationCodeRepo: AuthorizationCodeRepository;
 	private readonly userRepo: UserRepository;
+	private readonly consentService: ConsentService;
 
 	constructor({
 		clientRepo,
 		tokenRepo,
 		authorizationCodeRepo,
 		userRepo,
+		consentService,
 	}: OauthAuthorizationServiceDeps) {
 		this.clientRepo = clientRepo;
 		this.tokenRepo = tokenRepo;
 		this.authorizationCodeRepo = authorizationCodeRepo;
 		this.userRepo = userRepo;
+		this.consentService = consentService;
+	}
+
+
+	/**
+	 * Resolve the scope grants an authorize request actually covers.
+	 *
+	 * An authorize request with no `scope` means "every scope this client is granted" --
+	 * the OAuth default this server has always applied. That rule lives here so the
+	 * consent screen shows exactly the set `authorize` will bind to the code, rather than
+	 * re-deriving it and risking the two drifting apart.
+	 */
+	async resolveClientScopeGrants(
+		clientRowId: string,
+		requestedScopeNames: string[]
+	): Promise<ClientScopeGrant[]> {
+		return requestedScopeNames.length > 0
+			? this.tokenRepo.getClientScopeGrantsByNames(clientRowId, requestedScopeNames)
+			: this.tokenRepo.getClientScopeGrants(clientRowId);
 	}
 
 	async authorize(params: AuthorizeRequestParams): Promise<{ redirectTo: string }> {
@@ -131,10 +154,7 @@ export class OauthAuthorizationService {
 		}
 
 		const requestedScopes = parseScopeParam(params.scope ?? undefined);
-		const grants =
-			requestedScopes.length > 0
-				? await this.tokenRepo.getClientScopeGrantsByNames(client.id, requestedScopes)
-				: await this.tokenRepo.getClientScopeGrants(client.id);
+		const grants = await this.resolveClientScopeGrants(client.id, requestedScopes);
 
 		if (requestedScopes.length > 0 && grants.length !== requestedScopes.length) {
 			throw new OAuthServiceError(
@@ -168,6 +188,15 @@ export class OauthAuthorizationService {
 				resource,
 			},
 			grants.map((grant) => grant.clientScopeId)
+		);
+
+		// Record consent only once the code exists: a request that failed validation above
+		// never reaches here, so a rejected authorize cannot leave consent behind. The
+		// resolved grants -- not the raw request -- are the authoritative set.
+		await this.consentService.record(
+			params.subject,
+			client.id,
+			grants.map((grant) => grant.scopeName)
 		);
 
 		const redirect = new URL(redirectUri);

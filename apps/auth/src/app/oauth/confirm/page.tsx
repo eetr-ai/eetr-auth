@@ -34,14 +34,66 @@ export default async function OAuthConfirmPage() {
 	// Resolve the client's registered name for the consent prompt — important for
 	// dynamically registered clients (e.g. "Claude", "ChatGPT") the user hasn't seen before.
 	// The requested scopes and resource come straight from the pending request.
+	const services = getServices(ctx);
 	const client = pendingParams.client_id
-		? await getServices(ctx).clientService.getByClientIdentifier(pendingParams.client_id)
+		? await services.clientService.getByClientIdentifier(pendingParams.client_id)
 		: null;
 	const clientName = client?.name?.trim() || pendingParams.client_id || "An application";
-	const requestedScopes = (pendingParams.scope ?? "")
+	const requestedScopeNames = (pendingParams.scope ?? "")
 		.split(/\s+/)
 		.map((s) => s.trim())
 		.filter(Boolean);
+
+	// An authorize request with no `scope` means "everything this client is granted"
+	// (see OauthAuthorizationService.authorize), so resolve the client's full grant set
+	// rather than telling the user the uselessly vague "all scopes granted".
+	const effectiveScopeNames = client
+		? (
+				await services.oauthAuthorizationService.resolveClientScopeGrants(
+					client.id,
+					requestedScopeNames
+				)
+			).map((grant) => grant.scopeName)
+		: requestedScopeNames;
+
+	// Consent copy is optional, so index what the catalog has and fall back to the raw
+	// protocol token for anything an operator has not written copy for.
+	const copyByName = new Map(
+		(await services.scopeService.listByNames(effectiveScopeNames)).map((scope) => [
+			scope.scopeName,
+			scope,
+		])
+	);
+	// Skip the screen when the user has already consented to everything being asked for.
+	// `prompt=consent` (OIDC) always forces it, which is how a client re-confirms on demand.
+	const forceConsent = pendingParams.prompt
+		?.split(/\s+/)
+		.map((value) => value.trim())
+		.includes("consent");
+	const unconsentedScopeNames = client
+		? await services.consentService.getUnconsentedScopeNames(
+				session.user.id,
+				client.id,
+				effectiveScopeNames
+			)
+		: effectiveScopeNames;
+
+	if (client && !forceConsent && unconsentedScopeNames.length === 0) {
+		redirect("/api/authorize/complete");
+	}
+
+	// Ask about what actually changed: on a re-authorization that adds a scope, list only
+	// the new one rather than re-presenting everything the user already agreed to.
+	const scopesToShow =
+		unconsentedScopeNames.length > 0 ? unconsentedScopeNames : effectiveScopeNames;
+	const isIncrementalConsent =
+		unconsentedScopeNames.length > 0 && unconsentedScopeNames.length < effectiveScopeNames.length;
+
+	const consentScopes = scopesToShow.map((name) => ({
+		name,
+		label: copyByName.get(name)?.displayName ?? null,
+		description: copyByName.get(name)?.description ?? null,
+	}));
 	const requestedResource = pendingParams.resource ?? null;
 
 	const displayName = session.user.name ?? session.user.email ?? session.user.id;
@@ -51,26 +103,47 @@ export default async function OAuthConfirmPage() {
 			<div className="mx-auto mt-16 w-full max-w-xl rounded-card border border-border bg-background p-8">
 				<h1 className="text-2xl font-semibold">Authorize {clientName}</h1>
 				<p className="mt-2 text-sm text-muted-foreground">
-					<span className="font-medium text-foreground">{clientName}</span> wants to access your
-					account. Choose which account should authorize it.
+					{isIncrementalConsent ? (
+						<>
+							<span className="font-medium text-foreground">{clientName}</span> is asking for
+							additional access to your account.
+						</>
+					) : (
+						<>
+							<span className="font-medium text-foreground">{clientName}</span> wants to access
+							your account. Choose which account should authorize it.
+						</>
+					)}
 				</p>
 
 				<div className="mt-6 rounded-card border border-border p-4">
-					<p className="text-sm font-medium">This will grant access to:</p>
-					{requestedScopes.length > 0 ? (
-						<div className="mt-2 flex flex-wrap gap-1.5">
-							{requestedScopes.map((scope) => (
-								<span
-									key={scope}
-									className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 font-mono text-xs text-foreground"
-								>
-									{scope}
-								</span>
+						<p className="text-sm font-medium">
+						{isIncrementalConsent ? "This will additionally grant access to:" : "This will grant access to:"}
+					</p>
+					{consentScopes.length > 0 ? (
+						<ul className="mt-3 flex flex-col gap-3">
+							{consentScopes.map((scope) => (
+								<li key={scope.name}>
+									{scope.label ? (
+										<>
+											<span className="block text-sm font-medium">{scope.label}</span>
+											{scope.description && (
+												<span className="block text-sm text-muted-foreground">
+													{scope.description}
+												</span>
+											)}
+										</>
+									) : (
+										<span className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 font-mono text-xs text-foreground">
+											{scope.name}
+										</span>
+									)}
+								</li>
 							))}
-						</div>
+						</ul>
 					) : (
 						<p className="mt-1 text-sm text-muted-foreground">
-							All scopes granted to this application.
+							No scopes are granted to this application.
 						</p>
 					)}
 					{requestedResource && (

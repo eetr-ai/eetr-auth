@@ -2,8 +2,8 @@
 
 import { ReducerAction, bootstrapProvider } from "@eetr/react-reducer-utils";
 import { useEffect, useRef } from "react";
-import { Settings } from "lucide-react";
-import { FullPageSpinner, PageHeader } from "@/components/ui";
+import { Layers, Pencil, Plus, Settings, Tag } from "lucide-react";
+import { Button, ConfirmDialog, FullPageSpinner, PageHeader, SidePanel } from "@/components/ui";
 import {
 	listEnvironments,
 	createEnvironment,
@@ -13,6 +13,7 @@ import {
 import {
 	listScopes,
 	createScope,
+	updateScope,
 	deleteScope,
 } from "@/app/actions/scope-actions";
 import {
@@ -31,6 +32,8 @@ import {
 	clearSiteLogo,
 } from "@/app/actions/site-settings-actions";
 import type { SiteSettingsDto } from "@/lib/services/site-settings.service";
+import type { Environment } from "@/lib/repositories/environment.repository";
+import type { Scope } from "@/lib/repositories/scope.repository";
 import {
 	type ClientListItem,
 	type SetupPageState,
@@ -43,8 +46,21 @@ import { SiteIdentitySection } from "./_components/site-identity-section";
 import { AdminApiSection } from "./_components/admin-api-section";
 import { BasicSection } from "./_components/basic-section";
 import { EnvironmentsSection } from "./_components/environments-section";
+import { EnvironmentForm } from "./_components/environment-form";
+import { ScopeForm } from "./_components/scope-form";
+import {
+	draftFromEnvironment,
+	emptyEnvironmentDraft,
+	isEnvironmentDraftDirty,
+} from "./_components/environment-draft";
+import { draftFromScope, emptyScopeDraft, isScopeDraftDirty } from "./_components/scope-draft";
 import { ScopesSection } from "./_components/scopes-section";
 import { PasswordPoliciesSection } from "./_components/password-policies-section";
+import { environmentLabel } from "@/lib/repositories/environment.repository";
+
+/** Each form lives in its panel body; its submit button lives in the panel footer. */
+const ENV_FORM_ID = "environment-form";
+const SCOPE_FORM_ID = "scope-form";
 
 const { Provider: SetupPageStateProvider, useContextAccessors: useSetupPageState } =
 	bootstrapProvider<SetupPageState, ReducerAction<SetupPageActionType>>(
@@ -69,10 +85,16 @@ function SetupPageContent() {
 		passwordPolicies,
 		passwordPolicyError,
 		loading,
-		envName,
-		scopeName,
-		editingEnvId,
-		editingEnvName,
+		envPanelOpen,
+		envEditingId,
+		envDraft,
+		envBaseline,
+		envConfirmingDiscard,
+		scopePanelOpen,
+		scopeEditingId,
+		scopeDraft,
+		scopeBaseline,
+		scopeConfirmingDiscard,
 		envError,
 		envSaving,
 		scopeError,
@@ -95,7 +117,7 @@ function SetupPageContent() {
 
 	const logoInputRef = useRef<HTMLInputElement>(null);
 
-	const envById = new Map(environments.map((e) => [e.id, e.name]));
+	const envById = new Map(environments.map((e) => [e.id, environmentLabel(e)]));
 
 	/**
 	 * `silent` skips the full-page spinner. Post-mutation refreshes must be
@@ -151,49 +173,76 @@ function SetupPageContent() {
 		[],
 	);
 
-	const handleCreateEnv = async (e: React.FormEvent) => {
-		e.preventDefault();
+	const envDirty = isEnvironmentDraftDirty(envDraft, envBaseline);
+	const scopeDirty = isScopeDraftDirty(scopeDraft, scopeBaseline);
+
+	const openEnvCreate = () => {
 		dispatch({ type: SetupPageActionType.SET_ENV_ERROR, data: null });
-		const name = envName.trim();
-		if (!name) return;
-		dispatch({ type: SetupPageActionType.SET_ENV_SAVING, data: true });
-		try {
-			await createEnvironment(name);
-			dispatch({ type: SetupPageActionType.SET_ENV_NAME, data: "" });
-			await load({ silent: true });
-		} catch (err) {
-			dispatch({
-				type: SetupPageActionType.SET_ENV_ERROR,
-				data: err instanceof Error ? err.message : "Failed to create environment",
-			});
-		} finally {
-			dispatch({ type: SetupPageActionType.SET_ENV_SAVING, data: false });
+		dispatch({
+			type: SetupPageActionType.SET_ENV_PANEL,
+			data: { open: true, editingId: null, draft: emptyEnvironmentDraft },
+		});
+	};
+
+	const openEnvEdit = (env: Environment) => {
+		dispatch({ type: SetupPageActionType.SET_ENV_ERROR, data: null });
+		dispatch({
+			type: SetupPageActionType.SET_ENV_PANEL,
+			data: { open: true, editingId: env.id, draft: draftFromEnvironment(env) },
+		});
+	};
+
+	// Deliberately does not reset the draft: the panel keeps rendering its children
+	// while it animates out. Every open path re-initialises draft and baseline.
+	const closeEnvPanel = () => {
+		dispatch({ type: SetupPageActionType.SET_ENV_PANEL, data: { open: false } });
+		dispatch({ type: SetupPageActionType.SET_ENV_ERROR, data: null });
+	};
+
+	const requestCloseEnvPanel = () => {
+		// The panel stays mounted for its exit animation, so without this a second
+		// Escape would re-open the discard dialog over an already-closing panel.
+		if (!envPanelOpen || envSaving) return;
+		if (envDirty) {
+			dispatch({ type: SetupPageActionType.SET_ENV_CONFIRMING_DISCARD, data: true });
+		} else {
+			closeEnvPanel();
 		}
 	};
 
-	const handleUpdateEnv = async (e: React.FormEvent) => {
+	const handleSubmitEnv = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (!editingEnvId) return;
 		dispatch({ type: SetupPageActionType.SET_ENV_ERROR, data: null });
+		const name = envDraft.name.trim();
+		if (!name) {
+			dispatch({ type: SetupPageActionType.SET_ENV_ERROR, data: "Environment name is required" });
+			return;
+		}
 		dispatch({ type: SetupPageActionType.SET_ENV_SAVING, data: true });
 		try {
-			// The action resolves to the updated Environment, or null when the id no
-			// longer exists — say so rather than leaving the row silently in edit mode.
-			const result = await updateEnvironment(editingEnvId, editingEnvName.trim());
-			if (result) {
-				dispatch({ type: SetupPageActionType.SET_EDITING_ENV_ID, data: null });
-				dispatch({ type: SetupPageActionType.SET_EDITING_ENV_NAME, data: "" });
-				await load({ silent: true });
+			if (envEditingId) {
+				// The action resolves to the updated Environment, or null when the id no
+				// longer exists — say so rather than leaving the panel silently open.
+				const result = await updateEnvironment(envEditingId, name, envDraft.displayName);
+				if (!result) {
+					dispatch({
+						type: SetupPageActionType.SET_ENV_ERROR,
+						data: "Environment no longer exists",
+					});
+					return;
+				}
 			} else {
-				dispatch({
-					type: SetupPageActionType.SET_ENV_ERROR,
-					data: "Environment no longer exists",
-				});
+				await createEnvironment(name, envDraft.displayName);
 			}
+			await load({ silent: true });
+			closeEnvPanel();
 		} catch (err) {
 			dispatch({
 				type: SetupPageActionType.SET_ENV_ERROR,
-				data: err instanceof Error ? err.message : "Failed to update environment",
+				data:
+					err instanceof Error
+						? err.message
+						: `Failed to ${envEditingId ? "update" : "create"} environment`,
 			});
 		} finally {
 			dispatch({ type: SetupPageActionType.SET_ENV_SAVING, data: false });
@@ -223,20 +272,69 @@ function SetupPageContent() {
 		}
 	};
 
-	const handleCreateScope = async (e: React.FormEvent) => {
+	const openScopeCreate = () => {
+		dispatch({ type: SetupPageActionType.SET_SCOPE_ERROR, data: null });
+		dispatch({
+			type: SetupPageActionType.SET_SCOPE_PANEL,
+			data: { open: true, editingId: null, draft: emptyScopeDraft },
+		});
+	};
+
+	const openScopeEdit = (scope: Scope) => {
+		dispatch({ type: SetupPageActionType.SET_SCOPE_ERROR, data: null });
+		dispatch({
+			type: SetupPageActionType.SET_SCOPE_PANEL,
+			data: { open: true, editingId: scope.id, draft: draftFromScope(scope) },
+		});
+	};
+
+	const closeScopePanel = () => {
+		dispatch({ type: SetupPageActionType.SET_SCOPE_PANEL, data: { open: false } });
+		dispatch({ type: SetupPageActionType.SET_SCOPE_ERROR, data: null });
+	};
+
+	const requestCloseScopePanel = () => {
+		if (!scopePanelOpen || scopeSaving) return;
+		if (scopeDirty) {
+			dispatch({ type: SetupPageActionType.SET_SCOPE_CONFIRMING_DISCARD, data: true });
+		} else {
+			closeScopePanel();
+		}
+	};
+
+	const handleSubmitScope = async (e: React.FormEvent) => {
 		e.preventDefault();
 		dispatch({ type: SetupPageActionType.SET_SCOPE_ERROR, data: null });
-		const name = scopeName.trim();
-		if (!name) return;
+		const name = scopeDraft.scopeName.trim();
+		if (!name) {
+			dispatch({ type: SetupPageActionType.SET_SCOPE_ERROR, data: "Scope name is required" });
+			return;
+		}
 		dispatch({ type: SetupPageActionType.SET_SCOPE_SAVING, data: true });
 		try {
-			await createScope(name);
-			dispatch({ type: SetupPageActionType.SET_SCOPE_NAME, data: "" });
+			if (scopeEditingId) {
+				// Only the consent copy is editable; scopeName is the protocol token.
+				const result = await updateScope(
+					scopeEditingId,
+					scopeDraft.displayName,
+					scopeDraft.description
+				);
+				if (!result) {
+					dispatch({ type: SetupPageActionType.SET_SCOPE_ERROR, data: "Scope no longer exists" });
+					return;
+				}
+			} else {
+				await createScope(name, scopeDraft.displayName, scopeDraft.description);
+			}
 			await load({ silent: true });
+			closeScopePanel();
 		} catch (err) {
 			dispatch({
 				type: SetupPageActionType.SET_SCOPE_ERROR,
-				data: err instanceof Error ? err.message : "Failed to create scope",
+				data:
+					err instanceof Error
+						? err.message
+						: `Failed to ${scopeEditingId ? "update" : "create"} scope`,
 			});
 		} finally {
 			dispatch({ type: SetupPageActionType.SET_SCOPE_SAVING, data: false });
@@ -513,13 +611,9 @@ function SetupPageContent() {
 					<EnvironmentsSection
 						saving={envSaving}
 						environments={environments}
-						envName={envName}
-						editingEnvId={editingEnvId}
-						editingEnvName={editingEnvName}
 						envError={envError}
-						dispatch={dispatch}
-						onCreate={handleCreateEnv}
-						onUpdate={handleUpdateEnv}
+						onCreate={openEnvCreate}
+						onEdit={openEnvEdit}
 						onDelete={handleDeleteEnv}
 					/>
 				}
@@ -527,10 +621,9 @@ function SetupPageContent() {
 					<ScopesSection
 						saving={scopeSaving}
 						scopes={scopes}
-						scopeName={scopeName}
 						scopeError={scopeError}
-						dispatch={dispatch}
-						onCreate={handleCreateScope}
+						onCreate={openScopeCreate}
+						onEdit={openScopeEdit}
 						onDelete={handleDeleteScope}
 					/>
 				}
@@ -549,6 +642,120 @@ function SetupPageContent() {
 				onUpdate={handleUpdatePolicy}
 				onDelete={handleDeletePolicy}
 				onSetAdminPolicy={handleSetAdminPolicy}
+			/>
+			<SidePanel
+				open={envPanelOpen}
+				onRequestClose={requestCloseEnvPanel}
+				icon={Layers}
+				title={envEditingId ? "Edit environment" : "New environment"}
+				description={
+					envEditingId
+						? "The environment name is used by live tokens — change it with care."
+						: "Environments group clients and scope password policies to a deployment."
+				}
+				footer={
+					<div className="flex items-center gap-2">
+						<Button
+							type="submit"
+							form={ENV_FORM_ID}
+							icon={envEditingId ? Pencil : Plus}
+							loading={envSaving}
+						>
+							{envEditingId ? "Save environment" : "Add environment"}
+						</Button>
+						<Button
+							type="button"
+							variant="secondary"
+							onClick={requestCloseEnvPanel}
+							disabled={envSaving}
+						>
+							Cancel
+						</Button>
+					</div>
+				}
+			>
+				<EnvironmentForm
+					formId={ENV_FORM_ID}
+					draft={envDraft}
+					onChange={(patch) =>
+						dispatch({
+							type: SetupPageActionType.SET_ENV_DRAFT,
+							data: { ...envDraft, ...patch },
+						})
+					}
+					error={envError}
+					onSubmit={handleSubmitEnv}
+				/>
+			</SidePanel>
+
+			{/* Sibling of the panel, never inside it: the animated panel is a containing
+			    block, so a nested fixed overlay would resolve against it. */}
+			<ConfirmDialog
+				open={envConfirmingDiscard}
+				title="Discard changes?"
+				description="This environment has unsaved edits. Closing the panel will lose them."
+				confirmLabel="Discard"
+				onConfirm={closeEnvPanel}
+				onCancel={() =>
+					dispatch({ type: SetupPageActionType.SET_ENV_CONFIRMING_DISCARD, data: false })
+				}
+			/>
+
+			<SidePanel
+				open={scopePanelOpen}
+				onRequestClose={requestCloseScopePanel}
+				icon={Tag}
+				title={scopeEditingId ? "Edit scope" : "New scope"}
+				description={
+					scopeEditingId
+						? "Only the consent copy can be changed — clients request the scope name."
+						: "Scopes are the permissions a client can request during authorization."
+				}
+				footer={
+					<div className="flex items-center gap-2">
+						<Button
+							type="submit"
+							form={SCOPE_FORM_ID}
+							icon={scopeEditingId ? Pencil : Plus}
+							loading={scopeSaving}
+						>
+							{scopeEditingId ? "Save scope" : "Add scope"}
+						</Button>
+						<Button
+							type="button"
+							variant="secondary"
+							onClick={requestCloseScopePanel}
+							disabled={scopeSaving}
+						>
+							Cancel
+						</Button>
+					</div>
+				}
+			>
+				<ScopeForm
+					formId={SCOPE_FORM_ID}
+					draft={scopeDraft}
+					onChange={(patch) =>
+						dispatch({
+							type: SetupPageActionType.SET_SCOPE_DRAFT,
+							data: { ...scopeDraft, ...patch },
+						})
+					}
+					editingId={scopeEditingId}
+					error={scopeError}
+					onSubmit={handleSubmitScope}
+				/>
+			</SidePanel>
+
+			<ConfirmDialog
+				open={scopeConfirmingDiscard}
+				title="Discard changes?"
+				description="This scope has unsaved edits. Closing the panel will lose them."
+				confirmLabel="Discard"
+				onConfirm={closeScopePanel}
+				onCancel={() =>
+					dispatch({ type: SetupPageActionType.SET_SCOPE_CONFIRMING_DISCARD, data: false })
+				}
 			/>
 		</main>
 	);

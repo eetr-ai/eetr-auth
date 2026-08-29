@@ -1,5 +1,4 @@
-import { useState, type FormEvent } from "react";
-import type { ReducerAction } from "@eetr/react-reducer-utils";
+import { useState } from "react";
 import { Layers, Pencil, Plus, Trash2 } from "lucide-react";
 import {
 	Banner,
@@ -7,40 +6,32 @@ import {
 	EmptyState,
 	IconButton,
 	InlineDeleteConfirm,
-	Input,
 	SectionCard,
 } from "@/components/ui";
-import type { Environment } from "@/lib/repositories/environment.repository";
-import { SetupPageActionType } from "./state";
+import { environmentLabel, type Environment } from "@/lib/repositories/environment.repository";
 
 interface EnvironmentsSectionProps {
 	environments: Environment[];
-	envName: string;
-	editingEnvId: string | null;
-	editingEnvName: string;
 	envError: string | null;
-	dispatch: (action: ReducerAction<SetupPageActionType>) => void;
-	onCreate: (e: FormEvent) => void;
-	onUpdate: (e: FormEvent) => void;
+	onCreate: () => void;
+	onEdit: (env: Environment) => void;
 	onDelete: (id: string) => void;
 	/** A mutation is in flight; disable the controls so it cannot be double-submitted. */
 	saving: boolean;
 }
 
 /**
- * Environments are a single-field entity, so they keep a compact inline
- * add-row and inline rename rather than a side panel — an overlay to capture
- * one text input would cost more screen than it saves.
+ * Listing only: create and edit happen in a side panel, because an environment is a
+ * multi-field entity (identifier plus display name) and the identifier needs the
+ * explanation that it is not free to rename.
+ *
+ * Deleting stays a two-click inline confirm — deleting a record is never a dialog.
  */
 export function EnvironmentsSection({
 	environments,
-	envName,
-	editingEnvId,
-	editingEnvName,
 	envError,
-	dispatch,
 	onCreate,
-	onUpdate,
+	onEdit,
 	onDelete,
 	saving,
 }: EnvironmentsSectionProps) {
@@ -48,108 +39,72 @@ export function EnvironmentsSection({
 	const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
 	return (
-		<SectionCard title="Environments" icon={Layers}>
-			<Banner variant="error" message={envError} />
-			<form onSubmit={onCreate} className="mb-4 flex gap-2">
-				<Input
-					type="text"
-					value={envName}
-					onChange={(e) =>
-						dispatch({ type: SetupPageActionType.SET_ENV_NAME, data: e.target.value })
-					}
-					placeholder="Environment name"
-					className="flex-1"
-				/>
-				<Button type="submit" icon={Plus} loading={saving}>
-					Add
+		<SectionCard
+			title="Environments"
+			icon={Layers}
+			action={
+				<Button type="button" icon={Plus} onClick={onCreate} disabled={saving}>
+					New environment
 				</Button>
-			</form>
+			}
+		>
+			<Banner variant="error" message={envError} />
 
 			{environments.length === 0 ? (
 				<EmptyState
 					icon={Layers}
 					title="No environments yet"
 					description="Environments group clients and scope password policies to a deployment."
+					action={
+						<Button type="button" icon={Plus} onClick={onCreate}>
+							New environment
+						</Button>
+					}
 				/>
 			) : (
 				<ul className="divide-y divide-border overflow-hidden rounded-card border border-border">
 					{environments.map((env) => (
 						<li key={env.id} className="flex items-center justify-between gap-2 px-3 py-2">
-							{editingEnvId === env.id ? (
-								<form onSubmit={onUpdate} className="flex flex-1 gap-2">
-									<Input
-										type="text"
-										value={editingEnvName}
-										onChange={(e) =>
-											dispatch({
-												type: SetupPageActionType.SET_EDITING_ENV_NAME,
-												data: e.target.value,
-											})
-										}
-										className="flex-1 px-2 py-1 text-sm"
-										autoFocus
-									/>
-									<button
-										type="submit"
-										disabled={saving}
-										className="rounded-full border border-border px-2 py-1 text-sm hover:bg-surface-hover disabled:opacity-50"
-									>
-										Save
-									</button>
-									<button
-										type="button"
-										onClick={() => {
-											dispatch({ type: SetupPageActionType.SET_EDITING_ENV_ID, data: null });
-											dispatch({ type: SetupPageActionType.SET_EDITING_ENV_NAME, data: "" });
-										}}
-										className="rounded-full border border-border px-2 py-1 text-sm hover:bg-surface-hover"
-									>
-										Cancel
-									</button>
-								</form>
+							<div className="min-w-0">
+								<span className="block truncate font-medium">{environmentLabel(env)}</span>
+								{env.displayName?.trim() && (
+									<span className="block truncate font-mono text-xs text-muted-foreground">
+										{env.name}
+									</span>
+								)}
+							</div>
+							{confirmingDeleteId === env.id ? (
+								<InlineDeleteConfirm
+									label={`Delete "${environmentLabel(env)}"?`}
+									busy={saving}
+									onConfirm={() => {
+										onDelete(env.id);
+										setConfirmingDeleteId(null);
+									}}
+									onCancel={() => setConfirmingDeleteId(null)}
+								/>
 							) : (
-								<>
-									<span className="min-w-0 truncate font-medium">{env.name}</span>
-									{confirmingDeleteId === env.id ? (
-										<InlineDeleteConfirm
-											label={`Delete "${env.name}"?`}
-											busy={saving}
-											onConfirm={() => {
-												onDelete(env.id);
-												setConfirmingDeleteId(null);
-											}}
-											onCancel={() => setConfirmingDeleteId(null)}
-										/>
-									) : (
-										<div className="flex shrink-0 gap-1">
-											<IconButton
-												type="button"
-												aria-label={`Edit ${env.name}`}
-												title="Edit"
-												disabled={saving}
-												onClick={() => {
-													dispatch({ type: SetupPageActionType.SET_EDITING_ENV_ID, data: env.id });
-													dispatch({
-														type: SetupPageActionType.SET_EDITING_ENV_NAME,
-														data: env.name,
-													});
-												}}
-											>
-												<Pencil className="h-4 w-4" />
-											</IconButton>
-											<IconButton
-												type="button"
-												variant="danger"
-												aria-label={`Delete ${env.name}`}
-												title="Delete"
-												disabled={saving}
-												onClick={() => setConfirmingDeleteId(env.id)}
-											>
-												<Trash2 className="h-4 w-4" />
-											</IconButton>
-										</div>
-									)}
-								</>
+								<div className="flex shrink-0 gap-1">
+									<IconButton
+										type="button"
+										aria-label={`Edit ${environmentLabel(env)}`}
+										title="Edit"
+										disabled={saving}
+										onClick={() => onEdit(env)}
+									>
+										<Pencil className="h-4 w-4" />
+									</IconButton>
+									<IconButton
+										type="button"
+										variant="danger"
+										aria-label={`Delete ${environmentLabel(env)}`}
+										title="Delete"
+										disabled={saving}
+										onClick={() => setConfirmingDeleteId(env.id)}
+									>
+										<Trash2 className="h-4 w-4" />
+									</IconButton>
+								</div>
 							)}
 						</li>
 					))}

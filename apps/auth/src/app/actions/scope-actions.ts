@@ -10,12 +10,29 @@ export async function listScopes() {
 	});
 }
 
-export async function createScope(scopeName: string) {
+export async function createScope(
+	scopeName: string,
+	displayName: string | null = null,
+	description: string | null = null
+) {
 	const session = await auth();
 	const actorUserId = session?.user?.id ?? null;
 	return onAdminServerAction(async (_ctx, getServices) => {
 		const { scopeService } = getServices();
-		return scopeService.create(scopeName, actorUserId);
+		return scopeService.create(scopeName, { displayName, description }, actorUserId);
+	});
+}
+
+export async function updateScope(
+	id: string,
+	displayName: string | null,
+	description: string | null
+) {
+	const session = await auth();
+	const actorUserId = session?.user?.id ?? null;
+	return onAdminServerAction(async (_ctx, getServices) => {
+		const { scopeService } = getServices();
+		return scopeService.update(id, { displayName, description }, actorUserId);
 	});
 }
 

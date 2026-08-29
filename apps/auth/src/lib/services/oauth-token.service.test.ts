@@ -9,6 +9,7 @@ import type { AccessTokenRecord, ClientScopeGrant, TokenRepository } from "@/lib
 import type { UserRecord, UserRepository } from "@/lib/repositories/admin.repository";
 import { OIDC_CLAIMS_SUPPORTED } from "@/lib/config/oidc-metadata";
 import { OauthTokenService } from "@/lib/services/oauth-token.service";
+import type { ClientClaimService } from "@/lib/services/client-claim.service";
 
 function createClientRepoMock() {
 	return {
@@ -32,6 +33,7 @@ function createAuthorizationCodeRepoMock() {
 		getByCodeId: vi.fn(),
 		// Default: the code is successfully consumed (won the single-use race).
 		markUsed: vi.fn().mockResolvedValue(true),
+		deleteUnusedForSubjectAndClient: vi.fn(),
 		deleteUsedOrExpired: vi.fn(),
 	} satisfies AuthorizationCodeRepository;
 }
@@ -61,6 +63,7 @@ function createRefreshTokenRepoMock() {
 		listRefreshTokenActivity: vi.fn(),
 		deleteByTokenId: vi.fn(),
 		deleteExpired: vi.fn(),
+		revokeAllForSubjectAndClient: vi.fn(),
 		deleteRevoked: vi.fn(),
 	} satisfies RefreshTokenRepository;
 }
@@ -106,6 +109,11 @@ function createUserRepoMock(user: UserRecord | null = makeUser()) {
 	} satisfies UserRepository;
 }
 
+/** No custom claims by default; the claim-merging behaviour has its own tests. */
+function createClientClaimServiceMock(claims: Record<string, unknown> = {}) {
+	return { getTokenClaims: vi.fn().mockResolvedValue(claims) } as unknown as ClientClaimService;
+}
+
 function createService(deps?: {
 	clientRepo?: ClientRepository;
 	authorizationCodeRepo?: AuthorizationCodeRepository;
@@ -113,6 +121,7 @@ function createService(deps?: {
 	refreshTokenRepo?: RefreshTokenRepository;
 	envRepo?: EnvironmentRepository;
 	userRepo?: UserRepository;
+	clientClaimService?: ClientClaimService;
 	env?: CloudflareEnv;
 }) {
 	return new OauthTokenService({
@@ -122,6 +131,8 @@ function createService(deps?: {
 		refreshTokenRepo: deps?.refreshTokenRepo ?? createRefreshTokenRepoMock(),
 		envRepo: deps?.envRepo ?? createEnvRepoMock(),
 		userRepo: deps?.userRepo ?? createUserRepoMock(),
+		clientClaimService:
+			deps?.clientClaimService ?? createClientClaimServiceMock(),
 		env: deps?.env ?? ({} as CloudflareEnv),
 	});
 }

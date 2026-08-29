@@ -5,30 +5,30 @@ export class EnvironmentRepositoryD1 implements EnvironmentRepository {
 
 	async list(): Promise<Environment[]> {
 		const result = await this.db
-			.prepare("SELECT id, name FROM environments ORDER BY name")
-			.all<{ id: string; name: string }>();
+			.prepare("SELECT id, name, display_name as displayName FROM environments ORDER BY name")
+			.all<Environment>();
 		return (result.results ?? []) as Environment[];
 	}
 
 	async getById(id: string): Promise<Environment | null> {
 		const row = await this.db
-			.prepare("SELECT id, name FROM environments WHERE id = ?")
+			.prepare("SELECT id, name, display_name as displayName FROM environments WHERE id = ?")
 			.bind(id)
-			.first<{ id: string; name: string }>();
+			.first<Environment>();
 		return row ?? null;
 	}
 
-	async create(id: string, name: string): Promise<void> {
+	async create(id: string, name: string, displayName: string | null): Promise<void> {
 		await this.db
-			.prepare("INSERT INTO environments (id, name) VALUES (?, ?)")
-			.bind(id, name)
+			.prepare("INSERT INTO environments (id, name, display_name) VALUES (?, ?, ?)")
+			.bind(id, name, displayName)
 			.run();
 	}
 
-	async update(id: string, name: string): Promise<void> {
+	async update(id: string, name: string, displayName: string | null): Promise<void> {
 		await this.db
-			.prepare("UPDATE environments SET name = ? WHERE id = ?")
-			.bind(name, id)
+			.prepare("UPDATE environments SET name = ?, display_name = ? WHERE id = ?")
+			.bind(name, displayName, id)
 			.run();
 	}
 
