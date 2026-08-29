@@ -67,6 +67,7 @@ describe("draftFromUser", () => {
 			emailVerifiedAt: null,
 			avatarKey: null,
 			isAdmin: false,
+			isTestUser: false,
 			environmentIds: ["env-a"],
 		};
 		expect(draftFromUser(user)).toEqual({
@@ -75,6 +76,7 @@ describe("draftFromUser", () => {
 			email: "",
 			password: "",
 			isAdmin: false,
+			isTestUser: false,
 			environmentIds: ["env-a"],
 			// An existing user starts with no pending upload.
 			avatarStagedKey: null,
@@ -91,6 +93,7 @@ describe("draftFromUser", () => {
 			emailVerifiedAt: null,
 			avatarKey: null,
 			isAdmin: false,
+			isTestUser: false,
 			environmentIds: ["env-a"],
 		};
 		const draft = draftFromUser(user);

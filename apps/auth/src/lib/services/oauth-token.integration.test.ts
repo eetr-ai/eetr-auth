@@ -106,6 +106,7 @@ class InMemoryClientRepo implements ClientRepository {
 			name: row.name,
 			tokenEndpointAuthMethod: row.token_endpoint_auth_method,
 			isDynamic: row.is_dynamic === 1,
+			isTest: row.is_test === 1,
 		});
 	}
 
@@ -440,6 +441,10 @@ class InMemoryUserRepo implements UserRepository {
 	}
 	async update(): Promise<void> {}
 	async delete(): Promise<void> {}
+	async listTestUsersByEnvironment(): Promise<UserRecord[]> {
+		return [];
+	}
+
 	async getUserEnvironments(): Promise<string[]> {
 		// Grant the integration client's environment so authorize() passes the access gate.
 		return ["env-1"];
@@ -468,6 +473,7 @@ function buildHarness(options?: {
 		name: "Integration Client",
 		tokenEndpointAuthMethod: authMethod,
 		isDynamic: isPublic,
+		isTest: false,
 	} satisfies Client;
 
 	const envRepo = new InMemoryEnvironmentRepo(new Map([["env-1", { id: "env-1", name: "production", displayName: null }]]));
@@ -497,6 +503,7 @@ function buildHarness(options?: {
 			emailVerifiedAt: "2026-01-01T00:00:00.000Z",
 			avatarKey: null,
 			isAdmin: false,
+			isTestUser: false,
 		} satisfies UserRecord);
 	const userRepo = new InMemoryUserRepo(new Map([[user.id, user]]));
 
@@ -960,6 +967,7 @@ describe("OAuth stateful flows", () => {
 			emailVerifiedAt: "2026-01-01T00:00:00.000Z",
 			avatarKey: null,
 			isAdmin: false,
+			isTestUser: false,
 		};
 		const { authorizationService, tokenService } = buildHarness({
 			user,

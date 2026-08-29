@@ -196,6 +196,13 @@ export default function UsersPage() {
 					...(draft.avatarStagedKey ? { avatarStagedKey: draft.avatarStagedKey } : {}),
 				});
 			} else {
+				// A test user with no environment grant is invisible to every sign-in page,
+				// so it would be created into a state that does nothing. Catch it here, where
+				// the fix (tick an environment) is one field away.
+				if (draft.isTestUser && draft.environmentIds.length === 0) {
+					setError("A test user needs at least one environment to appear on a sign-in page");
+					return;
+				}
 				// createUser cannot take environments, so assigning them on create is a
 				// second call. If it fails the user still exists — the message says so
 				// rather than implying nothing was created.
@@ -205,6 +212,7 @@ export default function UsersPage() {
 					draft.isAdmin,
 					draft.name,
 					draft.email,
+					draft.isTestUser,
 				);
 				if (draft.environmentIds.length > 0 && created?.id) {
 					try {

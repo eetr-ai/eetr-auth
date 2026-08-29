@@ -16,10 +16,7 @@ import { EMAIL_VERIFICATION_CHALLENGE_COOKIE } from "@/lib/auth/email-verificati
 import { isEmailMfaGloballyEnabled } from "@/lib/auth/email-mfa-enablement";
 import { MFA_CHALLENGE_COOKIE } from "@/lib/auth/mfa-cookie";
 import { refreshAdminClaim } from "@/lib/auth/session-admin-refresh";
-import {
-	decodePendingAuthorizationCookie,
-	getPendingCookieName,
-} from "@/lib/auth/oauth-pending-cookie";
+import { resolvePendingClient, resolvePendingEnvironmentId } from "@/lib/auth/pending-client";
 
 /** Structured sign-in logs (grep `sign_in_authorize`). Never includes password or OTP. */
 function signInAuthorizeLog(payload: Record<string, unknown>) {
@@ -81,6 +78,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 					return null;
 				}
 
+				// A test user is passwordless: its stored hash is the empty sentinel, which
+				// verifyPassword already rejects on shape. Refusing before the call makes the
+				// intent explicit in the log (rather than a generic password_invalid) and skips
+				// a pointless round-trip to the argon-hasher service.
+				if (user.isTestUser) {
+					signInAuthorizeLog({
+						outcome: "failure",
+						reason: "test_user_password_disabled",
+						userId: user.id,
+						username: user.username,
+					});
+					return null;
+				}
+
 				const verified = await verifyPassword(password, user.passwordHash, {
 					argonHasher: env.ARGON_HASHER,
 					hashMethod,
@@ -129,14 +140,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 					// directly, bypassing beginSignInChallenge. A password that fails the applicable
 					// complexity policy must never mint a session. The interactive flow changes the
 					// password first, so it never trips this.
-					const pendingForPolicy = await decodePendingAuthorizationCookie(
-						(await cookies()).get(getPendingCookieName())?.value,
+					const policyEnvironmentId = await resolvePendingEnvironmentId(
+						clientService,
 						env as unknown as Record<string, unknown>
 					);
-					const policyClientId = pendingForPolicy?.client_id?.trim();
-					const policyEnvironmentId = policyClientId
-						? (await clientService.getByClientIdentifier(policyClientId))?.environmentId ?? null
-						: null;
 					const complexity = await passwordPolicyService.checkSignInPasswordComplexity({
 						userId: user.id,
 						isAdmin: user.isAdmin,
@@ -357,6 +364,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 					);
 					return null;
 				}
+				// A test user has no credentials of its own. A passkey registered against one
+				// would be a durable, transferable credential for a passwordless account, so
+				// refuse it here as well as at registration time.
+				if (user.isTestUser) {
+					console.info(
+						JSON.stringify({
+							event: "sign_in_authorize",
+							ts: new Date().toISOString(),
+							outcome: "failure",
+							provider: "passkey",
+							reason: "test_user_passkey_disabled",
+							userId,
+						})
+					);
+					return null;
+				}
 				// Email verification is only enforced when email MFA is enabled globally —
 				// otherwise there's no way to verify, so don't block sign-in (mirrors the
 				// password provider and beginSignInChallenge).
@@ -394,6 +417,101 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 					email: user.email,
 					image: resolveAvatarUrl(user.avatarKey, siteRow?.cdnUrl, env as unknown as Record<string, unknown>),
 					isAdmin: user.isAdmin,
+				};
+			},
+		}),
+		/**
+		 * One-click sign-in as a test user, from the picker a test client's sign-in page
+		 * renders instead of the password form.
+		 *
+		 * This provider takes nothing but a user id, and `authorize()` is directly reachable
+		 * -- a POST to /api/auth/callback/test-user does not go through the picker. So the id
+		 * is treated purely as a selector, never as authority: every condition is re-derived
+		 * here, from the signed httpOnly `oauth_pending` cookie plus the database, at the
+		 * moment the session is minted.
+		 *
+		 * That cookie is what supplies the authority. It is set only by GET /api/authorize,
+		 * is HMAC-signed, and lives 300s -- so a session can be minted only while a real
+		 * authorization request for a real test client is genuinely in flight. There is
+		 * deliberately no exchange-token table (as the passkey flow has): that exists to
+		 * carry a prior WebAuthn verification across a redirect, whereas here there is no
+		 * prior verification to carry, and a token would only freeze at mint time answers
+		 * that are better re-derived now.
+		 *
+		 * Deliberately absent: MFA, TOTP, email verification, password max-age and password
+		 * complexity. Every one of them is password- or email-bound and has no meaning for a
+		 * synthetic account with no password and, usually, no mailbox. The neighbouring
+		 * provider is dense with those gates; their absence here is a decision, not an
+		 * oversight.
+		 */
+		Credentials({
+			id: "test-user",
+			credentials: {
+				userId: { label: "Test user", type: "text" },
+			},
+			async authorize(credentials) {
+				const userId = (credentials?.userId as string | undefined)?.trim() ?? "";
+				const fail = (reason: string, extra: Record<string, unknown> = {}) => {
+					signInAuthorizeLog({ outcome: "failure", provider: "test-user", reason, ...extra });
+					return null;
+				};
+				if (!userId) return fail("missing_user_id");
+
+				const { env, cf, ctx } = await getCloudflareContext({ async: true });
+				const requestCtx: RequestContext = { env, cf, ctx };
+				const { clientService } = getServices(requestCtx);
+
+				// No pending authorization means no test client asked for this, so there is
+				// nothing to authorize against and a bare userId is not sufficient.
+				const client = await resolvePendingClient(
+					clientService,
+					env as unknown as Record<string, unknown>
+				);
+				if (!client) return fail("no_pending_authorization", { userId });
+				if (!client.isTest) {
+					return fail("client_not_test", { userId, clientId: client.clientId });
+				}
+				// Mirrors the expiry check in OauthAuthorizationService.authorize: an expired
+				// client cannot complete the flow, so it must not mint a session either.
+				if (client.expiresAt && client.expiresAt <= new Date().toISOString()) {
+					return fail("client_expired", { userId, clientId: client.clientId });
+				}
+
+				const db = getDb(env);
+				const repo = new UserRepositoryD1(db);
+				const user = await repo.getById(userId);
+				if (!user) return fail("user_not_found", { userId });
+				if (!user.isTestUser) return fail("user_not_test", { userId });
+				// Belt and braces against the DB CHECK: this provider must never be a path to
+				// an admin session, whatever a row happens to say.
+				if (user.isAdmin) return fail("test_user_is_admin", { userId });
+
+				const userEnvironmentIds = await repo.getUserEnvironments(user.id);
+				if (!userEnvironmentIds.includes(client.environmentId)) {
+					return fail("environment_not_granted", { userId, clientId: client.clientId });
+				}
+
+				const siteRow = await new SiteSettingsRepositoryD1(db).get();
+				signInAuthorizeLog({
+					outcome: "success",
+					provider: "test-user",
+					userId: user.id,
+					username: user.username,
+					clientId: client.clientId,
+				});
+				return {
+					id: user.id,
+					username: user.username,
+					name: user.name ?? user.username,
+					email: user.email,
+					image: resolveAvatarUrl(
+						user.avatarKey,
+						siteRow?.cdnUrl,
+						env as unknown as Record<string, unknown>
+					),
+					// Hardcoded, not read from the row: a passwordless dashboard admin is the
+					// one outcome this provider must be structurally incapable of producing.
+					isAdmin: false,
 				};
 			},
 		}),

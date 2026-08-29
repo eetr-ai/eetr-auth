@@ -1,4 +1,4 @@
-import { Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { FlaskConical, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { IconButton, InlineDeleteConfirm, TBody, THead, Table, Td, Th } from "@/components/ui";
 import type { UserRecord } from "@/lib/repositories/admin.repository";
 import type { Environment } from "@/lib/repositories/environment.repository";
@@ -66,6 +66,14 @@ export function UsersTable({
 										<div className="flex items-center gap-2">
 											<span className="truncate font-medium">{label}</span>
 											<VerificationStatus user={user} hideWhenNoEmail />
+											{/* Warning, not accent: this account signs in with one click and
+											    no password, which should be obvious from the list alone. */}
+											{user.isTestUser ? (
+												<span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-warning-bg px-2 py-0.5 text-xs font-medium text-warning-fg">
+													<FlaskConical className="h-3 w-3" />
+													Test
+												</span>
+											) : null}
 										</div>
 										<div className="truncate text-xs text-muted-foreground">@{user.username}</div>
 									</div>
@@ -78,7 +86,9 @@ export function UsersTable({
 									{user.email?.trim() ? user.email : "No email"}
 								</span>
 							</Td>
-							<Td className="text-muted-foreground">{user.isAdmin ? "Admin" : "User"}</Td>
+							<Td className="text-muted-foreground">
+								{user.isAdmin ? "Admin" : user.isTestUser ? "Test user" : "User"}
+							</Td>
 							<Td>
 								{envNames.length === 0 ? (
 									<span className="text-xs text-muted-foreground">None</span>

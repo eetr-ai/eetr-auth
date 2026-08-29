@@ -134,20 +134,54 @@ export function UserForm({
 				</span>
 				<Input
 					type="password"
-					required={!editingId}
+					// A test user has no password at all, so the field is neither required nor
+					// editable while the box is ticked. Shown disabled rather than hidden so the
+					// form does not reflow as the admin toggles it.
+					required={!editingId && !draft.isTestUser}
+					disabled={draft.isTestUser}
 					autoComplete="new-password"
-					value={draft.password}
+					value={draft.isTestUser ? "" : draft.password}
 					onChange={(e) => onChange({ password: e.target.value })}
-					placeholder={editingId ? "Unchanged" : "Password"}
+					placeholder={
+						draft.isTestUser ? "Not used" : editingId ? "Unchanged" : "Password"
+					}
 				/>
 			</label>
+
+			{/* Create-only: flipping this on an existing account would either leave a real
+			    password hash on a one-click account or leave an account nobody can sign into. */}
+			<label className="flex items-center gap-2 text-sm">
+				<input
+					type="checkbox"
+					checked={draft.isTestUser}
+					disabled={editingId !== null}
+					onChange={(e) =>
+						// A passwordless dashboard admin would be a critical hole, so ticking this
+						// clears Is admin rather than leaving an invalid combination to be rejected
+						// by the service.
+						onChange(
+							e.target.checked
+								? { isTestUser: true, isAdmin: false, password: "" }
+								: { isTestUser: false }
+						)
+					}
+					className="rounded-chip border-border disabled:opacity-50"
+				/>
+				Test user (passwordless)
+			</label>
+			<p className="-mt-2 text-xs text-muted-foreground">
+				Signs in with one click from a test client&apos;s sign-in page, with no password.
+				Cannot be an admin, and is refused by every client that is not a test client. Grant
+				at least one environment below, or this user appears on no sign-in page.
+			</p>
 
 			<label className="flex items-center gap-2 text-sm">
 				<input
 					type="checkbox"
 					checked={draft.isAdmin}
+					disabled={draft.isTestUser}
 					onChange={(e) => onChange({ isAdmin: e.target.checked })}
-					className="rounded-chip border-border"
+					className="rounded-chip border-border disabled:opacity-50"
 				/>
 				Is admin
 			</label>

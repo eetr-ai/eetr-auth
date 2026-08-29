@@ -115,6 +115,8 @@ export const PUT = withAdminApiClientContext(async (req, _ctx, getServices, auth
 		password?: unknown;
 		isAdmin?: unknown;
 		is_admin?: unknown;
+		isTestUser?: unknown;
+		is_test_user?: unknown;
 		name?: unknown;
 		email?: unknown;
 		emailVerifiedAt?: unknown;
@@ -145,6 +147,20 @@ export const PUT = withAdminApiClientContext(async (req, _ctx, getServices, auth
 				error: "invalid_request",
 				error_description:
 					"isAdmin/is_admin must be a boolean (or true/false, 1/0) when provided.",
+			},
+			{ status: 400 }
+		);
+	}
+	// is_test_user is immutable by design: promoting a real user would leave a real
+	// password hash on an account signable with one click, and demoting one would leave an
+	// account nobody can sign into. Reject it explicitly rather than dropping it silently,
+	// so a caller that tries is told the write did not happen.
+	if (body.isTestUser !== undefined || body.is_test_user !== undefined) {
+		return NextResponse.json(
+			{
+				error: "invalid_request",
+				error_description:
+					"isTestUser/is_test_user cannot be changed after creation; delete and recreate the user.",
 			},
 			{ status: 400 }
 		);

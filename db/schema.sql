@@ -44,7 +44,19 @@ CREATE TABLE IF NOT EXISTS users (
   -- Set whenever the user changes their password (create/update/reset). Used by the
   -- login max-age gate. NULL = not tracked -> treated as not expired.
   password_updated_at TEXT,
-  is_admin INTEGER NOT NULL DEFAULT 0
+  is_admin INTEGER NOT NULL DEFAULT 0,
+  -- Passwordless "test user": signed in with one click from a test client's sign-in page
+  -- (see clients.is_test). password_hash holds the empty sentinel '' -- the same idiom
+  -- clients.client_secret uses for public clients -- because verifyPassword() matches it
+  -- against neither the Argon2 PHC prefix nor the 32-hex MD5 shape, so no password can
+  -- ever authenticate this row. Set at creation and immutable: flipping a real user to a
+  -- test user would leave a real password hash on an account signable with one click, and
+  -- flipping back would leave an account nobody can sign into.
+  is_test_user INTEGER NOT NULL DEFAULT 0,
+  -- A passwordless dashboard admin would be a critical hole. Enforced here as well as in
+  -- UserService so no path -- the admin bearer API, a script, hand-written SQL -- can
+  -- produce one. SQLite applies this on INSERT and UPDATE alike.
+  CHECK (is_test_user = 0 OR is_admin = 0)
 );
 
 -- User<->environment access grants (many-to-many). Controls which environments a
@@ -58,6 +70,9 @@ CREATE TABLE IF NOT EXISTS users_environments (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE
 );
+
+-- The test-user picker reads this on every test-client sign-in page render.
+CREATE INDEX IF NOT EXISTS idx_users_is_test_user ON users(is_test_user);
 
 CREATE INDEX IF NOT EXISTS idx_users_environments_user_id ON users_environments(user_id);
 CREATE INDEX IF NOT EXISTS idx_users_environments_environment_id ON users_environments(environment_id);
@@ -83,6 +98,14 @@ CREATE TABLE IF NOT EXISTS clients (
   name TEXT,
   token_endpoint_auth_method TEXT NOT NULL DEFAULT 'client_secret_basic',
   is_dynamic INTEGER NOT NULL DEFAULT 0,
+  -- Test client: a normal OAuth client in every protocol respect (same grants, scopes,
+  -- claims, redirect URIs) with two differences. Its sign-in page lists only test users
+  -- instead of the password form, and it is the ONLY kind of client a test user may
+  -- authenticate against. Set at creation and immutable, like environment_id.
+  is_test INTEGER NOT NULL DEFAULT 0,
+  -- A dynamically registered (RFC 7591) client is created by an unauthenticated caller,
+  -- so it must never be able to become a test client.
+  CHECK (is_test = 0 OR is_dynamic = 0),
   FOREIGN KEY (environment_id) REFERENCES environments(id),
   FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 );
@@ -90,6 +113,30 @@ CREATE TABLE IF NOT EXISTS clients (
 CREATE INDEX IF NOT EXISTS idx_clients_environment_id ON clients(environment_id);
 CREATE INDEX IF NOT EXISTS idx_clients_created_by ON clients(created_by);
 CREATE INDEX IF NOT EXISTS idx_clients_client_id ON clients(client_id);
+
+-- The CHECK constraints above reject invalid *combinations*, but they cannot express
+-- immutability: nothing in them stops `UPDATE users SET is_test_user = 1` on an ordinary
+-- non-admin account, which would leave a real password hash on a row that is now eligible
+-- for one-click sign-in. The application never writes either column after creation
+-- (neither appears in an update input, and both admin API endpoints reject them), so these
+-- triggers exist for the paths the application does not own: a migration, a support
+-- script, or a hand-written UPDATE at the D1 console.
+--
+-- Guarded on OLD <> NEW so an idempotent write of the same value is still allowed; only a
+-- real change aborts.
+CREATE TRIGGER IF NOT EXISTS users_is_test_user_immutable
+BEFORE UPDATE OF is_test_user ON users
+FOR EACH ROW WHEN OLD.is_test_user <> NEW.is_test_user
+BEGIN
+  SELECT RAISE(ABORT, 'users.is_test_user is immutable; delete and recreate the user');
+END;
+
+CREATE TRIGGER IF NOT EXISTS clients_is_test_immutable
+BEFORE UPDATE OF is_test ON clients
+FOR EACH ROW WHEN OLD.is_test <> NEW.is_test
+BEGIN
+  SELECT RAISE(ABORT, 'clients.is_test is immutable; delete and recreate the client');
+END;
 
 -- Redirect URIs allowed per client
 CREATE TABLE IF NOT EXISTS redirect_uris (

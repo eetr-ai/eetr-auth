@@ -11,15 +11,27 @@
 --   * Custom JWT claims per client (client_claims): static key/value pairs injected into
 --     the access tokens that client is issued. value_type preserves the JSON type so a
 --     numeric claim is a number in the JWT, not a string.
+--   * Test clients and passwordless test users:
+--       - users.is_test_user: a passwordless user signed in with one click from a test
+--         client's sign-in page. password_hash holds the empty sentinel '' (the idiom
+--         clients.client_secret already uses for public clients); verifyPassword() matches
+--         it against neither the Argon2 PHC prefix nor the 32-hex MD5 shape, so no password
+--         can ever authenticate the row.
+--       - clients.is_test: a normal OAuth client whose sign-in page lists only test users,
+--         and the only kind of client a test user may authenticate against.
+--     Both are set at creation and immutable. Each carries a CHECK that SQLite applies on
+--     INSERT and UPDATE alike: a test user can never be an admin (a passwordless dashboard
+--     admin would be critical), and a DCR-registered client can never be a test client
+--     (it is created by an unauthenticated caller).
 --   * Human-readable label for environments:
 --       - environments.display_name, admin-UI only.
 --     environments.name stays the stable identifier -- it is the `environment` JWT claim, the
 --     `environmentName` field on POST /api/token/validate, and the denormalized value in
 --     token_activity_log.environment_name -- so it is deliberately NOT renamed here.
 --
--- Idempotency: the new table + indexes use CREATE ... IF NOT EXISTS, and the seed-copy
+-- Idempotency: the new table + indexes + triggers use CREATE ... IF NOT EXISTS, and the seed-copy
 -- backfill is guarded on `IS NULL`, so both are replay-safe. SQLite has no
--- `ADD COLUMN IF NOT EXISTS`, so the three ADD COLUMN statements are the non-idempotent
+-- `ADD COLUMN IF NOT EXISTS`, so the five ADD COLUMN statements are the non-idempotent
 -- ones; they are applied exactly once by the version gate in run-d1-migrate.mjs (patches
 -- strictly greater than the DB's current version). On a manual re-run against a DB that
 -- already has these columns, remove those lines.
@@ -29,6 +41,42 @@
 ALTER TABLE scopes ADD COLUMN display_name TEXT;
 ALTER TABLE scopes ADD COLUMN description TEXT;
 ALTER TABLE environments ADD COLUMN display_name TEXT;
+
+-- NOT NULL is safe on ALTER here because the default is a constant: every existing user
+-- upgrades to "not a test user" and every existing client to "not a test client". The
+-- CHECK clauses are stored with the column and enforced from this point on; SQLite does
+-- not re-validate existing rows, which is correct -- they are all 0.
+ALTER TABLE users ADD COLUMN is_test_user INTEGER NOT NULL DEFAULT 0
+  CHECK (is_test_user = 0 OR is_admin = 0);
+ALTER TABLE clients ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0
+  CHECK (is_test = 0 OR is_dynamic = 0);
+
+-- The test-user picker reads this on every test-client sign-in page render.
+CREATE INDEX IF NOT EXISTS idx_users_is_test_user ON users(is_test_user);
+
+-- The CHECK constraints above reject invalid *combinations*, but they cannot express
+-- immutability: nothing in them stops `UPDATE users SET is_test_user = 1` on an ordinary
+-- non-admin account, which would leave a real password hash on a row that is now eligible
+-- for one-click sign-in. The application never writes either column after creation
+-- (neither appears in an update input, and both admin API endpoints reject them), so these
+-- triggers exist for the paths the application does not own: a migration, a support
+-- script, or a hand-written UPDATE at the D1 console.
+--
+-- Guarded on OLD <> NEW so an idempotent write of the same value is still allowed; only a
+-- real change aborts.
+CREATE TRIGGER IF NOT EXISTS users_is_test_user_immutable
+BEFORE UPDATE OF is_test_user ON users
+FOR EACH ROW WHEN OLD.is_test_user <> NEW.is_test_user
+BEGIN
+  SELECT RAISE(ABORT, 'users.is_test_user is immutable; delete and recreate the user');
+END;
+
+CREATE TRIGGER IF NOT EXISTS clients_is_test_immutable
+BEFORE UPDATE OF is_test ON clients
+FOR EACH ROW WHEN OLD.is_test <> NEW.is_test
+BEGIN
+  SELECT RAISE(ABORT, 'clients.is_test is immutable; delete and recreate the client');
+END;
 
 -- Backfill consent copy for the three seeded OIDC scopes. Guarded on IS NULL so a
 -- re-run never clobbers copy an admin has since edited. Scopes an operator defined

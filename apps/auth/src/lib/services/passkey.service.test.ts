@@ -62,6 +62,7 @@ function createUserRepoMock() {
 		getById: vi.fn(),
 		update: vi.fn(),
 		delete: vi.fn(),
+		listTestUsersByEnvironment: vi.fn().mockResolvedValue([]),
 		getUserEnvironments: vi.fn().mockResolvedValue([]),
 		setUserEnvironments: vi.fn(),
 		deleteWithAudit: vi.fn(),
@@ -207,6 +208,7 @@ describe("PasskeyService", () => {
 			email: "alice@example.com",
 			avatarKey: null,
 			isAdmin: false,
+			isTestUser: false,
 		});
 		repo.findCredentialsByUserId.mockResolvedValue([]);
 		siteRepo.get.mockResolvedValue({

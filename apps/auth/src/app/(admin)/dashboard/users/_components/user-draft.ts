@@ -8,6 +8,12 @@ export interface UserDraft {
 	/** Write-only. Required on create; blank on edit means "leave unchanged". */
 	password: string;
 	isAdmin: boolean;
+	/**
+	 * Passwordless test user. Create-only: the panel disables it when editing, because
+	 * flipping it on an existing account would either leave a real password hash on a
+	 * one-click account or leave an account nobody can sign into.
+	 */
+	isTestUser: boolean;
 	environmentIds: string[];
 	/** A `staging/` key for a picked-but-unsaved avatar, promoted on save. */
 	avatarStagedKey: string | null;
@@ -21,6 +27,7 @@ export const emptyDraft: UserDraft = {
 	email: "",
 	password: "",
 	isAdmin: true,
+	isTestUser: false,
 	environmentIds: [],
 	avatarStagedKey: null,
 	avatarPreviewUrl: null,
@@ -33,6 +40,7 @@ export function draftFromUser(user: UserRecord): UserDraft {
 		email: user.email ?? "",
 		password: "",
 		isAdmin: user.isAdmin,
+		isTestUser: user.isTestUser,
 		environmentIds: [...(user.environmentIds ?? [])],
 		avatarStagedKey: null,
 		avatarPreviewUrl: null,
@@ -54,6 +62,7 @@ function userSignature(draft: UserDraft): string {
 		draft.email.trim(),
 		draft.password,
 		draft.isAdmin,
+		draft.isTestUser,
 		[...draft.environmentIds].sort(),
 		// A picked-but-unsaved photo is an unsaved change like any other.
 		draft.avatarStagedKey,

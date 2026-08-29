@@ -32,6 +32,47 @@ icon: Boxes
   clients. See the [SPA / public client guide](/docs/guides/spa-public-client).
 </Callout>
 
+## Test clients
+
+A **test client** is a normal OAuth client in every protocol respect — same grants, scopes, custom
+claims, redirect URIs, and tokens. Two things differ:
+
+- Its sign-in page lists the [test users](/docs/features/admin#test-users) granted its environment
+  instead of the password form. Picking one signs in immediately, with no password and no passkey.
+- It **skips the consent screen**. Synthetic users have nobody meaningful to ask; the `user_consents`
+  row is still recorded, so admin consent listing and revocation are unaffected.
+
+Create one from **Clients → New client** by ticking **Test client**. The list shows a **Test** badge
+and the Registration filter gains a **Test** entry.
+
+For the end-to-end setup — creating the pair and driving the flow from a script — see
+[Local development with agents](/docs/guides/local-development-with-agents).
+
+The pairing rule is asymmetric, and worth stating plainly:
+
+| | test client | normal client |
+|---|---|---|
+| **test user** | allowed | **refused** (`access_denied`) |
+| **normal user** | allowed | allowed |
+
+A test user is refused by every non-test client, enforced at `/authorize` and re-checked on every
+token refresh (which revokes the presented refresh token). A normal user is *not* refused by a test
+client — a test client is just a client — but the picker offers no way in, so this only happens with
+a session they already hold.
+
+<Callout type="warn" title="Anyone who can reach the page can be any test user on it">
+  There is no secret in this flow; that is the point of it. Never grant a test user an environment
+  that also contains production clients, and treat a test client's URL as public.
+</Callout>
+
+<Callout type="info" title="Set at creation, and never on a DCR client">
+  `is_test` is fixed when the client is created and shown read-only afterwards, like the
+  environment — flipping it would change who can authenticate against a client that already has live
+  tokens. A dynamically registered client can never be a test client: it is registered by an
+  unauthenticated caller, so allowing it would let anyone mint a client whose sign-in page hands out
+  sessions with one click. Refused by the service and by a DB `CHECK`.
+</Callout>
+
 ## Dynamic Client Registration (RFC 7591)
 
 `POST /api/register` lets clients self-register without an admin. It is a public endpoint,

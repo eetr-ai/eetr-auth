@@ -82,6 +82,7 @@ function setup(opts: {
 	};
 	const userService = {
 		updateUser: vi.fn().mockResolvedValue(undefined),
+		listTestUsersByEnvironment: vi.fn().mockResolvedValue([]),
 		getUserEnvironments: vi.fn().mockResolvedValue(opts.userEnvironments ?? []),
 	};
 

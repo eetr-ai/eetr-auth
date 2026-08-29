@@ -38,6 +38,15 @@ export default async function OAuthConfirmPage() {
 	const client = pendingParams.client_id
 		? await services.clientService.getByClientIdentifier(pendingParams.client_id)
 		: null;
+	// A test client is a developer's own fixture and its users are synthetic, so the
+	// consent screen has nobody meaningful to ask. This is the same path as the
+	// "already consented" skip below: authorize() records the consent row itself, so
+	// admin consent listing and revocation keep working either way. Placed before the
+	// scope-copy lookups so a test authorization also skips those round-trips.
+	if (client?.isTest) {
+		redirect("/api/authorize/complete");
+	}
+
 	const clientName = client?.name?.trim() || pendingParams.client_id || "An application";
 	const requestedScopeNames = (pendingParams.scope ?? "")
 		.split(/\s+/)

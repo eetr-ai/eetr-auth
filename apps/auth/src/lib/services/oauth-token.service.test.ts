@@ -88,6 +88,7 @@ function makeUser(overrides?: Partial<UserRecord>): UserRecord {
 		emailVerifiedAt: "2026-01-01T00:00:00.000Z",
 		avatarKey: null,
 		isAdmin: false,
+		isTestUser: false,
 		...overrides,
 	};
 }
@@ -103,6 +104,7 @@ function createUserRepoMock(user: UserRecord | null = makeUser()) {
 		delete: vi.fn(),
 		// Default: the user is granted makeClient()'s environment ("env-1") so refresh-token
 		// exchanges pass the per-user environment re-check. Denial tests override this.
+		listTestUsersByEnvironment: vi.fn().mockResolvedValue([]),
 		getUserEnvironments: vi.fn().mockResolvedValue(["env-1"]),
 		setUserEnvironments: vi.fn(),
 		deleteWithAudit: vi.fn(),
@@ -148,6 +150,7 @@ function makeClient(overrides?: Partial<Client>): Client {
 		name: "Test Client",
 		tokenEndpointAuthMethod: "client_secret_basic",
 		isDynamic: false,
+		isTest: false,
 		...overrides,
 	};
 }
@@ -535,6 +538,7 @@ describe("OauthTokenService", () => {
 			userRepo.getUserEnvironments.mockResolvedValue(["env-other"]);
 			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient());
 			refreshTokenRepo.getByTokenId.mockResolvedValue(makeRefreshToken());
+			refreshTokenRepo.listFamilyAccessTokenIds.mockResolvedValue(["access-row-9"]);
 			const service = createService({ clientRepo, tokenRepo, refreshTokenRepo, userRepo });
 
 			await expect(
@@ -549,10 +553,86 @@ describe("OauthTokenService", () => {
 				message: "User no longer has access to this environment.",
 				status: 400,
 			});
-			// The now-unauthorized token is revoked and no new pair is issued.
-			expect(refreshTokenRepo.revoke).toHaveBeenCalledWith("refresh-row-1", "2026-04-06T13:10:00.000Z");
+			// The whole family goes, along with the access tokens it minted: an access token
+			// already issued stays valid for up to an hour, so revoking only the presented
+			// refresh token would leave the revoked user calling resource servers meanwhile.
+			expect(refreshTokenRepo.revokeFamily).toHaveBeenCalledWith(
+				"refresh-row-1",
+				"2026-04-06T13:10:00.000Z"
+			);
+			expect(tokenRepo.expireAccessTokensByIds).toHaveBeenCalledWith(
+				["access-row-9"],
+				"2026-04-06T13:10:00.000Z"
+			);
 			expect(refreshTokenRepo.createRefreshToken).not.toHaveBeenCalled();
 			expect(tokenRepo.createAccessToken).not.toHaveBeenCalled();
+		});
+
+		// A test user is passwordless, so it must not keep a live grant on a real client.
+		// The environment gate would not catch this on its own: an admin can legitimately
+		// grant a test user an environment that also contains real clients.
+		it("rejects the refresh when a test user holds a grant on a non-test client", async () => {
+			const clientRepo = createClientRepoMock();
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			// Environment access is intact -- only the test-user/test-client pairing fails.
+			const userRepo = createUserRepoMock(makeUser({ isTestUser: true }));
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient({ isTest: false }));
+			refreshTokenRepo.getByTokenId.mockResolvedValue(makeRefreshToken());
+			refreshTokenRepo.listFamilyAccessTokenIds.mockResolvedValue(["access-row-9"]);
+			const service = createService({ clientRepo, tokenRepo, refreshTokenRepo, userRepo });
+
+			await expect(
+				service.exchange({
+					grantType: "refresh_token",
+					clientId: "client-app-id",
+					clientSecret: "plain-secret",
+					refreshToken: "rt_existing",
+				})
+			).rejects.toMatchObject({
+				code: "invalid_grant",
+				message: "User no longer has access to this environment.",
+				status: 400,
+			});
+			// Revoked, not merely refused: a 30-day token that keeps being presented would
+			// otherwise outlive the constraint it just failed. The family and its access
+			// tokens go too, so nothing already issued stays usable.
+			expect(refreshTokenRepo.revokeFamily).toHaveBeenCalledWith(
+				"refresh-row-1",
+				"2026-04-06T13:10:00.000Z"
+			);
+			expect(tokenRepo.expireAccessTokensByIds).toHaveBeenCalledWith(
+				["access-row-9"],
+				"2026-04-06T13:10:00.000Z"
+			);
+			expect(refreshTokenRepo.createRefreshToken).not.toHaveBeenCalled();
+			expect(tokenRepo.createAccessToken).not.toHaveBeenCalled();
+		});
+
+		it("allows a test user to refresh against a test client", async () => {
+			const clientRepo = createClientRepoMock();
+			const tokenRepo = createTokenRepoMock();
+			const refreshTokenRepo = createRefreshTokenRepoMock();
+			const userRepo = createUserRepoMock(makeUser({ isTestUser: true }));
+			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient({ isTest: true }));
+			refreshTokenRepo.getByTokenId.mockResolvedValue(makeRefreshToken());
+			tokenRepo.getClientScopeGrants.mockResolvedValue([
+				makeGrant({ clientScopeId: "client-scope-read", scopeName: "read:users" }),
+			]);
+			const service = createService({ clientRepo, tokenRepo, refreshTokenRepo, userRepo });
+
+			const result = await service.exchange({
+				grantType: "refresh_token",
+				clientId: "client-app-id",
+				clientSecret: "plain-secret",
+				refreshToken: "rt_existing",
+			});
+
+			// Rotation revokes the presented token as a matter of course, so the proof that
+			// the gate passed is that a new pair was issued at all.
+			expect(result.access_token).toMatch(/^at_[0-9a-f]{64}$/);
+			expect(result.refresh_token).toMatch(/^rt_[0-9a-f]{64}$/);
+			expect(refreshTokenRepo.createRefreshToken).toHaveBeenCalled();
 		});
 
 		it("does not environment-gate client_credentials refresh (no subject)", async () => {

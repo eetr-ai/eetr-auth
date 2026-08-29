@@ -1,10 +1,10 @@
-import { Pencil, Sparkles, Trash2 } from "lucide-react";
+import { FlaskConical, Pencil, Sparkles, Trash2 } from "lucide-react";
 import { IconButton, InlineDeleteConfirm, TBody, THead, Table, Td, Th } from "@/components/ui";
 import type { Client } from "@/lib/repositories/client.repository";
 import type { Environment } from "@/lib/repositories/environment.repository";
 import { environmentLabel } from "@/lib/repositories/environment.repository";
 
-export type ClientTypeFilter = "" | "dynamic" | "manual";
+export type ClientTypeFilter = "" | "dynamic" | "manual" | "test";
 
 interface ClientsTableProps {
 	clients: Client[];
@@ -58,6 +58,14 @@ export function ClientsTable({
 										<span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-accent-bg px-2 py-0.5 text-xs font-medium text-accent-fg">
 											<Sparkles className="h-3 w-3" />
 											Dynamic
+										</span>
+									) : null}
+									{/* Warning, not accent: a test client accepts passwordless one-click
+									    sign-in, so it should never be mistaken for a real one at a glance. */}
+									{client.isTest ? (
+										<span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-warning-bg px-2 py-0.5 text-xs font-medium text-warning-fg">
+											<FlaskConical className="h-3 w-3" />
+											Test
 										</span>
 									) : null}
 								</div>

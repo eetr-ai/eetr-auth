@@ -6,6 +6,8 @@ As of version `0.1.0`, the auth app uses versioned schema patches. The current r
 
 `client_claims` holds static custom JWT claims per client; `value_type` preserves the JSON type so a numeric claim mints as a number.
 
+`users.is_test_user` and `clients.is_test` are the passwordless test-user / test-client pair. Both are set at creation and immutable — flipping a real user to a test user would leave a real password hash on an account signable with one click, and flipping back would leave an account nobody can sign into. A test user stores the empty sentinel `''` in `password_hash` (the same idiom `clients.client_secret` uses for public clients), which `verifyPassword()` rejects on shape. Each column carries a `CHECK` that SQLite applies on `INSERT` and `UPDATE` alike: a test user can never be an admin, and a dynamically registered client can never be a test client.
+
 Two columns are identifiers rather than labels and must not be repurposed as display text: `environments.name` is the `environment` JWT claim, the `environmentName` field on `POST /api/token/validate`, and the denormalized value in `token_activity_log.environment_name`; `scopes.scope_name` is the protocol token clients send in `scope`. Both have a nullable `display_name` alongside them for the human-facing label.
 
 - **`schema.sql`** – The complete authoritative snapshot of the current schema.

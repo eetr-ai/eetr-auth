@@ -17,20 +17,31 @@ export class UserRepositoryD1 implements UserRepository {
 		emailVerifiedAt: string | null,
 		passwordHash: string,
 		passwordUpdatedAt: string | null,
-		isAdmin: boolean
+		isAdmin: boolean,
+		isTestUser: boolean
 	): Promise<void> {
 		await this.db
 			.prepare(
-				"INSERT INTO users (id, username, name, email, email_verified_at, password_hash, password_updated_at, is_admin) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+				"INSERT INTO users (id, username, name, email, email_verified_at, password_hash, password_updated_at, is_admin, is_test_user) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
 			)
-			.bind(id, username, name, email, emailVerifiedAt, passwordHash, passwordUpdatedAt, isAdmin ? 1 : 0)
+			.bind(
+				id,
+				username,
+				name,
+				email,
+				emailVerifiedAt,
+				passwordHash,
+				passwordUpdatedAt,
+				isAdmin ? 1 : 0,
+				isTestUser ? 1 : 0
+			)
 			.run();
 	}
 
 	async list(): Promise<UserRecord[]> {
 		const result = await this.db
 			.prepare(
-				"SELECT id, username, name, email, email_verified_at as emailVerifiedAt, avatar_key as avatarKey, is_admin as isAdmin FROM users ORDER BY username"
+				"SELECT id, username, name, email, email_verified_at as emailVerifiedAt, avatar_key as avatarKey, is_admin as isAdmin, is_test_user as isTestUser FROM users ORDER BY username"
 			)
 			.all<{
 				id: string;
@@ -40,6 +51,7 @@ export class UserRepositoryD1 implements UserRepository {
 				emailVerifiedAt: string | null;
 				avatarKey: string | null;
 				isAdmin: number;
+				isTestUser: number;
 			}>();
 		const grants = await this.db
 			.prepare("SELECT user_id as userId, environment_id as environmentId FROM users_environments")
@@ -58,6 +70,7 @@ export class UserRepositoryD1 implements UserRepository {
 			emailVerifiedAt: row.emailVerifiedAt,
 			avatarKey: row.avatarKey,
 			isAdmin: !!row.isAdmin,
+			isTestUser: !!row.isTestUser,
 			environmentIds: envByUser.get(row.id) ?? [],
 		}));
 	}
@@ -65,7 +78,7 @@ export class UserRepositoryD1 implements UserRepository {
 	async findByUsername(username: string): Promise<UserWithPassword | null> {
 		const result = await this.db
 			.prepare(
-				"SELECT id, username, name, email, email_verified_at as emailVerifiedAt, avatar_key as avatarKey, password_hash as passwordHash, password_updated_at as passwordUpdatedAt, is_admin as isAdmin FROM users WHERE username = ?"
+				"SELECT id, username, name, email, email_verified_at as emailVerifiedAt, avatar_key as avatarKey, password_hash as passwordHash, password_updated_at as passwordUpdatedAt, is_admin as isAdmin, is_test_user as isTestUser FROM users WHERE username = ?"
 			)
 			.bind(username)
 			.first<{
@@ -78,6 +91,7 @@ export class UserRepositoryD1 implements UserRepository {
 				passwordHash: string;
 				passwordUpdatedAt: string | null;
 				isAdmin: number;
+				isTestUser: number;
 			}>();
 		return result
 			? {
@@ -90,6 +104,7 @@ export class UserRepositoryD1 implements UserRepository {
 					passwordHash: result.passwordHash,
 					passwordUpdatedAt: result.passwordUpdatedAt,
 					isAdmin: !!result.isAdmin,
+					isTestUser: !!result.isTestUser,
 				}
 			: null;
 	}
@@ -99,7 +114,7 @@ export class UserRepositoryD1 implements UserRepository {
 		if (!normalized) return null;
 		const result = await this.db
 			.prepare(
-				"SELECT id, username, name, email, email_verified_at as emailVerifiedAt, avatar_key as avatarKey, password_hash as passwordHash, password_updated_at as passwordUpdatedAt, is_admin as isAdmin FROM users WHERE lower(trim(email)) = ?"
+				"SELECT id, username, name, email, email_verified_at as emailVerifiedAt, avatar_key as avatarKey, password_hash as passwordHash, password_updated_at as passwordUpdatedAt, is_admin as isAdmin, is_test_user as isTestUser FROM users WHERE lower(trim(email)) = ?"
 			)
 			.bind(normalized)
 			.first<{
@@ -112,6 +127,7 @@ export class UserRepositoryD1 implements UserRepository {
 				passwordHash: string;
 				passwordUpdatedAt: string | null;
 				isAdmin: number;
+				isTestUser: number;
 			}>();
 		return result
 			? {
@@ -124,6 +140,7 @@ export class UserRepositoryD1 implements UserRepository {
 					passwordHash: result.passwordHash,
 					passwordUpdatedAt: result.passwordUpdatedAt,
 					isAdmin: !!result.isAdmin,
+					isTestUser: !!result.isTestUser,
 				}
 			: null;
 	}
@@ -131,7 +148,7 @@ export class UserRepositoryD1 implements UserRepository {
 	async getById(id: string): Promise<UserRecord | null> {
 		const result = await this.db
 			.prepare(
-				"SELECT id, username, name, email, email_verified_at as emailVerifiedAt, avatar_key as avatarKey, is_admin as isAdmin FROM users WHERE id = ?"
+				"SELECT id, username, name, email, email_verified_at as emailVerifiedAt, avatar_key as avatarKey, is_admin as isAdmin, is_test_user as isTestUser FROM users WHERE id = ?"
 			)
 			.bind(id)
 			.first<{
@@ -142,6 +159,7 @@ export class UserRepositoryD1 implements UserRepository {
 				emailVerifiedAt: string | null;
 				avatarKey: string | null;
 				isAdmin: number;
+				isTestUser: number;
 			}>();
 		return result
 			? {
@@ -152,6 +170,7 @@ export class UserRepositoryD1 implements UserRepository {
 					emailVerifiedAt: result.emailVerifiedAt,
 					avatarKey: result.avatarKey,
 					isAdmin: !!result.isAdmin,
+					isTestUser: !!result.isTestUser,
 				}
 			: null;
 	}
@@ -203,6 +222,45 @@ export class UserRepositoryD1 implements UserRepository {
 
 	async delete(id: string): Promise<void> {
 		await this.db.prepare("DELETE FROM users WHERE id = ?").bind(id).run();
+	}
+
+	async listTestUsersByEnvironment(environmentId: string): Promise<UserRecord[]> {
+		const result = await this.db
+			.prepare(
+				[
+					"SELECT u.id, u.username, u.name, u.email,",
+					"u.email_verified_at as emailVerifiedAt, u.avatar_key as avatarKey,",
+					"u.is_admin as isAdmin, u.is_test_user as isTestUser",
+					"FROM users u",
+					"JOIN users_environments ue ON ue.user_id = u.id",
+					// is_admin = 0 is redundant against the CHECK on the table, and deliberately
+					// kept: this list is rendered as one-click sign-in buttons, so it must not be
+					// able to offer an admin even on a database that predates the constraint.
+					"WHERE u.is_test_user = 1 AND u.is_admin = 0 AND ue.environment_id = ?",
+					"ORDER BY COALESCE(NULLIF(TRIM(u.name), ''), u.username)",
+				].join(" ")
+			)
+			.bind(environmentId)
+			.all<{
+				id: string;
+				username: string;
+				name: string | null;
+				email: string | null;
+				emailVerifiedAt: string | null;
+				avatarKey: string | null;
+				isAdmin: number;
+				isTestUser: number;
+			}>();
+		return (result.results ?? []).map((row) => ({
+			id: row.id,
+			username: row.username,
+			name: row.name,
+			email: row.email,
+			emailVerifiedAt: row.emailVerifiedAt,
+			avatarKey: row.avatarKey,
+			isAdmin: !!row.isAdmin,
+			isTestUser: !!row.isTestUser,
+		}));
 	}
 
 	async getUserEnvironments(userId: string): Promise<string[]> {

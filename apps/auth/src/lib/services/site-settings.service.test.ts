@@ -423,6 +423,7 @@ describe("SiteSettingsService", () => {
 				name: null,
 				tokenEndpointAuthMethod: "client_secret_basic",
 				isDynamic: false,
+				isTest: false,
 			});
 			const service = createService(createSiteRepoMock(), adminRepo, clientRepo);
 
@@ -442,6 +443,7 @@ describe("SiteSettingsService", () => {
 				name: null,
 				tokenEndpointAuthMethod: "client_secret_basic",
 				isDynamic: false,
+				isTest: false,
 			});
 			const insert = vi.fn();
 			const service = createService(createSiteRepoMock(), createAdminClientsRepoMock(), clientRepo, {

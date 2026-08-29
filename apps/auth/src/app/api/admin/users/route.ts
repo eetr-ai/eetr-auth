@@ -37,6 +37,8 @@ export const POST = withAdminApiClientContext(async (req, _ctx, getServices, aut
 		password?: unknown;
 		isAdmin?: unknown;
 		is_admin?: unknown;
+		isTestUser?: unknown;
+		is_test_user?: unknown;
 		name?: unknown;
 		email?: unknown;
 	};
@@ -59,6 +61,19 @@ export const POST = withAdminApiClientContext(async (req, _ctx, getServices, aut
 				error: "invalid_request",
 				error_description:
 					"Admin API create only supports regular users; do not send isAdmin/is_admin.",
+			},
+			{ status: 400 }
+		);
+	}
+	// Test users are an interactive-admin concept: they are passwordless, so a machine
+	// caller minting one would be creating an account anybody on that environment's test
+	// client can sign in as. Create them from the dashboard, deliberately.
+	if (body.isTestUser !== undefined || body.is_test_user !== undefined) {
+		return NextResponse.json(
+			{
+				error: "invalid_request",
+				error_description:
+					"Admin API create does not support test users; create them from the dashboard.",
 			},
 			{ status: 400 }
 		);

@@ -136,6 +136,24 @@ export class OauthAuthorizationService {
 			);
 		}
 
+		// A test user (users.is_test_user) signs in with one click and no password, so it is
+		// only ever as trustworthy as "whoever can load this page". Confining it to test
+		// clients is what keeps that blast radius bounded -- and it has to be enforced HERE,
+		// not only at sign-in: the session a test user holds is an ordinary one, so nothing
+		// stops that browser from calling /api/authorize for a real client afterwards.
+		//
+		// Deliberately the same generic message as the environment check above: which of the
+		// two gates refused is the client's business to know, and telling it "this is a test
+		// account" leaks the account's nature to every relying party.
+		const subjectUser = await this.userRepo.getById(params.subject);
+		if (subjectUser?.isTestUser && !client.isTest) {
+			throw new OAuthServiceError(
+				"access_denied",
+				"You do not have access to this application.",
+				403
+			);
+		}
+
 		// Match loopback-tolerantly and carry the *registered* URI forward from here on: it is
 		// the spelling the client told us about, so it is what the code binds to and where the
 		// browser is sent. The token exchange receives redirect_uri in an unmangled request

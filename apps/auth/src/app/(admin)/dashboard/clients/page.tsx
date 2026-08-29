@@ -228,6 +228,7 @@ export default function ClientsPage() {
 				const result = await createClient({
 					environmentId: draft.environmentId,
 					name: draft.name.trim() || undefined,
+					isTest: draft.isTest,
 					redirectUris: uris,
 					scopeIds: draft.scopeIds.length > 0 ? draft.scopeIds : undefined,
 					expiresAt: draft.expiresAt.trim() || undefined,
@@ -294,9 +295,14 @@ export default function ClientsPage() {
 		return <FullPageSpinner />;
 	}
 
-	const visibleClients = clients.filter((client) =>
-		typeFilter === "dynamic" ? client.isDynamic : typeFilter === "manual" ? !client.isDynamic : true,
-	);
+	const visibleClients = clients.filter((client) => {
+		if (typeFilter === "dynamic") return client.isDynamic;
+		// "Manual" means "an admin created it", which a test client also is -- the two
+		// facets are independent, so a test client stays visible under Manual.
+		if (typeFilter === "manual") return !client.isDynamic;
+		if (typeFilter === "test") return client.isTest;
+		return true;
+	});
 
 	const newClientButton = (
 		<Button type="button" icon={Plus} onClick={openCreate}>
@@ -341,6 +347,7 @@ export default function ClientsPage() {
 						<option value="">All</option>
 						<option value="dynamic">Dynamic (DCR)</option>
 						<option value="manual">Manual</option>
+						<option value="test">Test</option>
 					</Select>
 				</div>
 			</div>

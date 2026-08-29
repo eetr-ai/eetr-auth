@@ -17,6 +17,7 @@ export interface ClientDetails {
 	scopeIds: string[];
 	tokenEndpointAuthMethod: string;
 	isDynamic: boolean;
+	isTest: boolean;
 	claims: ClaimDraft[];
 }
 
@@ -25,6 +26,12 @@ export interface ClientDraft {
 	name: string;
 	/** Immutable after creation, so the edit panel shows it read-only. */
 	environmentId: string;
+	/**
+	 * Test client: its sign-in page lists only test users. Immutable after creation for
+	 * the same reason as `environmentId` -- flipping it would change who can authenticate
+	 * against a client that already has live tokens.
+	 */
+	isTest: boolean;
 	/** Kept as a list with blanks allowed so rows can be added before being typed. */
 	redirectUris: string[];
 	scopeIds: string[];
@@ -37,6 +44,7 @@ export interface ClientDraft {
 export const emptyDraft: ClientDraft = {
 	name: "",
 	environmentId: "",
+	isTest: false,
 	redirectUris: [""],
 	scopeIds: [],
 	claims: [],
@@ -47,6 +55,7 @@ export function draftFromClient(client: ClientDetails): ClientDraft {
 	return {
 		name: client.name ?? "",
 		environmentId: client.environmentId,
+		isTest: client.isTest,
 		// A trailing blank row would otherwise read as an unsaved edit.
 		redirectUris: client.redirectUris.length > 0 ? [...client.redirectUris] : [""],
 		scopeIds: [...client.scopeIds],
@@ -76,6 +85,7 @@ function clientSignature(draft: ClientDraft): string {
 	return JSON.stringify([
 		draft.name.trim(),
 		draft.environmentId,
+		draft.isTest,
 		cleanRedirectUris(draft.redirectUris),
 		[...draft.scopeIds].sort(),
 		// Sorted by name: claim order is not persisted, so a reorder is not a real edit.
