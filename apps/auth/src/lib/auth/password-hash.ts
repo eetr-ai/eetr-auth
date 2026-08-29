@@ -69,7 +69,14 @@ export async function hashPassword(plain: string, options?: HashPasswordOptions)
 	return md5(plain);
 }
 
-async function verifyArgon2ViaHasherService(
+/**
+ * Verify a plaintext against an Argon2id PHC string via the hashing worker.
+ *
+ * Exported for credentials this system always generates itself (API keys), which have no
+ * legacy MD5 rows and so must NOT go through {@link verifyPassword} -- its MD5 match and
+ * silent upgrade path only make sense for user passwords imported from an older store.
+ */
+export async function verifyArgon2ViaService(
 	plain: string,
 	storedHash: string,
 	argonHasher: Fetcher
@@ -158,7 +165,7 @@ export async function verifyPassword(
 
 	if (isArgon2StoredHash(storedHash)) {
 		logPasswordVerify({ step: "route", path: "argon2_service" });
-		const ok = await verifyArgon2ViaHasherService(plain, storedHash, hasher);
+		const ok = await verifyArgon2ViaService(plain, storedHash, hasher);
 		if (ok) {
 			logPasswordVerify({ step: "done", outcome: "argon2_match" });
 			return { ok: true };

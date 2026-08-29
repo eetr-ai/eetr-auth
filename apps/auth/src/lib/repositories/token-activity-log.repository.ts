@@ -1,4 +1,4 @@
-export type TokenActivityRequestType = "authorize" | "token" | "validate" | "cleanup" | "admin_api";
+export type TokenActivityRequestType = "authorize" | "token" | "validate" | "cleanup" | "admin_api" | "api_key";
 
 export interface TokenActivityLogRow {
 	id: string;

@@ -24,6 +24,11 @@ export const AUDIT_ACTION = {
 	clientSecretRotate: "client.secret_rotate",
 	clientDelete: "client.delete",
 
+	// Long-lived API keys (per client+user machine credentials)
+	apiKeyCreate: "api_key.create",
+	/** Revocation is a soft delete: the row survives so this entry still resolves. */
+	apiKeyRevoke: "api_key.revoke",
+
 	// Setup: environments
 	environmentCreate: "environment.create",
 	environmentUpdate: "environment.update",
@@ -57,6 +62,7 @@ export const AUDIT_RESOURCE = {
 	environment: "environment",
 	scope: "scope",
 	consent: "consent",
+	apiKey: "api_key",
 	passwordPolicy: "password_policy",
 	siteSettings: "site_settings",
 } as const;
