@@ -14,6 +14,14 @@ Files in `src/app/actions/` (`*-actions.ts`) start with `"use server"`. Each exp
 callback. No business logic, and no direct `getCloudflareContext()`, `env`, or DB access. For the
 current session, call Auth.js `auth()` directly — there is no service for session.
 
+The same exemption covers `signIn()` and `signOut()`. They are the session issuer itself, not
+business logic: they read and write the request's cookies, and `signIn` completes by *throwing* a
+redirect that has to propagate out of the action untouched. Wrapping either in `onServerAction`
+would build a `RequestContext` and a service registry that neither uses, and put a callback between
+the throw and Next.js. `sign-in-actions.ts` is the reference — every action in it is a thin
+`try/catch` around one Auth.js call, and all gating lives in the provider's `authorize()`, which is
+directly reachable and must re-check everything anyway.
+
 ```ts
 "use server";
 import { onServerAction } from "@/lib/context/on-server-action";

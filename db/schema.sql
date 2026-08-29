@@ -114,6 +114,30 @@ CREATE INDEX IF NOT EXISTS idx_clients_environment_id ON clients(environment_id)
 CREATE INDEX IF NOT EXISTS idx_clients_created_by ON clients(created_by);
 CREATE INDEX IF NOT EXISTS idx_clients_client_id ON clients(client_id);
 
+-- The CHECK constraints above reject invalid *combinations*, but they cannot express
+-- immutability: nothing in them stops `UPDATE users SET is_test_user = 1` on an ordinary
+-- non-admin account, which would leave a real password hash on a row that is now eligible
+-- for one-click sign-in. The application never writes either column after creation
+-- (neither appears in an update input, and both admin API endpoints reject them), so these
+-- triggers exist for the paths the application does not own: a migration, a support
+-- script, or a hand-written UPDATE at the D1 console.
+--
+-- Guarded on OLD <> NEW so an idempotent write of the same value is still allowed; only a
+-- real change aborts.
+CREATE TRIGGER IF NOT EXISTS users_is_test_user_immutable
+BEFORE UPDATE OF is_test_user ON users
+FOR EACH ROW WHEN OLD.is_test_user <> NEW.is_test_user
+BEGIN
+  SELECT RAISE(ABORT, 'users.is_test_user is immutable; delete and recreate the user');
+END;
+
+CREATE TRIGGER IF NOT EXISTS clients_is_test_immutable
+BEFORE UPDATE OF is_test ON clients
+FOR EACH ROW WHEN OLD.is_test <> NEW.is_test
+BEGIN
+  SELECT RAISE(ABORT, 'clients.is_test is immutable; delete and recreate the client');
+END;
+
 -- Redirect URIs allowed per client
 CREATE TABLE IF NOT EXISTS redirect_uris (
   id TEXT PRIMARY KEY,

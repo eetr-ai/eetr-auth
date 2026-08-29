@@ -247,6 +247,40 @@ describe("UserService", () => {
 			expect(vi.mocked(mockRepo.create).mock.calls[0][8]).toBe(false);
 		});
 
+		// The dashboard disables the password field for a test user, but the admin bearer API
+		// accepts `password` for any user. Storing a hash would leave a real credential on an
+		// account that is also signable with one click -- the exact state immutability exists
+		// to prevent -- so the service refuses rather than silently dropping it.
+		it("refuses to set a password on a test user", async () => {
+			mockRepo.getById = vi.fn().mockResolvedValue(makeUserRecord({ isTestUser: true }));
+			const service = createService(mockRepo);
+
+			await expect(
+				service.updateUser("user-1", { password: "hunter2" }, "actor-1")
+			).rejects.toThrow("A test user cannot be given a password.");
+			expect(mockRepo.update).not.toHaveBeenCalled();
+		});
+
+		it("still allows setting a password on a normal user", async () => {
+			mockRepo.getById = vi.fn().mockResolvedValue(makeUserRecord({ isTestUser: false }));
+			const service = createService(mockRepo);
+
+			await service.updateUser("user-1", { password: "hunter2" }, "actor-1");
+
+			const patch = vi.mocked(mockRepo.update).mock.calls[0][1];
+			expect(patch.passwordHash).toBe("hashed-password");
+		});
+
+		it("refuses to promote a test user to admin", async () => {
+			mockRepo.getById = vi.fn().mockResolvedValue(makeUserRecord({ isTestUser: true }));
+			const service = createService(mockRepo);
+
+			await expect(
+				service.updateUser("user-1", { isAdmin: true }, "actor-1")
+			).rejects.toThrow("A test user cannot be an admin.");
+			expect(mockRepo.update).not.toHaveBeenCalled();
+		});
+
 		// The flag is immutable by construction -- it has no entry in UserUpdateInput -- so
 		// this guards the type, not a runtime branch: if someone adds one, this stops compiling.
 		it("does not expose isTestUser on the update path", async () => {

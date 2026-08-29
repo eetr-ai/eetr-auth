@@ -59,15 +59,25 @@ VER=$(openssl rand -base64 48 | tr '+/' '-_' | tr -d '=')
 CHAL=$(printf %s "$VER" | openssl dgst -binary -sha256 | base64 | tr '+/' '-_' | tr -d '=')
 
 # 1. Start the authorization request. Sets the signed `oauth_pending` cookie.
-curl -s -c "$JAR" -o /dev/null \
-  "$BASE/api/authorize?response_type=code&client_id=$CID&redirect_uri=$RURI&scope=openid&state=ci-1&code_challenge=$CHAL&code_challenge_method=S256"
+#    --get + --data-urlencode so a redirect URI containing & or : is encoded rather
+#    than splitting into extra query parameters.
+curl -s -c "$JAR" -o /dev/null --get "$BASE/api/authorize" \
+  --data-urlencode "response_type=code" \
+  --data-urlencode "client_id=$CID" \
+  --data-urlencode "redirect_uri=$RURI" \
+  --data-urlencode "scope=openid" \
+  --data-urlencode "state=ci-1" \
+  --data-urlencode "code_challenge=$CHAL" \
+  --data-urlencode "code_challenge_method=S256"
 
 # 2. Auth.js requires a CSRF token on the sign-in POST.
 CSRF=$(curl -s -b "$JAR" -c "$JAR" "$BASE/api/auth/csrf" | jq -r .csrfToken)
 
 # 3. Sign in as the test user. No password.
 curl -s -b "$JAR" -c "$JAR" -o /dev/null -X POST "$BASE/api/auth/callback/test-user" \
-  -d "csrfToken=$CSRF" -d "userId=$USER_ID" -d "callbackUrl=$BASE/oauth/confirm"
+  --data-urlencode "csrfToken=$CSRF" \
+  --data-urlencode "userId=$USER_ID" \
+  --data-urlencode "callbackUrl=$BASE/oauth/confirm"
 
 # 4. Complete. Test clients skip the consent screen, so this returns the code directly.
 CODE=$(curl -s -b "$JAR" -c "$JAR" -o /dev/null -w '%{redirect_url}' \
@@ -75,8 +85,10 @@ CODE=$(curl -s -b "$JAR" -c "$JAR" -o /dev/null -w '%{redirect_url}' \
 
 # 5. Exchange it.
 curl -s -u "$CID:$SEC" -X POST "$BASE/api/token" \
-  -d grant_type=authorization_code -d "code=$CODE" \
-  -d "redirect_uri=$RURI" -d "code_verifier=$VER"
+  --data-urlencode "grant_type=authorization_code" \
+  --data-urlencode "code=$CODE" \
+  --data-urlencode "redirect_uri=$RURI" \
+  --data-urlencode "code_verifier=$VER"
 ```
 
 You get back an ordinary token response — `access_token`, `id_token`, `refresh_token`, `scope` —

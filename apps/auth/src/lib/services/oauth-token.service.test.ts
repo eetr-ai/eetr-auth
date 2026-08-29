@@ -538,6 +538,7 @@ describe("OauthTokenService", () => {
 			userRepo.getUserEnvironments.mockResolvedValue(["env-other"]);
 			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient());
 			refreshTokenRepo.getByTokenId.mockResolvedValue(makeRefreshToken());
+			refreshTokenRepo.listFamilyAccessTokenIds.mockResolvedValue(["access-row-9"]);
 			const service = createService({ clientRepo, tokenRepo, refreshTokenRepo, userRepo });
 
 			await expect(
@@ -552,8 +553,17 @@ describe("OauthTokenService", () => {
 				message: "User no longer has access to this environment.",
 				status: 400,
 			});
-			// The now-unauthorized token is revoked and no new pair is issued.
-			expect(refreshTokenRepo.revoke).toHaveBeenCalledWith("refresh-row-1", "2026-04-06T13:10:00.000Z");
+			// The whole family goes, along with the access tokens it minted: an access token
+			// already issued stays valid for up to an hour, so revoking only the presented
+			// refresh token would leave the revoked user calling resource servers meanwhile.
+			expect(refreshTokenRepo.revokeFamily).toHaveBeenCalledWith(
+				"refresh-row-1",
+				"2026-04-06T13:10:00.000Z"
+			);
+			expect(tokenRepo.expireAccessTokensByIds).toHaveBeenCalledWith(
+				["access-row-9"],
+				"2026-04-06T13:10:00.000Z"
+			);
 			expect(refreshTokenRepo.createRefreshToken).not.toHaveBeenCalled();
 			expect(tokenRepo.createAccessToken).not.toHaveBeenCalled();
 		});
@@ -569,6 +579,7 @@ describe("OauthTokenService", () => {
 			const userRepo = createUserRepoMock(makeUser({ isTestUser: true }));
 			clientRepo.getByClientIdentifier.mockResolvedValue(makeClient({ isTest: false }));
 			refreshTokenRepo.getByTokenId.mockResolvedValue(makeRefreshToken());
+			refreshTokenRepo.listFamilyAccessTokenIds.mockResolvedValue(["access-row-9"]);
 			const service = createService({ clientRepo, tokenRepo, refreshTokenRepo, userRepo });
 
 			await expect(
@@ -584,9 +595,14 @@ describe("OauthTokenService", () => {
 				status: 400,
 			});
 			// Revoked, not merely refused: a 30-day token that keeps being presented would
-			// otherwise outlive the constraint it just failed.
-			expect(refreshTokenRepo.revoke).toHaveBeenCalledWith(
+			// otherwise outlive the constraint it just failed. The family and its access
+			// tokens go too, so nothing already issued stays usable.
+			expect(refreshTokenRepo.revokeFamily).toHaveBeenCalledWith(
 				"refresh-row-1",
+				"2026-04-06T13:10:00.000Z"
+			);
+			expect(tokenRepo.expireAccessTokensByIds).toHaveBeenCalledWith(
+				["access-row-9"],
 				"2026-04-06T13:10:00.000Z"
 			);
 			expect(refreshTokenRepo.createRefreshToken).not.toHaveBeenCalled();

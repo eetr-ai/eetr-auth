@@ -738,9 +738,12 @@ export class OauthTokenService {
 		if (token.subject) {
 			const userEnvironmentIds = await this.userRepo.getUserEnvironments(token.subject);
 			if (!userEnvironmentIds.includes(client.environmentId)) {
-				// The grant is no longer authorized. Revoke the presented token so this
-				// session stops rotating; the user must re-authorize (which re-checks access).
-				await this.refreshTokenRepo.revoke(token.id, nowIso);
+				// The grant is no longer authorized. Kill the whole rotation family AND the
+				// access tokens it minted, not just the presented refresh token: an access
+				// token already in the caller's hands stays valid for up to an hour, so
+				// revoking only the refresh token would leave the revoked principal calling
+				// resource servers until it expired on its own.
+				await this.revokeFamilyAndAccessTokens(token.id, nowIso);
 				throw new OAuthServiceError(
 					"invalid_grant",
 					"User no longer has access to this environment.",
@@ -753,7 +756,7 @@ export class OauthTokenService {
 			// would otherwise outlive the constraint. Same treatment, same generic message.
 			const subjectUser = await this.userRepo.getById(token.subject);
 			if (subjectUser?.isTestUser && !client.isTest) {
-				await this.refreshTokenRepo.revoke(token.id, nowIso);
+				await this.revokeFamilyAndAccessTokens(token.id, nowIso);
 				throw new OAuthServiceError(
 					"invalid_grant",
 					"User no longer has access to this environment.",

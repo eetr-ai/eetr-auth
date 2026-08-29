@@ -275,6 +275,15 @@ export class UserService {
 			patch.emailVerifiedAt = updates.emailVerifiedAt;
 		}
 		if (updates.password !== undefined && updates.password.trim()) {
+			// A test user is passwordless by construction. Nothing in the dashboard offers this
+			// (the field is disabled) but the admin bearer API accepts `password` for any user,
+			// and storing a hash here would leave a real credential on an account that is also
+			// signable with one click -- precisely the state is_test_user's immutability exists
+			// to prevent. Refuse rather than silently drop it, so the caller learns the write
+			// did not happen.
+			if (current.isTestUser) {
+				throw new Error("A test user cannot be given a password.");
+			}
 			patch.passwordHash = await hashPassword(updates.password, {
 				argonHasher: this.argonHasher,
 				hashMethod: this.hashMethod,
@@ -288,6 +297,11 @@ export class UserService {
 			patch.avatarKey = updates.avatarKey;
 		}
 		if (updates.isAdmin !== undefined) {
+			// The DB CHECK also rejects this, but as a raw constraint failure surfaced in the
+			// admin banner. A passwordless dashboard admin is the outcome worth naming.
+			if (current.isTestUser && updates.isAdmin === true) {
+				throw new Error("A test user cannot be an admin.");
+			}
 			if (id === actorUserId && updates.isAdmin === false) {
 				throw new Error("You cannot remove your own admin access");
 			}
