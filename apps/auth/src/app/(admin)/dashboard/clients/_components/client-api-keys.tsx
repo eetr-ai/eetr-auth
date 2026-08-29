@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Copy, KeyRound, Plus, TriangleAlert } from "lucide-react";
+import { Check, Copy, KeyRound, Plus, Trash2, TriangleAlert } from "lucide-react";
 import {
 	Banner,
 	Button,
 	EmptyState,
 	FormField,
+	IconButton,
 	InlineDeleteConfirm,
 	Input,
 	Select,
@@ -50,8 +51,8 @@ function statusOf(apiKey: ApiKey, nowIso: string): KeyStatus {
 	return { label: "Active", className: "text-foreground" };
 }
 
-function formatDate(value: string | null): string {
-	if (!value) return "—";
+/** Callers spell out the empty case ("never"), so this only formats real timestamps. */
+function formatDate(value: string): string {
 	const parsed = new Date(value);
 	return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString();
 }
@@ -199,8 +200,7 @@ export function ClientApiKeys({ clientId, scopes, grantedScopeIds }: ClientApiKe
 					) : null}
 				</h3>
 				{!creating && !revealed ? (
-					<Button type="button" variant="secondary" onClick={() => setCreating(true)}>
-						<Plus className="h-4 w-4" />
+					<Button type="button" variant="secondary" icon={Plus} onClick={() => setCreating(true)}>
 						New key
 					</Button>
 				) : null}
@@ -229,8 +229,12 @@ export function ClientApiKeys({ clientId, scopes, grantedScopeIds }: ClientApiKe
 						<code className="flex-1 break-all rounded bg-surface-sunken px-2 py-1 font-mono text-xs">
 							{revealed.apiKey}
 						</code>
-						<Button type="button" variant="secondary" onClick={() => copy(revealed.apiKey)}>
-							{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+						<Button
+							type="button"
+							variant="secondary"
+							icon={copied ? Check : Copy}
+							onClick={() => copy(revealed.apiKey)}
+						>
 							{copied ? "Copied" : "Copy"}
 						</Button>
 					</div>
@@ -312,8 +316,7 @@ export function ClientApiKeys({ clientId, scopes, grantedScopeIds }: ClientApiKe
 					)}
 
 					<div className="flex gap-2">
-						<Button type="button" onClick={handleCreate} disabled={!userId || busy}>
-							{busy ? <Spinner /> : null}
+						<Button type="button" onClick={handleCreate} loading={busy} disabled={!userId}>
 							Create key
 						</Button>
 						<Button
@@ -344,31 +347,41 @@ export function ClientApiKeys({ clientId, scopes, grantedScopeIds }: ClientApiKe
 				/>
 			) : (
 				<Table minWidth="min-w-0">
+					{/* THead supplies the header <tr> itself — adding one here nests <tr> and
+					    the browser reparses it, mangling every column. */}
+					{/* THead supplies the header <tr> itself. Seven columns wrapped their own
+					    headers in a side panel, so the key id rides under the name and the two
+					    timestamps share a Lifetime cell -- the same reduction TokensTable makes. */}
 					<THead>
-						<tr>
-							<Th>Name</Th>
-							<Th>User</Th>
-							<Th>Key id</Th>
-							<Th>Expires</Th>
-							<Th>Last used</Th>
-							<Th>Status</Th>
-							<Th> </Th>
-						</tr>
+						<Th>Key</Th>
+						<Th>User</Th>
+						<Th>Lifetime</Th>
+						<Th>Status</Th>
+						<Th className="text-right">Actions</Th>
 					</THead>
 					<TBody>
 						{apiKeys.map((apiKey) => {
 							const status = statusOf(apiKey, nowIso);
 							return (
 								<tr key={apiKey.id}>
-									<Td>{apiKey.name ?? "—"}</Td>
-									<Td>{apiKey.userDisplay}</Td>
 									<Td>
-										<code className="font-mono text-xs">{apiKey.keyId}</code>
+										<div>{apiKey.name ?? "Unnamed key"}</div>
+										<code className="font-mono text-xs text-muted-foreground">
+											{apiKey.keyId}
+										</code>
 									</Td>
-									<Td>{formatDate(apiKey.expiresAt)}</Td>
-									<Td>{formatDate(apiKey.lastUsedAt)}</Td>
+									<Td>{apiKey.userDisplay}</Td>
+									<Td className="text-xs text-muted-foreground">
+										<div>
+											Expires {apiKey.expiresAt ? formatDate(apiKey.expiresAt) : "never"}
+										</div>
+										<div>
+											Last used{" "}
+											{apiKey.lastUsedAt ? formatDate(apiKey.lastUsedAt) : "never"}
+										</div>
+									</Td>
 									<Td className={status.className}>{status.label}</Td>
-									<Td>
+									<Td className="text-right">
 										{apiKey.revokedAt ? null : confirmingRevokeId === apiKey.id ? (
 											<InlineDeleteConfirm
 												label="Revoke this key?"
@@ -378,13 +391,16 @@ export function ClientApiKeys({ clientId, scopes, grantedScopeIds }: ClientApiKe
 												onCancel={() => setConfirmingRevokeId(null)}
 											/>
 										) : (
-											<Button
+											<IconButton
 												type="button"
-												variant="secondary"
+												variant="danger"
+												aria-label={`Revoke API key ${apiKey.name ?? apiKey.keyId}`}
+												title="Revoke key"
+												disabled={revokingId !== null}
 												onClick={() => setConfirmingRevokeId(apiKey.id)}
 											>
-												Revoke
-											</Button>
+												<Trash2 className="h-4 w-4" />
+											</IconButton>
 										)}
 									</Td>
 								</tr>
