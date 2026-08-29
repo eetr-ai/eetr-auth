@@ -39,6 +39,10 @@ export interface CreateClientParams {
 	tokenEndpointAuthMethod?: string;
 	// Mark this client as dynamically registered (RFC 7591).
 	isDynamic?: boolean;
+	// Mark this client as a test client: its sign-in page lists only test users, and it is
+	// the only kind of client a test user may authenticate against. Immutable afterwards --
+	// there is deliberately no updateIsTest.
+	isTest?: boolean;
 }
 
 export interface CreateClientResult {
@@ -120,6 +124,14 @@ export class ClientService {
 	}
 
 	async create(params: CreateClientParams): Promise<CreateClientResult> {
+		// A DCR (RFC 7591) client is registered by an unauthenticated caller, so it must never
+		// be a test client -- that would let anyone mint a client whose sign-in page hands out
+		// sessions with one click. The DB CHECK backstops this; the throw is here because
+		// CreateClientParams is a wide object literal and DcrService spreads a caller-derived
+		// object into it, so a future refactor could otherwise smuggle the flag through.
+		if (params.isTest && params.isDynamic) {
+			throw new Error("A dynamically registered client cannot be a test client.");
+		}
 		const tokenEndpointAuthMethod = params.tokenEndpointAuthMethod ?? "client_secret_basic";
 		const isPublic = tokenEndpointAuthMethod === "none";
 		const id = crypto.randomUUID();
@@ -146,6 +158,7 @@ export class ClientService {
 			name: params.name ?? null,
 			token_endpoint_auth_method: tokenEndpointAuthMethod,
 			is_dynamic: params.isDynamic ? 1 : 0,
+			is_test: params.isTest ? 1 : 0,
 		});
 		const uris = (params.redirectUris ?? []).filter((u) => u?.trim());
 		const scopeIds = (params.scopeIds ?? []).filter(Boolean);
@@ -166,6 +179,7 @@ export class ClientService {
 				scopeIds,
 				tokenEndpointAuthMethod,
 				isDynamic: params.isDynamic ?? false,
+				isTest: params.isTest ?? false,
 			},
 		});
 		return {

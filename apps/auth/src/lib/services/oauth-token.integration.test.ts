@@ -106,6 +106,7 @@ class InMemoryClientRepo implements ClientRepository {
 			name: row.name,
 			tokenEndpointAuthMethod: row.token_endpoint_auth_method,
 			isDynamic: row.is_dynamic === 1,
+			isTest: row.is_test === 1,
 		});
 	}
 
@@ -468,6 +469,7 @@ function buildHarness(options?: {
 		name: "Integration Client",
 		tokenEndpointAuthMethod: authMethod,
 		isDynamic: isPublic,
+		isTest: false,
 	} satisfies Client;
 
 	const envRepo = new InMemoryEnvironmentRepo(new Map([["env-1", { id: "env-1", name: "production", displayName: null }]]));

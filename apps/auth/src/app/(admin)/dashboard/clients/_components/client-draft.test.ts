@@ -84,6 +84,7 @@ describe("draftFromClient", () => {
 			scopeIds: [],
 			tokenEndpointAuthMethod: "client_secret_basic",
 			isDynamic: false,
+			isTest: false,
 			claims: [],
 		};
 		const draft = draftFromClient(client);
@@ -91,6 +92,37 @@ describe("draftFromClient", () => {
 		expect(draft.name).toBe("");
 		// …and that blank row must not read as an unsaved edit.
 		expect(isClientDraftDirty(draft, draft)).toBe(false);
+	});
+
+	it("carries isTest through, so the edit panel reflects what was created", () => {
+		const client: ClientDetails = {
+			id: "c1",
+			clientId: "cid",
+			environmentId: "env-a",
+			name: null,
+			expiresAt: null,
+			redirectUris: [],
+			scopeIds: [],
+			tokenEndpointAuthMethod: "client_secret_basic",
+			isDynamic: false,
+			isTest: true,
+			claims: [],
+		};
+		expect(draftFromClient(client).isTest).toBe(true);
+	});
+});
+
+describe("isClientDraftDirty and isTest", () => {
+	// The create panel's checkbox is the only place isTest is ever set, so if the dirty
+	// guard ignored it, ticking the box on a new client would read as "no changes".
+	it("treats toggling isTest as a real change", () => {
+		expect(isClientDraftDirty({ ...emptyDraft, isTest: true }, emptyDraft)).toBe(true);
+	});
+
+	it("treats an unchanged isTest as clean", () => {
+		expect(
+			isClientDraftDirty({ ...emptyDraft, isTest: true }, { ...emptyDraft, isTest: true })
+		).toBe(false);
 	});
 });
 

@@ -103,6 +103,26 @@ export function ClientForm({
 				)}
 			</label>
 
+			{/*
+			  * Fixed at creation like the environment above: flipping it would change who can
+			  * authenticate against a client that already has live tokens. On edit the checkbox
+			  * is shown disabled rather than hidden, so the client's nature stays visible.
+			  */}
+			<label className="flex items-center gap-2 text-sm">
+				<input
+					type="checkbox"
+					checked={draft.isTest}
+					disabled={editingId !== null || readOnly}
+					onChange={(e) => onChange({ isTest: e.target.checked })}
+					className="rounded-chip border-border disabled:opacity-50"
+				/>
+				Test client
+			</label>
+			<p className="-mt-2 text-xs text-muted-foreground">
+				A test client&apos;s sign-in page lists only test users, who sign in with one click and
+				no password. Only test users can authenticate against it.
+			</p>
+
 			<div>
 				<span className="mb-1 block text-sm text-muted-foreground">Redirect URIs</span>
 				<div className="space-y-2">

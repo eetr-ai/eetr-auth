@@ -24,6 +24,8 @@ export async function createClient(params: {
 	scopeIds?: string[];
 	expiresAt?: string | null;
 	name?: string | null;
+	/** Immutable after creation; there is deliberately no update counterpart. */
+	isTest?: boolean;
 }) {
 	return onAdminServerAction(async (_ctx, getServices) => {
 		const session = await auth();

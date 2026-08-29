@@ -56,6 +56,7 @@ function makeClient(overrides?: Partial<Client>): Client {
 		name: "Primary Client",
 		tokenEndpointAuthMethod: "client_secret_basic",
 		isDynamic: false,
+		isTest: false,
 		...overrides,
 	};
 }
@@ -363,6 +364,45 @@ describe("ClientService", () => {
 		});
 	});
 
+	describe("test clients", () => {
+		it("creates a test client with is_test = 1", async () => {
+			const repo = createClientRepoMock();
+			const service = createService(repo);
+
+			await service.create({ environmentId: "env-1", createdBy: "user-1", isTest: true });
+
+			expect(repo.create).toHaveBeenCalledTimes(1);
+			expect(repo.create.mock.calls[0][0]).toMatchObject({ is_test: 1, is_dynamic: 0 });
+		});
+
+		it("defaults is_test to 0 when the flag is absent", async () => {
+			const repo = createClientRepoMock();
+			const service = createService(repo);
+
+			await service.create({ environmentId: "env-1", createdBy: "user-1" });
+
+			expect(repo.create.mock.calls[0][0]).toMatchObject({ is_test: 0 });
+		});
+
+		// A DCR client is registered by an unauthenticated caller. If one could be a test
+		// client, anyone could mint a client whose sign-in page hands out sessions with a
+		// single click. The DB CHECK backstops this; the throw keeps it out of the DB at all.
+		it("refuses to create a client that is both dynamic and test", async () => {
+			const repo = createClientRepoMock();
+			const service = createService(repo);
+
+			await expect(
+				service.create({
+					environmentId: "env-1",
+					createdBy: null,
+					isDynamic: true,
+					isTest: true,
+				})
+			).rejects.toThrow("A dynamically registered client cannot be a test client.");
+			expect(repo.create).not.toHaveBeenCalled();
+		});
+	});
+
 	describe("audit logging", () => {
 		it("records client.create attributed to the creating admin without leaking the secret", async () => {
 			const repo = createClientRepoMock();
@@ -397,6 +437,7 @@ describe("ClientService", () => {
 				scopeIds: ["scope-read"],
 				tokenEndpointAuthMethod: "client_secret_basic",
 				isDynamic: false,
+				isTest: false,
 			});
 		});
 

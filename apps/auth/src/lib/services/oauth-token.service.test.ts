@@ -148,6 +148,7 @@ function makeClient(overrides?: Partial<Client>): Client {
 		name: "Test Client",
 		tokenEndpointAuthMethod: "client_secret_basic",
 		isDynamic: false,
+		isTest: false,
 		...overrides,
 	};
 }

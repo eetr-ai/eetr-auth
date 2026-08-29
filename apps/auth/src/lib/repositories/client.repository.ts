@@ -13,6 +13,11 @@ export interface Client {
 	tokenEndpointAuthMethod: string;
 	// True for clients created via Dynamic Client Registration (RFC 7591).
 	isDynamic: boolean;
+	// Test client: a normal OAuth client in every protocol respect, except that its
+	// sign-in page lists only test users (users.is_test_user) instead of the password
+	// form, and it is the only kind of client a test user may authenticate against.
+	// Set at creation and immutable, like environmentId -- hence no setter below.
+	isTest: boolean;
 }
 
 export interface ClientRow {
@@ -25,6 +30,7 @@ export interface ClientRow {
 	name: string | null;
 	token_endpoint_auth_method: string;
 	is_dynamic: number;
+	is_test: number;
 }
 
 export interface ClientWithDetails extends Client {
