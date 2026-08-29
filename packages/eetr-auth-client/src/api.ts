@@ -130,6 +130,67 @@ export async function exchangeToken(
   return data;
 }
 
+export interface ExchangeApiKeyParams {
+  /** The full credential, `eak_<keyId>_<secret>`. */
+  apiKey: string;
+  /**
+   * Space-delimited subset of the key's scopes. Omit for all of them. Scopes outside
+   * the key's set are rejected, never granted.
+   */
+  scope?: string;
+  /** Scopes as an array. Merged with `scope`. */
+  scopes?: readonly string[];
+  /** RFC 8707 resource indicator; becomes the token's audience. */
+  resource?: string;
+}
+
+export interface ExchangeApiKeyConfig {
+  /** Usually `${issuer}/api/token/api-key`. */
+  apiKeyEndpoint: string;
+}
+
+/**
+ * Exchange a long-lived API key for a short-lived access token.
+ *
+ * Intended for CI/CD and other machine callers: one durable secret in the environment
+ * instead of a client_id + client_secret pair, and no client_credentials round trip
+ * before every request.
+ *
+ * The returned token carries the user the key is bound to as its `sub`. There is no
+ * `refresh_token` — the API key is itself the long-lived credential.
+ */
+export async function exchangeApiKey(
+  params: ExchangeApiKeyParams,
+  config: ExchangeApiKeyConfig
+): Promise<TokenResponse> {
+  const body = new URLSearchParams();
+  const scope = resolveScopeParam(params.scope, params.scopes);
+  if (scope) body.set("scope", scope);
+  if (params.resource) body.set("resource", params.resource);
+
+  const res = await fetch(config.apiKeyEndpoint, {
+    method: "POST",
+    headers: {
+      // Sent as a bearer credential rather than in the body so the key stays out of
+      // anything that logs request bodies.
+      Authorization: `Bearer ${params.apiKey}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body,
+  });
+  const data = (await res.json()) as TokenResponse & {
+    error?: string;
+    error_description?: string;
+  };
+  if (!res.ok) {
+    throw new OAuthError(
+      data.error ?? "server_error",
+      data.error_description ?? `API key exchange failed: ${res.status}`
+    );
+  }
+  return data;
+}
+
 export interface IntrospectTokenParams {
   token: string;
   scopes?: string[];
