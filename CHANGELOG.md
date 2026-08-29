@@ -4,6 +4,39 @@ All notable changes to this monorepo are documented in this file.
 
 The current released baseline for both the auth server and the client library is 0.3.1.
 
+## [0.5.1](https://github.com/eetr-ai/eetr-auth/compare/v0.5.0...v0.5.1) (2026-08-29)
+
+
+### Features
+
+* **admin-api:** create, list and revoke client API keys ([a592561](https://github.com/eetr-ai/eetr-auth/commit/a592561cf3a95847b3040fb1a497c654d00c449c))
+* **auth:** exchange long-lived API keys for access tokens ([af04c15](https://github.com/eetr-ai/eetr-auth/commit/af04c1524acbc01c4a4041e59a1d6cfa5c48d266))
+* **auth:** one-click test user sign-in ([5a38d14](https://github.com/eetr-ai/eetr-auth/commit/5a38d14ea9555536ed2fa078409144c491183db6))
+* **client:** API key exchange and management in @eetr/eetr-auth-client ([278ebe6](https://github.com/eetr-ai/eetr-auth/commit/278ebe6f7f4db860ebbee1cd438d79b73da80732))
+* **clients:** custom JWT claims per client ([c6464a7](https://github.com/eetr-ai/eetr-auth/commit/c6464a7001fce2642437ad031edf5dac86ba4b74))
+* **clients:** test client flag through repo, service and admin UI ([f1b367d](https://github.com/eetr-ai/eetr-auth/commit/f1b367defe3941ca01e5559b8e0bd4a90313ca40))
+* **consent:** record, skip, and revoke end-user consent ([8482dcc](https://github.com/eetr-ai/eetr-auth/commit/8482dcc30cb3ce369aa7c719fd9e80cb488ee4c6))
+* **dashboard:** manage a client's API keys from the client panel ([0770e67](https://github.com/eetr-ai/eetr-auth/commit/0770e672b45f8ecd793d8cb312d841ad80f6f40b))
+* **db:** add client_claims to schema 0.6.0 ([0928839](https://github.com/eetr-ai/eetr-auth/commit/092883941fa9f9c847348ed7e266fe69ccc3d03c))
+* **db:** add users.is_test_user and clients.is_test ([12e6b20](https://github.com/eetr-ai/eetr-auth/commit/12e6b20c14eaab03bf34103288c5c24008dd7edf))
+* **db:** api_keys and api_key_scopes tables ([9ea76ed](https://github.com/eetr-ai/eetr-auth/commit/9ea76ed207c3ab99050fe68635b0e6a18a75653a))
+* **db:** reject malformed JSON in client_claims ([df7efa3](https://github.com/eetr-ai/eetr-auth/commit/df7efa324086fc24649ef18813cda3f96f219374))
+* **db:** schema 0.6.0 — scope consent copy, consent records, env display name ([0ce365a](https://github.com/eetr-ai/eetr-auth/commit/0ce365aee9efbda267be59b6193945dbbd5d89aa))
+* **environments:** human-readable display name ([583f718](https://github.com/eetr-ai/eetr-auth/commit/583f7181fc30c5710da4771de199e50e24299297))
+* long-lived API keys for CI/CD ([e74b13c](https://github.com/eetr-ai/eetr-auth/commit/e74b13c588b569d40172f5eea7b04ff24bcc9df7))
+* **oauth:** confine test users to test clients ([69cbb77](https://github.com/eetr-ai/eetr-auth/commit/69cbb7724e3f1996a28b666873d12517237c2b9c))
+* **scopes:** human-readable consent copy for scopes ([cd3ae04](https://github.com/eetr-ai/eetr-auth/commit/cd3ae0475c4ad4e628c92fb105610e601ba9045c))
+* test clients and passwordless test users ([b660ef4](https://github.com/eetr-ai/eetr-auth/commit/b660ef416319592d8bc9bf863452883e9842d6d8))
+* **users:** passwordless test users through repo, service and admin UI ([37283af](https://github.com/eetr-ai/eetr-auth/commit/37283afb0e40a378a11d1c65aec0e3430d38e875))
+
+
+### Bug Fixes
+
+* address CodeRabbit findings on API keys ([68397a6](https://github.com/eetr-ai/eetr-auth/commit/68397a6fea0b56c0ee817405f6f3ef6b50c95794))
+* address review findings on test clients and test users ([6ab68d7](https://github.com/eetr-ai/eetr-auth/commit/6ab68d7abc007a5ca02b8d6d3b226c07d0052543))
+* **auth:** call argon-hasher with a URL, and honor HASH_METHOD for API keys ([8f1c01b](https://github.com/eetr-ai/eetr-auth/commit/8f1c01b1ebaae531747985e8e5d446eefeeab5ef))
+* **dashboard:** repair the API keys table and button layout ([713be16](https://github.com/eetr-ai/eetr-auth/commit/713be16841b18d92dc42b059013d88902c93d647))
+
 ## [0.5.0](https://github.com/eetr-ai/eetr-auth/compare/v0.4.0...v0.5.0) (2026-08-15)
 
 
