@@ -236,9 +236,17 @@ fix the primitive.
 
 ## Overlays
 
-`SidePanel` is for **multi-field** create/edit forms on a list surface. Single-field entities
-(environments, scopes) keep a compact inline add-row: a full-screen overlay to capture one text input
-costs more screen than it saves.
+`SidePanel` is for **multi-field** create/edit forms on a list surface. A genuinely single-field
+entity keeps a compact inline add-row instead: a full-screen overlay to capture one text input costs
+more screen than it saves.
+
+The test is the entity, not the surface. Environments and scopes were single-field and used the
+inline row; once they grew a display name and consent copy they moved to a panel, because a stack of
+inputs wedged into a list row stops reading as a list and leaves no room to explain a field. When a
+field needs a caveat — "this name is used by live tokens" — it needs a panel.
+
+A card-scoped listing puts its create CTA in the `action` slot on `SectionCard`, which mirrors the
+CTA slot on `PageHeader`; don't hand-roll a header row.
 
 **Controlled, always.** The consumer owns `open`. `onRequestClose` fires from the X, the scrim and
 Escape, and the panel never closes itself — that is precisely what allows the dirty guard to
