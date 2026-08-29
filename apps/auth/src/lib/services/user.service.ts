@@ -96,6 +96,7 @@ export class UserService {
 			emailVerifiedAt: byUsername.emailVerifiedAt,
 			avatarKey: byUsername.avatarKey,
 			isAdmin: byUsername.isAdmin,
+			isTestUser: byUsername.isTestUser,
 		};
 	}
 
@@ -147,24 +148,46 @@ export class UserService {
 		isAdmin = true,
 		name?: string | null,
 		email?: string | null,
-		actorUserId: string | null = null
+		actorUserId: string | null = null,
+		options: { isTestUser?: boolean } = {}
 	): Promise<UserRecord> {
 		const normalizedUsername = username.trim();
 		if (!normalizedUsername) {
 			throw new Error("Username is required");
 		}
+		const isTestUser = options.isTestUser === true;
+		// A passwordless account that can reach the dashboard would be a critical hole.
+		// The DB CHECK backstops this; refusing here turns it into a readable error rather
+		// than a raw constraint failure surfaced in the admin banner.
+		if (isTestUser && isAdmin) {
+			throw new Error("A test user cannot be an admin.");
+		}
+		// The username is globally UNIQUE, and D1 would otherwise surface a raw
+		// "UNIQUE constraint failed" string in the admin panel's save banner.
+		if (await this.userRepository.findByUsername(normalizedUsername)) {
+			throw new Error("That username is already taken.");
+		}
 		const id = crypto.randomUUID();
-		const passwordHash = await hashPassword(password, {
-			argonHasher: this.argonHasher,
-			hashMethod: this.hashMethod,
-		});
+		// Test users are passwordless: store the empty sentinel, which verifyPassword()
+		// matches against neither the Argon2 PHC prefix nor the 32-hex MD5 shape, so no
+		// password can ever authenticate the row. Branching BEFORE hashPassword is load
+		// bearing, not an optimisation -- it defaults to argon and throws without an
+		// ARGON_HASHER binding, so routing a test user through it would fail creation
+		// outright on any deployment that has not bound the hasher.
+		const passwordHash = isTestUser
+			? ""
+			: await hashPassword(password, {
+					argonHasher: this.argonHasher,
+					hashMethod: this.hashMethod,
+				});
 		const normalizedName = normalizeOptionalProfileField(name);
 		const normalizedEmail = normalizeOptionalProfileField(email);
 		// Admin-managed emails are trusted (auto-verified), but only when one is
 		// actually provided. Stamping verification on a missing email leaves a stale
 		// timestamp that later surfaces as "Verified" the moment an email is added.
 		const emailVerifiedAt = isAdmin && normalizedEmail ? new Date().toISOString() : null;
-		const passwordUpdatedAt = new Date().toISOString();
+		// No password was ever set, so there is no clock for the max-age gate to run.
+		const passwordUpdatedAt = isTestUser ? null : new Date().toISOString();
 		await this.userRepository.create(
 			id,
 			normalizedUsername,
@@ -173,7 +196,8 @@ export class UserService {
 			emailVerifiedAt,
 			passwordHash,
 			passwordUpdatedAt,
-			isAdmin
+			isAdmin,
+			isTestUser
 		);
 		await this.adminAuditLogService.logAction({
 			actorUserId,
@@ -185,6 +209,7 @@ export class UserService {
 				email: normalizedEmail,
 				name: normalizedName,
 				isAdmin,
+				isTestUser,
 			},
 		});
 		return this.withAvatarUrl({
@@ -195,7 +220,17 @@ export class UserService {
 			emailVerifiedAt,
 			avatarKey: null,
 			isAdmin,
+			isTestUser,
 		});
+	}
+
+	/**
+	 * Test users granted `environmentId` -- the one-click picker on a test client's
+	 * sign-in page. Avatar URLs are resolved the same way listUsers() does.
+	 */
+	async listTestUsersForEnvironment(environmentId: string): Promise<UserRecord[]> {
+		const users = await this.userRepository.listTestUsersByEnvironment(environmentId);
+		return Promise.all(users.map((user) => this.withAvatarUrl(user)));
 	}
 
 	async updateUser(idOrUsername: string, updates: UpdateUserInput, actorUserId: string): Promise<UserRecord> {

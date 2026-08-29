@@ -31,7 +31,12 @@ export async function createUser(
 	password: string,
 	isAdmin = true,
 	name?: string | null,
-	email?: string | null
+	email?: string | null,
+	/**
+	 * Creates a passwordless test user. Immutable afterwards, which is why there is no
+	 * counterpart in updateUser's whitelist below.
+	 */
+	isTestUser = false
 ) {
 	const session = await auth();
 	if (!session?.user?.id) {
@@ -40,7 +45,9 @@ export async function createUser(
 
 	return onAdminServerAction(async (_ctx, getServices) => {
 		const { userService } = getServices();
-		return userService.createUser(username, password, isAdmin, name, email, session.user.id);
+		return userService.createUser(username, password, isAdmin, name, email, session.user.id, {
+			isTestUser,
+		});
 	});
 }
 
@@ -66,6 +73,11 @@ export async function updateUser(
 	// Whitelist the mutable fields explicitly (mirrors the admin bearer API) so a crafted
 	// RPC body can't smuggle unknown columns into the update. isAdmin stays allowed but is
 	// gated by onAdminServerAction and audited distinctly in the service.
+	//
+	// isTestUser is deliberately absent and must stay that way: promoting a real user to a
+	// passwordless one would leave a real password hash on an account signable with one
+	// click, and demoting one would leave an account nobody can sign into. Delete and
+	// recreate instead.
 	const sanitized = {
 		...(updates.username !== undefined ? { username: updates.username } : {}),
 		...(updates.name !== undefined ? { name: updates.name } : {}),

@@ -88,6 +88,7 @@ function makeUser(overrides?: Partial<UserRecord>): UserRecord {
 		emailVerifiedAt: "2026-01-01T00:00:00.000Z",
 		avatarKey: null,
 		isAdmin: false,
+		isTestUser: false,
 		...overrides,
 	};
 }
@@ -103,6 +104,7 @@ function createUserRepoMock(user: UserRecord | null = makeUser()) {
 		delete: vi.fn(),
 		// Default: the user is granted makeClient()'s environment ("env-1") so refresh-token
 		// exchanges pass the per-user environment re-check. Denial tests override this.
+		listTestUsersByEnvironment: vi.fn().mockResolvedValue([]),
 		getUserEnvironments: vi.fn().mockResolvedValue(["env-1"]),
 		setUserEnvironments: vi.fn(),
 		deleteWithAudit: vi.fn(),

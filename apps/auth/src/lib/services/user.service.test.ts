@@ -4,6 +4,7 @@ import type { UserRecord, UserRepository } from "@/lib/repositories/admin.reposi
 import type { AdminAuditLogRepository } from "@/lib/repositories/admin-audit-log.repository";
 import type { UserChallengeRepository } from "@/lib/repositories/user-challenge.repository";
 import type { SiteSettingsRepository } from "@/lib/repositories/site-settings.repository";
+import { hashPassword } from "@/lib/auth/password-hash";
 import { UserService } from "@/lib/services/user.service";
 import { AdminAuditLogService } from "@/lib/services/admin-audit-log.service";
 
@@ -23,6 +24,7 @@ function createUserRepoMock(): UserRepository {
 		getById: vi.fn(),
 		update: vi.fn(),
 		delete: vi.fn(),
+		listTestUsersByEnvironment: vi.fn().mockResolvedValue([]),
 		getUserEnvironments: vi.fn().mockResolvedValue([]),
 		setUserEnvironments: vi.fn(),
 		deleteWithAudit: vi.fn(),
@@ -87,6 +89,7 @@ function makeUserRecord(overrides?: Partial<UserRecord>): UserRecord {
 		emailVerifiedAt: null,
 		avatarKey: null,
 		isAdmin: false,
+		isTestUser: false,
 		...overrides,
 	};
 }
@@ -175,6 +178,88 @@ describe("UserService", () => {
 		});
 	});
 
+	describe("test users", () => {
+		it("stores the empty sentinel and never reaches the hasher", async () => {
+			vi.useFakeTimers();
+			vi.setSystemTime(new Date("2026-04-07T12:00:00.000Z"));
+			// hashPassword is a module-factory mock, so restoreAllMocks does not clear its
+			// call history -- without this the assertion below would silently depend on no
+			// earlier test in the file having hashed anything.
+			vi.mocked(hashPassword).mockClear();
+			const service = createService(mockRepo);
+
+			const result = await service.createUser(
+				"test_alice",
+				"ignored",
+				false,
+				"Alice",
+				null,
+				"actor-1",
+				{ isTestUser: true }
+			);
+
+			// Reaching hashPassword is not merely wasteful: it defaults to argon and throws
+			// without an ARGON_HASHER binding, so a test user routed through it would fail to
+			// create at all on any deployment that has not bound the hasher.
+			expect(hashPassword).not.toHaveBeenCalled();
+			expect(mockRepo.create).toHaveBeenCalledWith(
+				"new-user-id",
+				"test_alice",
+				"Alice",
+				null,
+				null,
+				// The empty sentinel: verifyPassword() matches it against neither the Argon2
+				// PHC prefix nor the 32-hex MD5 shape, so no password can authenticate it.
+				"",
+				// No password was ever set, so the max-age gate has no clock to run.
+				null,
+				false,
+				true
+			);
+			expect(result.isTestUser).toBe(true);
+			vi.useRealTimers();
+		});
+
+		it("ignores the password argument entirely", async () => {
+			const service = createService(mockRepo);
+
+			await service.createUser("test_bob", "hunter2", false, null, null, null, {
+				isTestUser: true,
+			});
+
+			expect(vi.mocked(mockRepo.create).mock.calls[0][5]).toBe("");
+		});
+
+		it("refuses to create a test user that is also an admin", async () => {
+			const service = createService(mockRepo);
+
+			await expect(
+				service.createUser("test_root", "", true, null, null, null, { isTestUser: true })
+			).rejects.toThrow("A test user cannot be an admin.");
+			expect(mockRepo.create).not.toHaveBeenCalled();
+		});
+
+		it("creates a normal user with is_test_user = false by default", async () => {
+			const service = createService(mockRepo);
+
+			await service.createUser("carol", "secret", false);
+
+			expect(vi.mocked(mockRepo.create).mock.calls[0][8]).toBe(false);
+		});
+
+		// The flag is immutable by construction -- it has no entry in UserUpdateInput -- so
+		// this guards the type, not a runtime branch: if someone adds one, this stops compiling.
+		it("does not expose isTestUser on the update path", async () => {
+			mockRepo.getById = vi.fn().mockResolvedValue(makeUserRecord());
+			const service = createService(mockRepo);
+
+			await service.updateUser("user-1", { name: "Renamed" }, "actor-1");
+
+			const patch = (mockRepo.update as ReturnType<typeof vi.fn>).mock.calls[0][1];
+			expect(patch).not.toHaveProperty("isTestUser");
+		});
+	});
+
 	describe("createUser", () => {
 		it("throws when username is empty", async () => {
 			const service = createService(mockRepo);
@@ -194,7 +279,8 @@ describe("UserService", () => {
 				"2026-04-07T12:00:00.000Z",
 				"hashed-password",
 				"2026-04-07T12:00:00.000Z",
-				true
+				true,
+				false
 			);
 			expect(result.emailVerifiedAt).toBe("2026-04-07T12:00:00.000Z");
 			expect(result.isAdmin).toBe(true);

@@ -37,6 +37,7 @@ function createUserRepoMock() {
 		getById: vi.fn(),
 		update: vi.fn(),
 		delete: vi.fn(),
+		listTestUsersByEnvironment: vi.fn().mockResolvedValue([]),
 		getUserEnvironments: vi.fn().mockResolvedValue([]),
 		setUserEnvironments: vi.fn(),
 		deleteWithAudit: vi.fn(),
@@ -118,6 +119,7 @@ function makeUser(overrides?: Partial<UserWithPassword>): UserWithPassword {
 		passwordHash: "stored-hash",
 		passwordUpdatedAt: null,
 		isAdmin: false,
+		isTestUser: false,
 		...overrides,
 	};
 }
@@ -328,6 +330,7 @@ describe("UserChallengeService", () => {
 				emailVerifiedAt: null,
 				avatarKey: null,
 				isAdmin: false,
+				isTestUser: false,
 			});
 			const service = createService({ challengeRepo, userRepo });
 
@@ -355,6 +358,7 @@ describe("UserChallengeService", () => {
 				emailVerifiedAt: null,
 				avatarKey: null,
 				isAdmin: false,
+				isTestUser: false,
 			});
 			siteRepo.get.mockResolvedValue({
 				siteTitle: "Test Auth",

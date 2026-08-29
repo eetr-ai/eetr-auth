@@ -50,6 +50,7 @@ function createAuthorizationCodeRepoMock() {
 /** Defaults to granting the user the client's environment ("env-1") so happy paths pass. */
 function createUserRepoMock(environmentIds: string[] = ["env-1"]) {
 	return {
+		listTestUsersByEnvironment: vi.fn().mockResolvedValue([]),
 		getUserEnvironments: vi.fn().mockResolvedValue(environmentIds),
 	} as unknown as UserRepository;
 }
