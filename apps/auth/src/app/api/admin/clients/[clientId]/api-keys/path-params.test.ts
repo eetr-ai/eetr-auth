@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getClientIdFromPath, toApiKeyPayload } from "./route";
+import { getClientIdFromPath, toApiKeyPayload } from "./helpers";
 import type { ApiKey } from "@/lib/repositories/api-key.repository";
 
 describe("admin api-keys route helpers", () => {
