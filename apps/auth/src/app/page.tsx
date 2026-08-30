@@ -34,13 +34,20 @@ export default async function HomePage({
 	// page is reached by redirect, so there is nothing in the URL to read. A test client
 	// gets the one-click picker instead of the password form. Same lookup the consent page
 	// does; null simply means "no OAuth request in flight", i.e. a plain dashboard login.
+	const normalizedCallbackUrl = callbackUrl?.trim() ?? "";
 	const ctx = await buildRequestContext();
 	const services = getServices(ctx);
 	const pendingClient = await resolvePendingClient(
 		services.clientService,
 		ctx.env as unknown as Record<string, unknown>
 	);
-	const isTestSignIn = pendingClient?.isTest === true;
+	// The cookie outlives the request that set it (300s) and is not scoped to this page, so
+	// its presence alone does not mean an authorization is in flight. Only a sign-in that
+	// /api/authorize itself redirected here — callbackUrl=/oauth/confirm — counts; otherwise
+	// a plain visit to the sign-in page, minutes after poking at a test client, would be
+	// handed the one-click picker and no password form at all.
+	const isOAuthSignIn = normalizedCallbackUrl === "/oauth/confirm";
+	const isTestSignIn = isOAuthSignIn && pendingClient?.isTest === true;
 	const testUsers = isTestSignIn
 		? await services.userService.listTestUsersForEnvironment(pendingClient!.environmentId)
 		: [];
@@ -48,9 +55,8 @@ export default async function HomePage({
 	// confirm step, so falling back to the password form would silently offer the wrong
 	// thing on a test client — and on any client it would strand the user in a flow whose
 	// request no longer exists. Say so instead.
-	const pendingExpired = !pendingClient && callbackUrl?.trim() === "/oauth/confirm";
+	const pendingExpired = !pendingClient && isOAuthSignIn;
 	const { displayTitle, displayLogoUrl, siteUrl, mfaEnabled } = site;
-	const normalizedCallbackUrl = callbackUrl?.trim() ?? "";
 	const callbackTargetsAdmin =
 		normalizedCallbackUrl.startsWith("/dashboard") || normalizedCallbackUrl.startsWith("/admin");
 
