@@ -45,7 +45,10 @@ export default async function HomePage({
 	// its presence alone does not mean an authorization is in flight. Only a sign-in that
 	// /api/authorize itself redirected here — callbackUrl=/oauth/confirm — counts; otherwise
 	// a plain visit to the sign-in page, minutes after poking at a test client, would be
-	// handed the one-click picker and no password form at all.
+	// handed the one-click picker and no password form at all. The marker is in the URL and
+	// so is the visitor's to set: it decides which form is offered, never who may sign in.
+	// The `test-user` provider re-derives the pending authorization, the client and the user
+	// before minting a session, so a hand-typed callbackUrl buys nothing but a picker.
 	const isOAuthSignIn = normalizedCallbackUrl === "/oauth/confirm";
 	const isTestSignIn = isOAuthSignIn && pendingClient?.isTest === true;
 	const testUsers = isTestSignIn
