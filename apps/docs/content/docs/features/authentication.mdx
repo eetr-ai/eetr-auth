@@ -54,8 +54,16 @@ Per-environment password policies are managed from **Setup → Password policies
 
 When the authorizing client is a [test client](/docs/features/clients#test-clients), the sign-in page
 renders a picker of the [test users](/docs/features/admin#test-users) granted that client's
-environment instead of the password form. One click signs in, the consent screen is skipped, and the
-browser lands back at the client's `redirect_uri` with an authorization code.
+environment instead of the password form. One click signs in, the consent screen is skipped for that
+test user, and the browser lands back at the client's `redirect_uri` with an authorization code.
+
+The picker replaces the password form only on the sign-in redirect `GET /authorize` issues, which is
+marked by `callbackUrl=/oauth/confirm`. Browsing to the sign-in page gets the password form, even if a
+test client's `oauth_pending` cookie from a few minutes ago is still valid. That marker is in the URL
+and so is the visitor's to set, but it grants nothing on its own: the test-user provider re-derives
+the live pending authorization, the client, and the user server-side before it mints a session. For the
+same reason a *real* user reaching a test client is shown the consent screen rather than being passed
+straight through: it is the only step that offers "sign in with a different account".
 
 Which client is authorizing is read from the signed, httpOnly `oauth_pending` cookie set by
 `GET /authorize` — the page is reached by redirect, so there is nothing in the URL to read. That

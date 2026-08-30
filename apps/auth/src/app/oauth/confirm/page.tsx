@@ -38,12 +38,14 @@ export default async function OAuthConfirmPage() {
 	const client = pendingParams.client_id
 		? await services.clientService.getByClientIdentifier(pendingParams.client_id)
 		: null;
-	// A test client is a developer's own fixture and its users are synthetic, so the
-	// consent screen has nobody meaningful to ask. This is the same path as the
-	// "already consented" skip below: authorize() records the consent row itself, so
-	// admin consent listing and revocation keep working either way. Placed before the
-	// scope-copy lookups so a test authorization also skips those round-trips.
-	if (client?.isTest) {
+	// A test client signing in one of its own synthetic users has nobody meaningful to
+	// ask, so that path goes straight through — authorize() records the consent row
+	// itself, so admin consent listing and revocation keep working either way. A *real*
+	// user reaching a test client still gets the screen: it is an ordinary authorization
+	// worth confirming, and it is the only place in the flow offering "sign in with a
+	// different account" — the way out when the browser holds the wrong session. Placed
+	// before the scope-copy lookups so the fixture path also skips those round-trips.
+	if (client?.isTest && (await services.userService.getById(session.user.id))?.isTestUser) {
 		redirect("/api/authorize/complete");
 	}
 
@@ -73,12 +75,11 @@ export default async function OAuthConfirmPage() {
 			scope,
 		])
 	);
-	// Skip the screen when the user has already consented to everything being asked for.
-	// `prompt=consent` (OIDC) always forces it, which is how a client re-confirms on demand.
-	const forceConsent = pendingParams.prompt
-		?.split(/\s+/)
-		.map((value) => value.trim())
-		.includes("consent");
+	// The screen is shown on every authorization, even when the user has already consented
+	// to everything being asked for. Skipping it also removed the only place in the flow
+	// that offers "sign in with a different account", which left a signed-in user with no
+	// way to switch — so the skip is disabled for now. `prompt=consent` is therefore a
+	// no-op today; the consent record still drives the incremental copy below.
 	const unconsentedScopeNames = client
 		? await services.consentService.getUnconsentedScopeNames(
 				session.user.id,
@@ -86,10 +87,6 @@ export default async function OAuthConfirmPage() {
 				effectiveScopeNames
 			)
 		: effectiveScopeNames;
-
-	if (client && !forceConsent && unconsentedScopeNames.length === 0) {
-		redirect("/api/authorize/complete");
-	}
 
 	// Ask about what actually changed: on a re-authorization that adds a scope, list only
 	// the new one rather than re-presenting everything the user already agreed to.
