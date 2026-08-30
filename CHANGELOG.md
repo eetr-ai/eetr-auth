@@ -4,6 +4,20 @@ All notable changes to this monorepo are documented in this file.
 
 The current released baseline for both the auth server and the client library is 0.3.1.
 
+## [0.5.3](https://github.com/eetr-ai/eetr-auth/compare/v0.5.2...v0.5.3) (2026-08-30)
+
+
+### Features
+
+* **api-keys:** self-service key management with a user's own token ([53bd2dc](https://github.com/eetr-ai/eetr-auth/commit/53bd2dcd3e202c8b1627656494b129b58973100c))
+* **api-keys:** self-service key management with a user's own token ([b89453a](https://github.com/eetr-ai/eetr-auth/commit/b89453a411aa863389b690e2c1a76bc87b5c4687))
+
+
+### Bug Fixes
+
+* **ci:** make npm trusted publishing actually authenticate ([0a2e400](https://github.com/eetr-ai/eetr-auth/commit/0a2e400c2801df43a8c98b4744e01cea7555310a))
+* **ci:** make npm trusted publishing actually authenticate ([f2d5be7](https://github.com/eetr-ai/eetr-auth/commit/f2d5be7279cf67b905f564f4ccef86bfddc4e00a))
+
 ## [0.5.2](https://github.com/eetr-ai/eetr-auth/compare/v0.5.1...v0.5.2) (2026-08-30)
 
 
