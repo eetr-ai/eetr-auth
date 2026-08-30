@@ -1,5 +1,10 @@
 {
   "title": "Contributing",
   "icon": "GitBranch",
-  "pages": ["index", "layer-conventions", "ux-guidelines"]
+  "pages": [
+    "index",
+    "layer-conventions",
+    "ux-guidelines",
+    "releasing"
+  ]
 }

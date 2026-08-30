@@ -35,3 +35,15 @@ jobs:
       id-token: write
     uses: ./.github/workflows/docs.yml
     secrets: inherit
+
+  # Publish the JS client to npm on the same release, for the same reason the
+  # docs deploy lives here: releases created by the default GITHUB_TOKEN do not
+  # trigger further workflow runs.
+  publish-client:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/publish-client.yml
+    secrets: inherit

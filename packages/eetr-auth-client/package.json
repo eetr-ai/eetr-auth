@@ -2,6 +2,31 @@
   "name": "@eetr/eetr-auth-client",
   "version": "0.5.1",
   "description": "TypeScript client library for eetr-auth OAuth 2.1 / OIDC server",
+  "license": "MIT",
+  "author": "eetr-ai",
+  "homepage": "https://github.com/eetr-ai/eetr-auth/tree/main/packages/eetr-auth-client#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eetr-ai/eetr-auth.git",
+    "directory": "packages/eetr-auth-client"
+  },
+  "bugs": {
+    "url": "https://github.com/eetr-ai/eetr-auth/issues"
+  },
+  "keywords": [
+    "oauth",
+    "oauth2",
+    "oidc",
+    "openid-connect",
+    "authentication",
+    "passkeys",
+    "webauthn",
+    "eetr-auth"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "sideEffects": false,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -12,7 +37,9 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc",
@@ -29,5 +56,8 @@
     "@types/node": "^20.19.35",
     "typescript": "^5.8.3",
     "vitest": "^4.1.2"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

@@ -1,0 +1,57 @@
+---
+title: Releasing
+description: How release-please cuts a release, and what it publishes — the docs site and the npm client.
+icon: Rocket
+---
+
+Releases are cut by [release-please](https://github.com/googleapis/release-please). Merging
+Conventional Commits into `main` keeps a release PR up to date; **merging that release PR** is what
+cuts the release. Everything downstream is automatic.
+
+## What a release does
+
+`.github/workflows/release-please.yml` runs on every push to `main`. When the release PR merges,
+`release_created` is `true` and two follow-on jobs fire in the same workflow run:
+
+| Job | Workflow | Result |
+| --- | --- | --- |
+| `deploy-docs` | `docs.yml` | Builds `apps/docs` and deploys it to GitHub Pages. |
+| `publish-client` | `publish-client.yml` | Tests, builds, and publishes `@eetr/eetr-auth-client` to npm. |
+
+<Callout type="warn" title="Why they live in release-please.yml">
+  Releases created with the default `GITHUB_TOKEN` do **not** trigger further workflow runs, so an
+  `on: release` trigger would never fire. Both jobs are `workflow_call` targets invoked from the same
+  run instead. Both are also `workflow_dispatch`-able for a manual re-publish.
+</Callout>
+
+## Versioning
+
+There is one version for the whole monorepo, tracked in `.release-please-manifest.json`.
+`release-please-config.json` propagates it into `apps/auth/package.json`,
+`packages/eetr-auth-client/package.json`, and `README.md` via `extra-files` — so the npm client's
+version always matches the release tag. Never hand-edit those versions.
+
+## npm publishing
+
+The client publishes with **npm trusted publishing** (OIDC): there is no `NPM_TOKEN` secret. The
+`publish-client` job requests `id-token: write`, upgrades to the latest npm CLI (trusted publishing
+needs npm ≥ 11.5.1), and runs `npm publish` from `packages/eetr-auth-client`. npm attaches a
+provenance attestation automatically.
+
+The job is idempotent: it checks `npm view <name>@<version>` first and skips publishing if that
+version is already on the registry, so a re-run or a manual dispatch can't fail the release.
+
+### One-time npm setup
+
+On [npmjs.com](https://npmjs.com), under the `@eetr/eetr-auth-client` package → **Settings** →
+**Trusted publisher**, add a GitHub Actions publisher with:
+
+- **Organization or user:** `eetr-ai`
+- **Repository:** `eetr-auth`
+- **Workflow filename:** `publish-client.yml`
+- **Environment:** *(leave empty)*
+
+The `@eetr` scope must allow public publishing, and the package's `publishConfig.access` is already
+`public`. A trusted publisher can only be attached to a package that already exists on the registry —
+`@eetr/eetr-auth-client` was first published manually, so this is already done and every release from
+now on publishes automatically.
