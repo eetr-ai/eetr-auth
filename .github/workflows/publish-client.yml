@@ -1,0 +1,77 @@
+name: Publish client
+
+# Publishes packages/eetr-auth-client to npm as @eetr/eetr-auth-client.
+# - workflow_call: invoked by release-please.yml on each release, so the client
+#   ships with every release (the version is bumped by release-please via the
+#   extra-files entry in release-please-config.json).
+# - workflow_dispatch: manual re-publish / first publish.
+#
+# Authentication uses npm trusted publishing (OIDC): no NPM_TOKEN secret is
+# needed, and npm attaches a provenance attestation automatically. The npm
+# package must have this repo + workflow configured as a trusted publisher.
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+# Never run two publishes of the same package concurrently.
+concurrency:
+  group: publish-client
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required for npm trusted publishing (OIDC token exchange).
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing requires npm >= 11.5.1; Node 24 may ship an older 11.x.
+      - name: Ensure npm supports trusted publishing
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm run test --workspace=packages/eetr-auth-client
+
+      - name: Build
+        run: npm run build --workspace=packages/eetr-auth-client
+
+      - name: Check whether this version is already on npm
+        id: check
+        run: |
+          NAME=$(node -p "require('./packages/eetr-auth-client/package.json').name")
+          VERSION=$(node -p "require('./packages/eetr-auth-client/package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "$NAME@$VERSION is already on npm — skipping publish."
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish to npm
+        if: steps.check.outputs.published == 'false'
+        run: npm publish
+        working-directory: packages/eetr-auth-client
+
+      - name: Summary
+        run: |
+          if [ "${{ steps.check.outputs.published }}" = "true" ]; then
+            echo "Skipped: @eetr/eetr-auth-client@${{ steps.check.outputs.version }} was already published." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Published @eetr/eetr-auth-client@${{ steps.check.outputs.version }} to npm." >> "$GITHUB_STEP_SUMMARY"
+          fi
