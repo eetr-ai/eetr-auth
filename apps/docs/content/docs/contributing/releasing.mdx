@@ -34,12 +34,31 @@ version always matches the release tag. Never hand-edit those versions.
 ## npm publishing
 
 The client publishes with **npm trusted publishing** (OIDC): there is no `NPM_TOKEN` secret. The
-`publish-client` job requests `id-token: write`, upgrades to the latest npm CLI (trusted publishing
-needs npm ≥ 11.5.1), and runs `npm publish` from `packages/eetr-auth-client`. npm attaches a
-provenance attestation automatically.
+`publish-client` job requests `id-token: write` (the caller grants it too — both parent and child
+need it), upgrades to the latest npm CLI (trusted publishing needs npm ≥ 11.5.1), and runs
+`npm publish` from `packages/eetr-auth-client`. npm attaches a provenance attestation automatically.
+
+<Callout type="warn" title="The trusted publisher names release-please.yml, not publish-client.yml">
+  npm validates the OIDC claim against the **calling** workflow, not the workflow that actually runs
+  `npm publish`. Since `publish-client.yml` is invoked through `workflow_call`, the publisher
+  configured on npm must be `release-please.yml`. Getting this wrong fails with a misleading
+  `404 Not Found - PUT` rather than an auth error.
+</Callout>
+
+<Callout type="warn" title="Don't add registry-url to setup-node">
+  `registry-url:` makes `actions/setup-node` write an `.npmrc` containing
+  `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`. With no token supplied that expands to a
+  placeholder, and npm attempts classic token auth instead of OIDC — again failing with a 404 on
+  `PUT`. Installing public dependencies needs no auth, so the option is deliberately absent.
+</Callout>
 
 The job is idempotent: it checks `npm view <name>@<version>` first and skips publishing if that
-version is already on the registry, so a re-run or a manual dispatch can't fail the release.
+version is already on the registry, so a re-run can't fail the release.
+
+To retry a publish that failed, **re-run the `publish-client` job from the original release-please
+workflow run** — the caller is still `release-please.yml`, so the OIDC claim still matches. The
+`workflow_dispatch` trigger on `publish-client.yml` runs the build and tests, but cannot authenticate
+against a publisher configured for `release-please.yml` (npm allows only one publisher per package).
 
 ### One-time npm setup
 
@@ -48,7 +67,7 @@ On [npmjs.com](https://npmjs.com), under the `@eetr/eetr-auth-client` package �
 
 - **Organization or user:** `eetr-ai`
 - **Repository:** `eetr-auth`
-- **Workflow filename:** `publish-client.yml`
+- **Workflow filename:** `release-please.yml` — the *caller*, not `publish-client.yml`
 - **Environment:** *(leave empty)*
 
 The `@eetr` scope must allow public publishing, and the package's `publishConfig.access` is already
