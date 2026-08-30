@@ -7,8 +7,15 @@ name: Publish client
 # - workflow_dispatch: manual re-publish / first publish.
 #
 # Authentication uses npm trusted publishing (OIDC): no NPM_TOKEN secret is
-# needed, and npm attaches a provenance attestation automatically. The npm
-# package must have this repo + workflow configured as a trusted publisher.
+# needed, and npm attaches a provenance attestation automatically.
+#
+# IMPORTANT: npm validates the OIDC claim against the *calling* workflow, not
+# the workflow that runs `npm publish`. Because this is invoked via
+# `workflow_call` from release-please.yml, the trusted publisher configured on
+# npm must name **release-please.yml**. A package can only have one trusted
+# publisher, so the workflow_dispatch path below cannot authenticate against
+# that same config — to retry a failed release publish, re-run this job from
+# the original release-please workflow run instead.
 on:
   workflow_dispatch:
   workflow_call:
@@ -31,15 +38,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No `registry-url:` on purpose. It makes setup-node write an .npmrc with
+      # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`; with no token
+      # supplied that expands to a placeholder, and npm then attempts classic
+      # token auth instead of OIDC and fails with a misleading 404 on PUT.
+      # Installing public dependencies needs no auth.
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-          registry-url: https://registry.npmjs.org
 
       # Trusted publishing requires npm >= 11.5.1; Node 24 may ship an older 11.x.
       - name: Ensure npm supports trusted publishing
         run: npm install -g npm@latest
+
+      - name: Show npm version
+        run: npm --version
 
       - name: Install dependencies
         run: npm ci
