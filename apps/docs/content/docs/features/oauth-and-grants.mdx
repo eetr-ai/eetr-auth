@@ -45,11 +45,12 @@ exact redirect URI. At `/api/token`, the client proves possession with the `code
 Consent is **recorded**, not re-asked every time. When an authorization succeeds, the scopes actually
 granted are stored against the (user, client) pair, accumulating across authorizations.
 
-- If every requested scope is already consented to, the consent screen is **skipped** and the user
-  goes straight back to the client.
-- If the request adds a scope the user has not seen before, the screen is shown and lists **only the
-  new scopes** — not everything already agreed to.
-- `prompt=consent` always shows the screen, even when nothing new is being requested.
+- The consent screen is currently shown on **every** authorization. Skipping it when everything was
+  already consented to is disabled for now: it also removed the only step offering "sign in with a
+  different account", leaving a signed-in user no way to switch. `prompt=consent` is a no-op while
+  that is the case.
+- If the request adds a scope the user has not seen before, the screen lists **only the new scopes** —
+  not everything already agreed to.
 - A request with no `scope` means "everything this client is granted", and the screen lists that
   resolved set rather than a vague catch-all.
 

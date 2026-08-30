@@ -39,8 +39,9 @@ claims, redirect URIs, and tokens. Two things differ:
 
 - Its sign-in page lists the [test users](/docs/features/admin#test-users) granted its environment
   instead of the password form. Picking one signs in immediately, with no password and no passkey.
-- It **skips the consent screen**. Synthetic users have nobody meaningful to ask; the `user_consents`
-  row is still recorded, so admin consent listing and revocation are unaffected.
+- It **skips the consent screen for a test user**. Synthetic users have nobody meaningful to ask; the
+  `user_consents` row is still recorded, so admin consent listing and revocation are unaffected. A
+  normal user reaching a test client still sees the screen, which is where they can switch accounts.
 
 Create one from **Clients → New client** by ticking **Test client**. The list shows a **Test** badge
 and the Registration filter gains a **Test** entry.
@@ -58,7 +59,7 @@ The pairing rule is asymmetric, and worth stating plainly:
 A test user is refused by every non-test client, enforced at `/authorize` and re-checked on every
 token refresh (which revokes the presented refresh token). A normal user is *not* refused by a test
 client — a test client is just a client — but the picker offers no way in, so this only happens with
-a session they already hold.
+a session they already hold, and that case goes through the consent screen.
 
 <Callout type="warn" title="Anyone who can reach the page can be any test user on it">
   There is no secret in this flow; that is the point of it. Never grant a test user an environment
