@@ -1,4 +1,6 @@
+import type { NextRequest } from "next/server";
 import type { ApiKey } from "@/lib/repositories/api-key.repository";
+import type { WithAdminApiClientContextOptions } from "@/lib/context/with-admin-api-client-context";
 
 /**
  * `/api/admin/clients/{clientId}/api-keys` — parts are
@@ -30,3 +32,18 @@ export function toApiKeyPayload(apiKey: ApiKey) {
 		lastUsedAt: apiKey.lastUsedAt,
 	};
 }
+
+/**
+ * Lets these routes accept a user-scoped JWT issued by the client in the path, in addition
+ * to an admin API client token. See {@link WithAdminApiClientContextOptions.selfService}
+ * for the three conditions such a token must meet; the routes themselves then confine
+ * every operation to `auth.selfServiceUserId`.
+ *
+ * The `[keyId]` route sits one segment deeper but addresses the same client, and
+ * getClientIdFromPath reads by index from the left, so both share this.
+ */
+export const selfServiceOptions: WithAdminApiClientContextOptions = {
+	selfService: {
+		resolveTargetClientId: (req: NextRequest) => getClientIdFromPath(req.nextUrl.pathname),
+	},
+};

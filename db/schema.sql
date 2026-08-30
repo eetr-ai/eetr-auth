@@ -335,7 +335,14 @@ CREATE TABLE IF NOT EXISTS tokens (
   client_id TEXT NOT NULL,
   expires_at TEXT NOT NULL,
   resource TEXT,
-  FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+  -- Set when this token was minted by POST /api/token/api-key, naming the api_keys row
+  -- that produced it. NULL for every OAuth grant. Lets a resource server tell a
+  -- machine-credential token apart from an interactive one -- in particular, the
+  -- self-service API-key routes refuse it, so a key can never mint a longer-lived or
+  -- wider-scoped successor to itself.
+  api_key_id TEXT,
+  FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+  FOREIGN KEY (api_key_id) REFERENCES api_keys(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_tokens_token_id ON tokens(token_id);

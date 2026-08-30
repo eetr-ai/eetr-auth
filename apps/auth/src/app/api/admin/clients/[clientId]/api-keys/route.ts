@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { withAdminApiClientContext } from "@/lib/context/with-admin-api-client-context";
-import { getClientIdFromPath, toApiKeyPayload } from "./helpers";
+import { getClientIdFromPath, selfServiceOptions, toApiKeyPayload } from "./helpers";
 
 function invalidRequest(description: string) {
 	return NextResponse.json(
@@ -13,6 +13,10 @@ function notFound(description: string) {
 	return NextResponse.json({ error: "not_found", error_description: description }, { status: 404 });
 }
 
+function forbidden(description: string) {
+	return NextResponse.json({ error: "forbidden", error_description: description }, { status: 403 });
+}
+
 function toErrorResponse(error: unknown) {
 	const message = error instanceof Error ? error.message : "Unexpected error.";
 	// Caller-fixable problems raised by ApiKeyService.create.
@@ -21,14 +25,15 @@ function toErrorResponse(error: unknown) {
 		message === "User not found" ||
 		message === "Client not found" ||
 		/valid ISO timestamp/u.test(message) ||
-		/test user can only be bound/u.test(message)
+		/test user can only be bound/u.test(message) ||
+		/has no email address/u.test(message)
 	) {
 		return NextResponse.json({ error: "invalid_request", error_description: message }, { status: 400 });
 	}
 	return NextResponse.json({ error: "server_error", error_description: message }, { status: 500 });
 }
 
-export const GET = withAdminApiClientContext(async (req, _ctx, getServices) => {
+export const GET = withAdminApiClientContext(async (req, _ctx, getServices, auth) => {
 	const clientIdentifier = getClientIdFromPath(req.nextUrl.pathname);
 	if (!clientIdentifier) {
 		return invalidRequest("Client id path parameter is required.");
@@ -40,12 +45,13 @@ export const GET = withAdminApiClientContext(async (req, _ctx, getServices) => {
 		if (!client) {
 			return notFound("Client not found");
 		}
-		const apiKeys = await apiKeyService.list(client.id);
+		// A self-service caller sees only its own keys; an admin caller sees all of them.
+		const apiKeys = await apiKeyService.list(client.id, { userId: auth.selfServiceUserId });
 		return NextResponse.json({ apiKeys: apiKeys.map(toApiKeyPayload) }, { status: 200 });
 	} catch (error) {
 		return toErrorResponse(error);
 	}
-});
+}, selfServiceOptions);
 
 export const POST = withAdminApiClientContext(async (req, _ctx, getServices, auth) => {
 	const clientIdentifier = getClientIdFromPath(req.nextUrl.pathname);
@@ -78,11 +84,13 @@ export const POST = withAdminApiClientContext(async (req, _ctx, getServices, aut
 	};
 
 	// A key must name its user: the minted token's `sub` is that user, so an unbound key
-	// would produce machine tokens nobody is accountable for.
+	// would produce machine tokens nobody is accountable for. A self-service caller does
+	// not have to say who it is -- the token's subject already did, and it is the only
+	// user that caller may bind a key to.
 	const userRef =
 		[body.userId, body.user_id, body.username].find((v) => typeof v === "string" && v.trim()) ??
 		null;
-	if (typeof userRef !== "string") {
+	if (typeof userRef !== "string" && !auth.selfServiceUserId) {
 		return invalidRequest("userId (or username) is required.");
 	}
 
@@ -106,10 +114,18 @@ export const POST = withAdminApiClientContext(async (req, _ctx, getServices, aut
 		if (!client) {
 			return notFound("Client not found");
 		}
-		// Accepts an id or a username, like the sibling user routes.
-		const user = await userService.getByIdOrUsername(userRef.trim());
+		// Accepts an id or a username, like the sibling user routes. With no reference at
+		// all, this is a self-service call prefilling itself from the token's subject.
+		const user = await userService.getByIdOrUsername(
+			typeof userRef === "string" ? userRef.trim() : auth.selfServiceUserId!
+		);
 		if (!user) {
 			return notFound("User not found");
+		}
+		// A self-service caller may name its own user explicitly (by id or username), but
+		// never anyone else's -- that would be exactly the escalation this mode avoids.
+		if (auth.selfServiceUserId && user.id !== auth.selfServiceUserId) {
+			return forbidden("This token may only manage API keys for its own user.");
 		}
 
 		// api_keys.created_by is a FK to users(id), so the `client:<id>` label the sibling
@@ -123,6 +139,9 @@ export const POST = withAdminApiClientContext(async (req, _ctx, getServices, aut
 				name: typeof body.name === "string" ? body.name : null,
 				expiresAt: typeof expiresAtRaw === "string" ? expiresAtRaw : null,
 				scopeNames: Array.isArray(body.scopes) ? (body.scopes as string[]) : undefined,
+				// A self-service key is authorized by the user's own token with no admin in
+				// the loop, so the user is told out-of-band that it exists.
+				notifyUser: Boolean(auth.selfServiceUserId),
 			},
 			auth.subjectUserId,
 			{ viaAdminClientRowId: auth.adminClientRowId }
@@ -136,4 +155,4 @@ export const POST = withAdminApiClientContext(async (req, _ctx, getServices, aut
 	} catch (error) {
 		return toErrorResponse(error);
 	}
-});
+}, selfServiceOptions);

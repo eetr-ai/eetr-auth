@@ -136,6 +136,10 @@ export function getServices(ctx: RequestContext): Services {
 		userRepo,
 		tokenRepo,
 		adminAuditLogService,
+		// Only the self-service create path uses these, to notify the bound user.
+		siteRepo,
+		siteSettings: siteSettingsService,
+		mail: transactionalEmailService,
 		argonHasher: ctx.env.ARGON_HASHER,
 		hashMethod,
 	});

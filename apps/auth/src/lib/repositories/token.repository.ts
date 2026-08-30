@@ -12,6 +12,9 @@ export interface AccessTokenRow {
 	// RFC 8707 resource indicator: the audience the token was minted for. NULL = the
 	// legacy default (the owning client's client_id).
 	resource: string | null;
+	// Provenance: the api_keys row this token was minted from, or NULL for every OAuth
+	// grant. Optional so existing callers are unchanged.
+	api_key_id?: string | null;
 }
 
 export interface AccessTokenActivity {
@@ -36,6 +39,9 @@ export interface AccessTokenRecord {
 	scopeNames: string[];
 	// RFC 8707 audience the token was minted for; NULL = default (client_id).
 	resource: string | null;
+	// Non-null when POST /api/token/api-key minted this token, naming the api_keys row.
+	// Lets a caller tell a machine-credential token from an interactive one.
+	apiKeyId: string | null;
 }
 
 export interface TokenRepository {

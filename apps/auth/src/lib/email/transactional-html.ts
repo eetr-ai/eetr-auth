@@ -107,3 +107,46 @@ export function passwordResetBodyHtml(
 <p style="margin:0 0 12px;font-size:13px;color:${TEXT_MUTED};word-break:break-all;line-height:1.45;">If the reset button does not work, copy and paste this URL into your browser:<br /><span style="color:#3f3f46;">${safeUrl}</span></p>
 <p style="margin:0;font-size:12px;color:${TEXT_MUTED};word-break:break-all;line-height:1.45;">Cancel link:<br /><span style="color:#3f3f46;">${safeCancel}</span></p>`;
 }
+
+export interface ApiKeyCreatedDetails {
+	/** Human-readable client name, falling back to the client_id. */
+	clientName: string;
+	/** The public handle. Safe to email; the secret half never leaves the create response. */
+	keyId: string;
+	/** The label the creator gave the key, if any. */
+	name: string | null;
+	/** Scope names the key may mint. Empty means the client had no grants to give it. */
+	scopes: string[];
+	/** ISO timestamp, or null for a key that never expires. */
+	expiresAt: string | null;
+}
+
+/**
+ * Sent when someone creates an API key using the *recipient's own* access token, via the
+ * self-service route. The recipient is by definition the only person who could have
+ * authorized it, so this is the one path where a key appears without an administrator in
+ * the loop -- an unexpected message here means their token has been taken.
+ *
+ * Deliberately carries no secret: the credential is shown once, to the caller, and is not
+ * recoverable afterwards, so there is nothing here worth stealing from an inbox.
+ */
+export function apiKeyCreatedBodyHtml(details: ApiKeyCreatedDetails): string {
+	const row = (label: string, value: string) =>
+		`<tr><td style="padding:6px 12px 6px 0;font-size:14px;color:${TEXT_MUTED};white-space:nowrap;vertical-align:top;">${escapeHtml(label)}</td><td style="padding:6px 0;font-size:14px;color:#18181b;word-break:break-word;">${escapeHtml(value)}</td></tr>`;
+
+	const rows = [
+		row("Application", details.clientName),
+		row("Key ID", details.keyId),
+		...(details.name ? [row("Name", details.name)] : []),
+		row("Scopes", details.scopes.length > 0 ? details.scopes.join(", ") : "none"),
+		row("Expires", details.expiresAt ?? "never"),
+	].join("\n");
+
+	return `<p style="margin:0 0 20px;">A new API key was just created for your account using an access token issued to you. API keys are long-lived credentials that can obtain access tokens in your name.</p>
+<table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 20px;border:1px solid ${BORDER};border-radius:8px;background-color:#fafafa;width:100%;">
+  <tr><td style="padding:12px 16px;"><table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;font-family:system-ui,-apple-system,sans-serif;">
+${rows}
+  </table></td></tr>
+</table>
+<p style="margin:0;font-size:14px;color:${TEXT_MUTED};line-height:1.5;">If you created this key, no action is needed. If you did not, revoke it and treat your access token as compromised.</p>`;
+}

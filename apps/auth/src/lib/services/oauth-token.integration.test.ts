@@ -192,6 +192,7 @@ class InMemoryTokenRepo implements TokenRepository {
 			expiresAt: stored.row.expires_at,
 			scopeNames,
 			resource: stored.row.resource,
+			apiKeyId: stored.row.api_key_id ?? null,
 		};
 	}
 
@@ -1189,6 +1190,37 @@ describe("OAuth stateful flows", () => {
 			expect(claims.aud).toBe("client-app-id");
 			expect(claims.scope).toBe("read:users write:users");
 			expect(claims.environment).toBe("production");
+		});
+
+		it("stamps the minting key on the token, so a key cannot issue its own successor", async () => {
+			const { tokenService, apiKeyService, user } = await buildJwtHarness();
+			const { apiKey, presentedKey } = await apiKeyService.create(
+				{ clientRowId: "client-row-1", userId: user.id, name: "ci" },
+				"admin"
+			);
+
+			const { response } = await tokenService.exchangeApiKey({ apiKey: presentedKey });
+			const validated = await tokenService.validateAccessToken(response.access_token, [], null);
+
+			expect(validated.valid).toBe(true);
+			// What the self-service API-key routes read to refuse this token: without it, a
+			// key narrowed to one scope and expiring next week could mint a token and use it
+			// to create a never-expiring key holding everything the client has.
+			expect(validated.apiKeyId).toBe(apiKey.id);
+		});
+
+		it("leaves the provenance null for an ordinary OAuth grant", async () => {
+			const { tokenService } = await buildJwtHarness();
+
+			const response = await tokenService.exchange({
+				grantType: "client_credentials",
+				clientId: "client-app-id",
+				clientSecret: "plain-secret",
+			});
+			const validated = await tokenService.validateAccessToken(response.access_token, [], null);
+
+			expect(validated.valid).toBe(true);
+			expect(validated.apiKeyId).toBeNull();
 		});
 
 		it("carries only the scopes the key was issued with", async () => {

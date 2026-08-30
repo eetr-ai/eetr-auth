@@ -1,11 +1,15 @@
 import { generateApiKey, parseApiKey } from "@/lib/auth/api-key-format";
 import { hashPassword, verifyPassword } from "@/lib/auth/password-hash";
+import { apiKeyCreatedBodyHtml, buildTransactionalEmailHtml } from "@/lib/email/transactional-html";
 import type { HashMethod } from "@/lib/config/hash-method";
 import type { ApiKey, ApiKeyRepository } from "@/lib/repositories/api-key.repository";
 import type { Client, ClientRepository } from "@/lib/repositories/client.repository";
 import type { UserRecord, UserRepository } from "@/lib/repositories/admin.repository";
 import type { ClientScopeGrant, TokenRepository } from "@/lib/repositories/token.repository";
+import type { SiteSettingsRepository } from "@/lib/repositories/site-settings.repository";
 import type { AdminAuditLogService } from "./admin-audit-log.service";
+import type { SiteSettingsService } from "./site-settings.service";
+import type { TransactionalEmailService } from "./transactional-email.service";
 import { AUDIT_ACTION, AUDIT_RESOURCE } from "./audit-actions";
 import { OAuthServiceError } from "./oauth.types";
 
@@ -18,6 +22,15 @@ export interface CreateApiKeyParams {
 	expiresAt?: string | null;
 	/** Subset of the client's granted scopes. Empty/omitted = all of them at issue time. */
 	scopeNames?: string[];
+	/**
+	 * Email the bound user that this key was created. Set by the self-service route, where
+	 * the user's own access token authorized the key and no administrator was involved --
+	 * an unexpected message is how they learn their token has been taken.
+	 *
+	 * Not best-effort: a user with no email address is refused, and a send that fails
+	 * rolls the key back (see create()).
+	 */
+	notifyUser?: boolean;
 }
 
 export interface CreateApiKeyResult {
@@ -51,6 +64,15 @@ export interface ApiKeyServiceDeps {
 	userRepo: UserRepository;
 	tokenRepo: TokenRepository;
 	adminAuditLogService: AdminAuditLogService;
+	/**
+	 * The three below are needed only by `create({ notifyUser: true })`. Optional so the
+	 * OAuth-only wiring and existing fixtures can omit them, matching how OauthTokenService
+	 * treats its own apiKeyService dep; create() refuses to notify rather than proceeding
+	 * silently when they are absent.
+	 */
+	siteRepo?: SiteSettingsRepository;
+	siteSettings?: SiteSettingsService;
+	mail?: TransactionalEmailService;
 	argonHasher?: Fetcher;
 	/**
 	 * Same policy as user passwords (see resolveHashMethod): `argon` everywhere real, and
@@ -76,6 +98,9 @@ export class ApiKeyService {
 	private readonly userRepo: UserRepository;
 	private readonly tokenRepo: TokenRepository;
 	private readonly adminAuditLogService: AdminAuditLogService;
+	private readonly siteRepo?: SiteSettingsRepository;
+	private readonly siteSettings?: SiteSettingsService;
+	private readonly mail?: TransactionalEmailService;
 	private readonly argonHasher?: Fetcher;
 	private readonly hashMethod: HashMethod;
 
@@ -85,6 +110,9 @@ export class ApiKeyService {
 		this.userRepo = deps.userRepo;
 		this.tokenRepo = deps.tokenRepo;
 		this.adminAuditLogService = deps.adminAuditLogService;
+		this.siteRepo = deps.siteRepo;
+		this.siteSettings = deps.siteSettings;
+		this.mail = deps.mail;
 		this.argonHasher = deps.argonHasher;
 		// Default argon (fail closed), matching hashPassword/verifyPassword: a caller that
 		// forgets to pass hashMethod gets the strong path, which then requires the binding.
@@ -95,8 +123,19 @@ export class ApiKeyService {
 		return { argonHasher: this.argonHasher, hashMethod: this.hashMethod };
 	}
 
-	async list(clientRowId: string): Promise<ApiKey[]> {
-		return this.apiKeyRepo.listByClient(clientRowId);
+	/**
+	 * List a client's keys, optionally confined to one bound user.
+	 *
+	 * The filter is applied here rather than in SQL because the self-service callers that
+	 * need it are the only ones that do, and a client's key list is small and already
+	 * fetched whole by {@link getByKeyIdForClient}.
+	 */
+	async list(clientRowId: string, opts?: { userId?: string | null }): Promise<ApiKey[]> {
+		const keys = await this.apiKeyRepo.listByClient(clientRowId);
+		if (!opts?.userId) {
+			return keys;
+		}
+		return keys.filter((key) => key.userId === opts.userId);
 	}
 
 	/**
@@ -152,6 +191,13 @@ export class ApiKeyService {
 		if (user.isTestUser && !client.isTest) {
 			throw new Error("A test user can only be bound to a test client");
 		}
+		// Checked before anything is written, so a user who cannot be notified never gets a
+		// key created and immediately rolled back.
+		if (params.notifyUser && !user.email?.trim()) {
+			throw new Error(
+				"Your account has no email address; an API key cannot be created without one"
+			);
+		}
 		// Normalized to canonical UTC. authenticate() compares expiry to an ISO string
 		// lexicographically, so storing an offset form like 2026-08-29T01:00:00+10:00
 		// verbatim would sort it as if it expired 10 hours later than it actually does.
@@ -206,7 +252,77 @@ export class ApiKeyService {
 		if (!created) {
 			throw new Error("Failed to load the created API key");
 		}
+
+		if (params.notifyUser) {
+			try {
+				await this.sendCreatedNotification(created, client, user.email!.trim(), grants);
+			} catch (error) {
+				// The notification is the only thing standing between a stolen access token
+				// and a silently issued long-lived credential, so a key that could not be
+				// announced must not stay usable. Revoked rather than deleted, so the audit
+				// trail still shows what happened.
+				await this.apiKeyRepo.revoke(id, new Date().toISOString());
+				const message = error instanceof Error ? error.message : String(error);
+				throw new Error(`API key notification could not be sent, so the key was revoked: ${message}`);
+			}
+		}
+
 		return { apiKey: created, presentedKey: generated.presented };
+	}
+
+	/**
+	 * Tell the bound user that a key was issued in their name. Never includes the secret:
+	 * it is shown once to the caller and is not recoverable, so there is nothing here worth
+	 * stealing from an inbox.
+	 */
+	private async sendCreatedNotification(
+		apiKey: ApiKey,
+		client: Client,
+		toEmail: string,
+		grants: ClientScopeGrant[]
+	): Promise<void> {
+		if (!this.mail || !this.siteRepo || !this.siteSettings) {
+			throw new Error("Email delivery is not configured");
+		}
+		const site = await this.siteRepo.get();
+		const siteUrl = site?.siteUrl?.trim();
+		if (!siteUrl) {
+			throw new Error("Site URL is not configured");
+		}
+		const siteUrlHttp = siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`;
+		const displayTitle = site?.siteTitle?.trim() || "API key created";
+		const logoAlt = this.siteSettings.getDisplaySiteTitle(site?.siteTitle);
+		const html = buildTransactionalEmailHtml({
+			heading: displayTitle,
+			logoUrl: this.siteSettings.getEmailLogoAbsoluteUrl(
+				site?.logoKey ?? null,
+				site?.cdnUrl ?? null
+			),
+			logoAlt,
+			bodyHtml: apiKeyCreatedBodyHtml({
+				clientName: client.name?.trim() || client.clientId,
+				keyId: apiKey.keyId,
+				name: apiKey.name,
+				scopes: grants.map((grant) => grant.scopeName),
+				expiresAt: apiKey.expiresAt,
+			}),
+			footerLine: `Sent by ${logoAlt}. If you did not create this API key, revoke it and treat your access token as compromised.`,
+		});
+
+		await this.mail.send({
+			from: this.mail.fromAddress(siteUrlHttp),
+			to: toEmail,
+			subject: `New API key created — ${displayTitle}`,
+			html,
+			text: [
+				`A new API key was created for your account using an access token issued to you.`,
+				`Application: ${client.name?.trim() || client.clientId}`,
+				`Key ID: ${apiKey.keyId}`,
+				`Scopes: ${grants.map((g) => g.scopeName).join(", ") || "none"}`,
+				`Expires: ${apiKey.expiresAt ?? "never"}`,
+				`If you did not create it, revoke it and treat your access token as compromised.`,
+			].join("\n"),
+		});
 	}
 
 	/**
@@ -217,6 +333,22 @@ export class ApiKeyService {
 	async getByKeyIdForClient(clientRowId: string, keyId: string): Promise<ApiKey | null> {
 		const keys = await this.apiKeyRepo.listByClient(clientRowId);
 		return keys.find((key) => key.keyId === keyId) ?? null;
+	}
+
+	/**
+	 * The same lookup, additionally confined to one bound user.
+	 *
+	 * Self-service callers use this so a user managing their own keys cannot reach a
+	 * colleague's key on the same client. It returns null rather than throwing, so the
+	 * route answers 404 either way and never reveals that the handle exists.
+	 */
+	async getByKeyIdForClientAndUser(
+		clientRowId: string,
+		keyId: string,
+		userId: string
+	): Promise<ApiKey | null> {
+		const key = await this.getByKeyIdForClient(clientRowId, keyId);
+		return key && key.userId === userId ? key : null;
 	}
 
 	async revoke(

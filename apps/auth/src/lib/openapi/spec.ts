@@ -1,3 +1,10 @@
+/**
+ * Appended to the API-key admin routes, which accept a second kind of caller. Kept in one
+ * place so the three operations cannot drift apart in how they describe it.
+ */
+const SELF_SERVICE_NOTE =
+	"\n\n**Self-service:** these routes additionally accept a user-scoped JWT issued by the client named in the path. Such a caller is confined to its own user: it sees only its own keys, may bind a key only to itself, and may revoke only its own. A token minted by the API-key exchange is refused, so a key cannot issue itself a successor with a later expiry or wider scopes.";
+
 export function getOpenApiDocument(serverUrl?: string) {
 	const serverList = serverUrl ? [{ url: serverUrl }] : [];
 
@@ -796,7 +803,8 @@ export function getOpenApiDocument(serverUrl?: string) {
 					tags: ["Admin"],
 					summary: "List a client's API keys",
 					description:
-						"Admin API endpoint. Requires a bearer JWT whose client is configured in Setup > Admin API. Returns every API key issued for the client, including revoked and expired ones. The secret is never returned -- it is shown only once, at creation.",
+						"Admin API endpoint. Requires a bearer JWT whose client is configured in Setup > Admin API. Returns every API key issued for the client, including revoked and expired ones. The secret is never returned -- it is shown only once, at creation." +
+						SELF_SERVICE_NOTE,
 					security: [{ bearerAuth: [] }],
 					parameters: [
 						{
@@ -832,7 +840,8 @@ export function getOpenApiDocument(serverUrl?: string) {
 							},
 						},
 						"403": {
-							description: "Token client is not configured as an admin API client",
+							description:
+								"Token client is not an admin API client and does not qualify for self-service",
 							content: {
 								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
 							},
@@ -849,7 +858,9 @@ export function getOpenApiDocument(serverUrl?: string) {
 					tags: ["Admin"],
 					summary: "Issue an API key for a client",
 					description:
-						"Admin API endpoint. Requires a bearer JWT whose client is configured in Setup > Admin API. The key is bound to a user, whose id becomes the `sub` of every token it mints.\n\n`scopes` must be a subset of the scopes granted to the client; omitting it grants all of them. The subset is a snapshot taken at issue time -- the key does not pick up scopes granted to the client later.\n\nThe full credential is returned exactly once in the `apiKey` field and cannot be recovered afterwards.",
+						"Admin API endpoint. Requires a bearer JWT whose client is configured in Setup > Admin API. The key is bound to a user, whose id becomes the `sub` of every token it mints.\n\n`scopes` must be a subset of the scopes granted to the client; omitting it grants all of them. The subset is a snapshot taken at issue time -- the key does not pick up scopes granted to the client later.\n\nThe full credential is returned exactly once in the `apiKey` field and cannot be recovered afterwards." +
+						SELF_SERVICE_NOTE +
+						" A self-service caller may omit `userId`; the key binds to the token's own user, who must have an email address on file and is emailed that the key was created.",
 					security: [{ bearerAuth: [] }],
 					parameters: [
 						{
@@ -866,12 +877,11 @@ export function getOpenApiDocument(serverUrl?: string) {
 							"application/json": {
 								schema: {
 									type: "object",
-									required: ["userId"],
 									properties: {
 										userId: {
 											type: "string",
 											description:
-												"Internal user UUID or username of the user to bind the key to. `username` is accepted as an alias.",
+												"Internal user UUID or username of the user to bind the key to. `username` is accepted as an alias. Required for an admin caller; optional for a self-service caller, which may only name its own user.",
 										},
 										name: {
 											type: ["string", "null"],
@@ -932,7 +942,8 @@ export function getOpenApiDocument(serverUrl?: string) {
 							},
 						},
 						"403": {
-							description: "Token client is not configured as an admin API client",
+							description:
+								"Token client is not an admin API client and does not qualify for self-service",
 							content: {
 								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
 							},
@@ -951,7 +962,9 @@ export function getOpenApiDocument(serverUrl?: string) {
 					tags: ["Admin"],
 					summary: "Revoke an API key",
 					description:
-						"Admin API endpoint. Requires a bearer JWT whose client is configured in Setup > Admin API. Revocation is immediate: the key stops minting tokens on the next exchange. Already-issued access tokens live out their remaining TTL.\n\nThis is a soft delete -- the record survives so the audit trail still resolves -- and is idempotent, so retrying keeps the original revocation timestamp.",
+						"Admin API endpoint. Requires a bearer JWT whose client is configured in Setup > Admin API. Revocation is immediate: the key stops minting tokens on the next exchange. Already-issued access tokens live out their remaining TTL.\n\nThis is a soft delete -- the record survives so the audit trail still resolves -- and is idempotent, so retrying keeps the original revocation timestamp." +
+						SELF_SERVICE_NOTE +
+						" A key belonging to another user answers 404, not 403, so the handle's existence is never confirmed.",
 					security: [{ bearerAuth: [] }],
 					parameters: [
 						{
@@ -989,7 +1002,8 @@ export function getOpenApiDocument(serverUrl?: string) {
 							},
 						},
 						"403": {
-							description: "Token client is not configured as an admin API client",
+							description:
+								"Token client is not an admin API client and does not qualify for self-service",
 							content: {
 								"application/json": { schema: { $ref: "#/components/schemas/OAuthError" } },
 							},

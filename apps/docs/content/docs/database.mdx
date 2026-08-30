@@ -100,6 +100,12 @@ the minted token's `sub`; both it and `client_id` cascade on delete, so a key ne
 `api_key_scopes` keys on `client_scopes(id)` like `token_scopes`, so ungranting a scope from the
 client removes it from every key that held it.
 
+`tokens.api_key_id` records provenance: it is set only on tokens minted by the API-key exchange and
+is `NULL` for every OAuth grant. The
+[self-service API-key routes](/docs/features/api-keys#self-service-a-user-managing-their-own-keys)
+refuse a token that carries it, so a key cannot issue itself a successor with a later expiry or
+wider scopes than it holds.
+
 `users.is_test_user` and `clients.is_test` are the passwordless
 [test user / test client](/docs/features/clients#test-clients) pair. A test user stores the empty
 sentinel `''` in `password_hash` — the same idiom `clients.client_secret` uses for public clients —

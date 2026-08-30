@@ -209,6 +209,7 @@ function makeAccessTokenRecord(overrides?: Partial<AccessTokenRecord>): AccessTo
 		environmentId: "env-1",
 		environmentName: "production",
 		expiresAt: "2026-04-06T14:10:00.000Z",
+		apiKeyId: null,
 		scopeNames: ["read:users", "write:users"],
 		resource: null,
 		...overrides,

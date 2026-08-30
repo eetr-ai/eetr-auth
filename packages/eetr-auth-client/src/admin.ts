@@ -58,8 +58,14 @@ export interface ApiKeyRecord {
 }
 
 export interface CreateApiKeyParams {
-  /** Internal user UUID or username to bind the key to. Required. */
-  userId: string;
+  /**
+   * Internal user UUID or username to bind the key to.
+   *
+   * Required when calling with an admin API token. Optional when calling with a
+   * user-scoped JWT issued by this same client: the key is bound to that token's own user,
+   * and naming anyone else is refused.
+   */
+  userId?: string;
   /** Human-readable label, e.g. the pipeline that uses it. */
   name?: string | null;
   /** ISO timestamp. Omit for a key that never expires. */
@@ -234,6 +240,8 @@ export async function revokeUserConsent(
  * List every API key issued for a client, including revoked and expired ones.
  *
  * The secret is never returned — it is shown only once, when the key is created.
+ *
+ * With a user-scoped JWT from this client, only that user's own keys are listed.
  */
 export async function listClientApiKeys(
   clientId: string,
@@ -254,6 +262,10 @@ export async function listClientApiKeys(
  *
  * The full credential comes back in `apiKey` and is not recoverable afterwards — store
  * it at the call site or hand it straight to the operator.
+ *
+ * Works with either an admin API token (bind the key to any user via `userId`) or a
+ * user-scoped JWT from this client (omit `userId`; the key binds to that token's user, and
+ * the server emails them that it was created).
  */
 export async function createClientApiKey(
   clientId: string,
@@ -267,7 +279,7 @@ export async function createClientApiKey(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      userId: params.userId,
+      ...(params.userId !== undefined ? { userId: params.userId } : {}),
       ...(params.name !== undefined ? { name: params.name } : {}),
       ...(params.expiresAt !== undefined ? { expiresAt: params.expiresAt } : {}),
       ...(params.scopes !== undefined ? { scopes: [...params.scopes] } : {}),
