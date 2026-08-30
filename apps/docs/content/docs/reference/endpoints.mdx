@@ -62,7 +62,9 @@ All paths are relative to your issuer base URL (e.g. `https://auth.yourdomain.co
 | POST | `/api/admin/site-logo` | Stage the site logo; applied when Site identity is saved |
 
 <sup>†</sup> Also accepts a user-scoped JWT issued by the client in the path, confined to
-that token's own user — see [self-service API keys](/docs/features/api-keys#self-service-a-user-managing-their-own-keys).
+that token's own user. A token minted by `/api/token/api-key` is refused, so a key cannot
+issue itself a successor — see
+[self-service API keys](/docs/features/api-keys#self-service-a-user-managing-their-own-keys).
 
 <Callout type="warn" title="Protect the admin endpoints">
   `/api/admin/*` is bearer-token protected in-app, but should additionally sit behind an IP allowlist
