@@ -4,6 +4,23 @@ All notable changes to this monorepo are documented in this file.
 
 The current released baseline for both the auth server and the client library is 0.3.1.
 
+## [0.5.2](https://github.com/eetr-ai/eetr-auth/compare/v0.5.1...v0.5.2) (2026-08-30)
+
+
+### Features
+
+* **ci:** publish the JS client to npm on each release ([20cfdee](https://github.com/eetr-ai/eetr-auth/commit/20cfdee4567d68d6f030a086e3862c0e276a5bf5))
+* **ci:** publish the JS client to npm on each release ([1ada634](https://github.com/eetr-ai/eetr-auth/commit/1ada6345cf985e30ef6dcaea62d4c420b8bfbc4f))
+
+
+### Bug Fixes
+
+* **admin:** move api-keys route helpers out of route.ts ([5f0b84e](https://github.com/eetr-ai/eetr-auth/commit/5f0b84e1129eaee6ecea86d6bcf66a2a1bc2da47))
+* **admin:** move api-keys route helpers out of route.ts ([8a044c2](https://github.com/eetr-ai/eetr-auth/commit/8a044c279b2f02167b7ca056d042ecb6763b73c9))
+* **auth:** only show the test-user picker while an authorization is in flight ([64ba58f](https://github.com/eetr-ai/eetr-auth/commit/64ba58f174bdda0410fa35a56bb469e04bdb37cd))
+* **consent:** stop skipping the consent screen for already-consented scopes ([0f7cdf3](https://github.com/eetr-ai/eetr-auth/commit/0f7cdf35eb2bc6314afb8d0393da22abf46b0586))
+* restore password sign-in and the consent screen's account switcher ([1956bc6](https://github.com/eetr-ai/eetr-auth/commit/1956bc6c307a9a72569025f55e5e469a5103c038))
+
 ## [0.5.1](https://github.com/eetr-ai/eetr-auth/compare/v0.5.0...v0.5.1) (2026-08-29)
 
 
