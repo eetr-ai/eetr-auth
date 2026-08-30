@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { withAdminApiClientContext } from "@/lib/context/with-admin-api-client-context";
+import { selfServiceOptions } from "../helpers";
 
 /**
  * `/api/admin/clients/{clientId}/api-keys/{keyId}` — parts are
@@ -46,8 +47,16 @@ export const DELETE = withAdminApiClientContext(async (req, _ctx, getServices, a
 		if (!client) {
 			return notFound("Client not found");
 		}
-		// Scoped to the client, so this route cannot revoke another client's key.
-		const apiKey = await apiKeyService.getByKeyIdForClient(client.id, params.keyId);
+		// Scoped to the client, so this route cannot revoke another client's key -- and, for
+		// a self-service caller, additionally to that caller's own user. A key belonging to
+		// someone else reads as 404 rather than 403, so the handle's existence stays hidden.
+		const apiKey = auth.selfServiceUserId
+			? await apiKeyService.getByKeyIdForClientAndUser(
+					client.id,
+					params.keyId,
+					auth.selfServiceUserId
+				)
+			: await apiKeyService.getByKeyIdForClient(client.id, params.keyId);
 		if (!apiKey) {
 			return notFound("API key not found");
 		}
@@ -62,4 +71,4 @@ export const DELETE = withAdminApiClientContext(async (req, _ctx, getServices, a
 		const message = error instanceof Error ? error.message : "Unexpected error.";
 		return NextResponse.json({ error: "server_error", error_description: message }, { status: 500 });
 	}
-});
+}, selfServiceOptions);

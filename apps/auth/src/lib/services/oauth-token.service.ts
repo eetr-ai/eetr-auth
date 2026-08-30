@@ -120,6 +120,12 @@ export interface ValidateTokenResult {
 	active: boolean;
 	clientId: string | null;
 	subject: string | null;
+	/**
+	 * The api_keys row that minted this token, or null for every OAuth grant. Callers that
+	 * must not accept a machine credential -- notably the self-service API-key routes --
+	 * refuse a validation result carrying this.
+	 */
+	apiKeyId: string | null;
 	environmentId: string | null;
 	environmentMatch: boolean;
 	expectedEnvironmentName: string | null;
@@ -272,6 +278,12 @@ export class OauthTokenService {
 		 * false: its long-lived credential is the API key itself.
 		 */
 		issueRefreshToken?: boolean;
+		/**
+		 * Provenance, recorded on the access token row. Only the API-key exchange sets it;
+		 * every OAuth grant leaves it null. Read back by validateAccessToken so a caller can
+		 * refuse a token that a machine credential minted.
+		 */
+		apiKeyRowId?: string | null;
 	}): Promise<OAuthTokenResponse> {
 		const env = this.env as unknown as Record<string, unknown>;
 		// Prefer ctx.env; in next dev, .env.local is in process.env but may not be merged into ctx.env
@@ -329,6 +341,7 @@ export class OauthTokenService {
 				client_id: params.clientId,
 				expires_at: accessExpiresAt.toISOString(),
 				resource: params.resource ?? null,
+				api_key_id: params.apiKeyRowId ?? null,
 			},
 			params.clientScopeIds
 		);
@@ -380,6 +393,7 @@ export class OauthTokenService {
 		authTime?: string | null;
 		resource?: string | null;
 		issueRefreshToken?: boolean;
+		apiKeyRowId?: string | null;
 	}): Promise<OAuthTokenResponse> {
 		const t0 = Date.now();
 		const now = new Date();
@@ -460,6 +474,7 @@ export class OauthTokenService {
 				client_id: params.clientId,
 				expires_at: accessExpiresAt.toISOString(),
 				resource: params.resource ?? null,
+				api_key_id: params.apiKeyRowId ?? null,
 			},
 			params.clientScopeIds
 		);
@@ -658,6 +673,9 @@ export class OauthTokenService {
 			clientIdentifier: authenticated.client.clientId,
 			resource,
 			issueRefreshToken: false,
+			// Provenance. The self-service API-key routes refuse a token carrying this, so a
+			// key cannot mint a successor to itself that outlives or out-scopes it.
+			apiKeyRowId: authenticated.apiKey.id,
 		});
 		logTokenStep("api_key_total", t0);
 		return {
@@ -1064,6 +1082,7 @@ export class OauthTokenService {
 				active: false,
 				clientId: null,
 				subject: null,
+				apiKeyId: null,
 				environmentId: null,
 				environmentMatch: false,
 				expectedEnvironmentName,
@@ -1093,6 +1112,7 @@ export class OauthTokenService {
 				active: false,
 				clientId: null,
 				subject: null,
+				apiKeyId: null,
 				environmentId: null,
 				environmentMatch: false,
 				expectedEnvironmentName,
@@ -1125,6 +1145,7 @@ export class OauthTokenService {
 			active,
 			clientId: tokenRecord.clientId,
 			subject: null,
+			apiKeyId: tokenRecord.apiKeyId,
 			environmentId: tokenRecord.environmentId,
 			environmentMatch,
 			expectedEnvironmentName,
@@ -1188,6 +1209,7 @@ export class OauthTokenService {
 			active: false,
 			clientId: null,
 			subject: null,
+			apiKeyId: null,
 			environmentId: null,
 			environmentMatch: false,
 			expectedEnvironmentName,
@@ -1205,6 +1227,7 @@ export class OauthTokenService {
 			expiresAt: string;
 			scopeNames: string[];
 			resource: string | null;
+			apiKeyId: string | null;
 		}, subject: string | null): ValidateTokenResult => {
 			const nowIso = new Date().toISOString();
 			const active = tokenRecord.expiresAt > nowIso;
@@ -1237,6 +1260,7 @@ export class OauthTokenService {
 				active,
 				clientId: tokenRecord.clientId,
 				subject,
+				apiKeyId: tokenRecord.apiKeyId,
 				environmentId: tokenRecord.environmentId,
 				environmentMatch,
 				expectedEnvironmentName,

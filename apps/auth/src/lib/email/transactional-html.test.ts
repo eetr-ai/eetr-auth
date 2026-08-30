@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	apiKeyCreatedBodyHtml,
 	buildTransactionalEmailHtml,
 	emailVerificationBodyHtml,
 	escapeHtml,
@@ -122,5 +123,43 @@ describe("passwordResetBodyHtml", () => {
 	it("escapes HTML in the URLs", () => {
 		const html = passwordResetBodyHtml('https://example.com/reset?t=a"b', 'https://example.com/cancel?t=a"b', 60);
 		expect(html).toContain("&quot;");
+	});
+});
+
+describe("apiKeyCreatedBodyHtml", () => {
+	const details = {
+		clientName: "CI client",
+		keyId: "3f2a9c1b4d5e6f70",
+		name: "deploy pipeline",
+		scopes: ["read", "write"],
+		expiresAt: "2027-01-01T00:00:00.000Z",
+	};
+
+	it("names the key by its public handle and lists what it can do", () => {
+		const html = apiKeyCreatedBodyHtml(details);
+		expect(html).toContain("3f2a9c1b4d5e6f70");
+		expect(html).toContain("CI client");
+		expect(html).toContain("deploy pipeline");
+		expect(html).toContain("read, write");
+		expect(html).toContain("2027-01-01T00:00:00.000Z");
+	});
+
+	it("spells out the absent cases rather than leaving them blank", () => {
+		const html = apiKeyCreatedBodyHtml({ ...details, name: null, scopes: [], expiresAt: null });
+		expect(html).toContain("never");
+		expect(html).toContain("none");
+		// An unnamed key omits the row entirely instead of showing an empty label.
+		expect(html).not.toContain("Name");
+	});
+
+	it("tells the reader what to do if they did not create it", () => {
+		// The whole point of the message: an unexpected one means the token was taken.
+		expect(apiKeyCreatedBodyHtml(details)).toContain("revoke it");
+	});
+
+	it("escapes HTML in the client name", () => {
+		const html = apiKeyCreatedBodyHtml({ ...details, clientName: '<img src=x onerror="a">' });
+		expect(html).not.toContain("<img");
+		expect(html).toContain("&lt;img");
 	});
 });

@@ -110,6 +110,64 @@ Revocation is a soft delete: the record survives so the audit trail still resolv
 twice keeps the original timestamp. It takes effect on the next exchange — access tokens already
 minted live out their remaining hour.
 
+## Self-service: a user managing their own keys
+
+The admin routes above need an [admin API client](/docs/features/admin#admin-api) — a
+credential an operator holds. That is the right shape for provisioning a pipeline, and the
+wrong shape for letting a signed-in developer mint a key for themselves.
+
+So the same three routes accept a **second** kind of caller: a user-scoped JWT issued by the
+very client named in the path. No configuration is needed; a client can always manage its
+own keys.
+
+```bash
+# $USER_TOKEN is an ordinary access token this client minted for a signed-in user
+curl -X POST https://auth.example.com/api/admin/clients/$CLIENT_ID/api-keys \
+  -H "Authorization: Bearer $USER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"my laptop","scopes":["api"]}'
+```
+
+There is no `userId`: the token already says who the user is, and that is the only user this
+caller may bind a key to. The same confinement applies throughout — the list returns only
+that user's keys, and revoking someone else's answers `404`, never `403`, so the handle's
+existence is never confirmed.
+
+A caller qualifies only if all three hold:
+
+| Condition | Why |
+|---|---|
+| The token was issued by the client in the path | Otherwise knowing another client's public `client_id` would be enough to manage its keys |
+| The token carries a `sub` | A `client_credentials` token names no user, so there is nobody to confine the request to |
+| The token was **not** minted by an API key | See below |
+
+<Callout type="warn" title="A key cannot issue its own successor">
+  Without the third rule, a key expiring next week and narrowed to `read` could exchange
+  itself for a token and use that token to create a never-expiring key holding every scope
+  the client has — laundering away both limits it was created with. Tokens from
+  `/api/token/api-key` therefore carry their originating key (`tokens.api_key_id`), and these
+  routes refuse them. Admin callers are unaffected.
+</Callout>
+
+Failing the first condition returns exactly the message a plain non-admin token gets, so
+these endpoints cannot be probed for which clients are configured as admin API clients.
+
+### The user is always told
+
+A self-service key is authorized by the user's own token with no administrator in the loop,
+so the bound user is **emailed** whenever one is created — naming the client, the key id, its
+scopes and expiry, but never the secret. An unexpected message is how someone learns their
+access token has been taken.
+
+That makes an email address a precondition, not a nicety:
+
+- A user with no email address on file is refused with `400`, before anything is written.
+- If the message cannot be delivered, the key is **revoked** and the call fails. A key
+  nobody could be told about does not stay usable.
+
+Neither applies to the admin path: an operator issuing a key for a service account is
+already the accountable party, and that account often has no mailbox at all.
+
 ## Exchanging a key for a token
 
 ```bash

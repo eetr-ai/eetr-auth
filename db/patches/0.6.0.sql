@@ -31,6 +31,12 @@
 --     via the same argon-hasher service that stores user passwords. user_id is mandatory,
 --     so the minted JWT's `sub` always names a real person. api_key_scopes keys on
 --     client_scopes(id) like token_scopes, so ungranting a client scope cascades.
+--       - tokens.api_key_id: provenance, set only on tokens minted by the API-key exchange.
+--         The self-service API-key routes refuse such a token, so a key cannot mint a
+--         successor to itself with a later expiry or wider scopes than it holds.
+--     A key's scope subset is always materialized at issue time, so it is a SNAPSHOT: no
+--     rows for a key means the key mints NOTHING (every scope it held was ungranted from
+--     the client and cascaded away), never "everything the client happens to hold now".
 --   * Human-readable label for environments:
 --       - environments.display_name, admin-UI only.
 --     environments.name stays the stable identifier -- it is the `environment` JWT claim, the
@@ -39,7 +45,7 @@
 --
 -- Idempotency: the new table + indexes + triggers use CREATE ... IF NOT EXISTS, and the seed-copy
 -- backfill is guarded on `IS NULL`, so both are replay-safe. SQLite has no
--- `ADD COLUMN IF NOT EXISTS`, so the five ADD COLUMN statements are the non-idempotent
+-- `ADD COLUMN IF NOT EXISTS`, so the six ADD COLUMN statements are the non-idempotent
 -- ones; they are applied exactly once by the version gate in run-d1-migrate.mjs (patches
 -- strictly greater than the DB's current version). On a manual re-run against a DB that
 -- already has these columns, remove those lines.
@@ -192,8 +198,10 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id);
 -- The scope subset a key may mint, keyed on client_scopes(id) exactly like token_scopes
 -- and refresh_token_scopes. Keying on the grant rather than the scope name means revoking
 -- a scope from the client cascades to every key that referenced it, so a key can never
--- outlive its client's grant. No rows for a key = the key mints all of the client's
--- current scopes.
+-- outlive its client's grant. The subset is always materialized at creation, so no rows
+-- for a key means it mints nothing at all -- never a fallback to the client's current
+-- grants, which would let a key narrowed to `read` come back minting whatever was added
+-- to the client later.
 CREATE TABLE IF NOT EXISTS api_key_scopes (
   id TEXT PRIMARY KEY,
   api_key_id TEXT NOT NULL,
@@ -204,5 +212,17 @@ CREATE TABLE IF NOT EXISTS api_key_scopes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_api_key_scopes_api_key_id ON api_key_scopes(api_key_id);
+
+-- Token provenance. Set only by POST /api/token/api-key, naming the api_keys row that
+-- minted the token; NULL for every OAuth grant, including every token issued before this
+-- patch. Declared after api_keys so the referenced table exists.
+--
+-- This exists so the self-service API-key routes can refuse a token that an API key
+-- minted. Without it, a key expiring next week and narrowed to `read` could exchange
+-- itself for a token and use that token to issue a never-expiring key holding every
+-- scope the client has -- laundering away both limits the key was created with.
+--
+-- Non-idempotent ADD COLUMN (applied exactly once by the version gate; see header note).
+ALTER TABLE tokens ADD COLUMN api_key_id TEXT REFERENCES api_keys(id) ON DELETE SET NULL;
 
 UPDATE schema_metadata SET value = '0.6.0' WHERE key = 'schema_version';

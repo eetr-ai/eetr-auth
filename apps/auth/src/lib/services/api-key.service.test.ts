@@ -86,6 +86,7 @@ interface Harness {
 	userRepo: UserRepository;
 	tokenRepo: TokenRepository;
 	auditInsert: ReturnType<typeof vi.fn>;
+	mailSend: ReturnType<typeof vi.fn>;
 }
 
 function createHarness(options: { argonHasher?: Fetcher | undefined } = {}): Harness {
@@ -117,6 +118,25 @@ function createHarness(options: { argonHasher?: Fetcher | undefined } = {}): Har
 	const auditInsert = vi.fn();
 	const logRepo: AdminAuditLogRepository = { insert: auditInsert, listLogs: vi.fn() };
 
+	// Only the self-service create path touches these.
+	const mailSend = vi.fn().mockResolvedValue(undefined);
+	const mail = {
+		send: mailSend,
+		fromAddress: () => "no-reply@auth.example",
+	} as unknown as ConstructorParameters<typeof ApiKeyService>[0]["mail"];
+	const siteRepo = {
+		get: vi.fn().mockResolvedValue({
+			siteUrl: "https://auth.example",
+			siteTitle: "Example Auth",
+			logoKey: null,
+			cdnUrl: null,
+		}),
+	} as unknown as ConstructorParameters<typeof ApiKeyService>[0]["siteRepo"];
+	const siteSettings = {
+		getDisplaySiteTitle: (title?: string | null) => title ?? "Example Auth",
+		getEmailLogoAbsoluteUrl: () => "https://auth.example/logo.png",
+	} as unknown as ConstructorParameters<typeof ApiKeyService>[0]["siteSettings"];
+
 	const service = new ApiKeyService({
 		apiKeyRepo,
 		clientRepo,
@@ -124,9 +144,12 @@ function createHarness(options: { argonHasher?: Fetcher | undefined } = {}): Har
 		tokenRepo,
 		adminAuditLogService: new AdminAuditLogService({ logRepo }),
 		argonHasher: "argonHasher" in options ? options.argonHasher : createArgonHasherMock(),
+		mail,
+		siteRepo,
+		siteSettings,
 	});
 
-	return { service, apiKeyRepo, clientRepo, userRepo, tokenRepo, auditInsert };
+	return { service, apiKeyRepo, clientRepo, userRepo, tokenRepo, auditInsert, mailSend };
 }
 
 describe("ApiKeyService", () => {
@@ -134,6 +157,121 @@ describe("ApiKeyService", () => {
 
 	beforeEach(() => {
 		harness = createHarness();
+	});
+
+	describe("create with notifyUser (self-service)", () => {
+		it("emails the bound user, naming the key but never the secret", async () => {
+			const { service, apiKeyRepo, userRepo, mailSend } = harness;
+			vi.mocked(userRepo.getById).mockResolvedValue(createUser({ email: "ci@example.com" }));
+			vi.mocked(apiKeyRepo.getById).mockResolvedValue(createStoredKey({ name: "deploy" }));
+
+			const result = await service.create(
+				{ clientRowId: "client-row-1", userId: "user-1", scopeNames: ["read"], notifyUser: true },
+				"user-1"
+			);
+
+			expect(mailSend).toHaveBeenCalledTimes(1);
+			const [message] = mailSend.mock.calls[0];
+			expect(message.to).toBe("ci@example.com");
+			expect(message.subject).toContain("New API key created");
+			// The public handle is fine to email; the credential is not.
+			expect(message.html).toContain("aaaaaaaaaaaaaaaa");
+			const [, , secret] = result.presentedKey.split("_");
+			expect(message.html).not.toContain(secret);
+			expect(message.text).not.toContain(secret);
+			expect(message.html).toContain("read");
+		});
+
+		it("refuses before writing anything when the user has no email address", async () => {
+			const { service, apiKeyRepo, mailSend } = harness;
+
+			await expect(
+				service.create(
+					{ clientRowId: "client-row-1", userId: "user-1", notifyUser: true },
+					"user-1"
+				)
+			).rejects.toThrow(/has no email address/u);
+
+			// The check runs before any write, so there is no key to roll back.
+			expect(apiKeyRepo.create).not.toHaveBeenCalled();
+			expect(mailSend).not.toHaveBeenCalled();
+		});
+
+		it("revokes the key and fails when the notification cannot be delivered", async () => {
+			const { service, apiKeyRepo, userRepo, mailSend } = harness;
+			vi.mocked(userRepo.getById).mockResolvedValue(createUser({ email: "ci@example.com" }));
+			vi.mocked(apiKeyRepo.getById).mockResolvedValue(createStoredKey());
+			mailSend.mockRejectedValue(new Error("Resend error (application_error): down"));
+
+			// A key nobody could be told about must not stay usable -- otherwise a stolen
+			// access token could mint a long-lived credential in silence.
+			await expect(
+				service.create(
+					{ clientRowId: "client-row-1", userId: "user-1", notifyUser: true },
+					"user-1"
+				)
+			).rejects.toThrow(/notification could not be sent, so the key was revoked/u);
+
+			// Revoked by the row id that was just inserted, not the fixture's.
+			const [insertedRow] = vi.mocked(apiKeyRepo.create).mock.calls[0];
+			expect(apiKeyRepo.revoke).toHaveBeenCalledWith(insertedRow.id, expect.any(String));
+		});
+
+		it("does not email at all on the ordinary admin path", async () => {
+			const { service, apiKeyRepo, userRepo, mailSend } = harness;
+			vi.mocked(userRepo.getById).mockResolvedValue(createUser({ email: "ci@example.com" }));
+			vi.mocked(apiKeyRepo.getById).mockResolvedValue(createStoredKey());
+
+			await service.create({ clientRowId: "client-row-1", userId: "user-1" }, "admin");
+
+			expect(mailSend).not.toHaveBeenCalled();
+		});
+
+		it("creates the key for a user with no email when notification is not requested", async () => {
+			const { service, apiKeyRepo } = harness;
+			vi.mocked(apiKeyRepo.getById).mockResolvedValue(createStoredKey());
+
+			// An admin issuing a key for a service account must not be blocked by a missing
+			// address -- the precondition belongs to the self-service path only.
+			await expect(
+				service.create({ clientRowId: "client-row-1", userId: "user-1" }, "admin")
+			).resolves.toMatchObject({ presentedKey: expect.any(String) });
+		});
+	});
+
+	describe("list and lookup confined to a user", () => {
+		const mine = createStoredKey({ id: "key-mine", keyId: "1111111111111111", userId: "user-1" });
+		const theirs = createStoredKey({ id: "key-theirs", keyId: "2222222222222222", userId: "user-2" });
+
+		it("returns every key for an unconfined caller", async () => {
+			const { service, apiKeyRepo } = harness;
+			vi.mocked(apiKeyRepo.listByClient).mockResolvedValue([mine, theirs]);
+
+			expect(await service.list("client-row-1")).toHaveLength(2);
+			// An explicitly absent filter is not a filter.
+			expect(await service.list("client-row-1", { userId: null })).toHaveLength(2);
+		});
+
+		it("returns only the confined user's keys", async () => {
+			const { service, apiKeyRepo } = harness;
+			vi.mocked(apiKeyRepo.listByClient).mockResolvedValue([mine, theirs]);
+
+			const keys = await service.list("client-row-1", { userId: "user-1" });
+			expect(keys.map((k) => k.id)).toEqual(["key-mine"]);
+		});
+
+		it("hides another user's key from a confined lookup", async () => {
+			const { service, apiKeyRepo } = harness;
+			vi.mocked(apiKeyRepo.listByClient).mockResolvedValue([mine, theirs]);
+
+			expect(
+				await service.getByKeyIdForClientAndUser("client-row-1", "1111111111111111", "user-1")
+			).toMatchObject({ id: "key-mine" });
+			// Same handle, wrong owner: null, so the route answers 404 rather than revealing it.
+			expect(
+				await service.getByKeyIdForClientAndUser("client-row-1", "2222222222222222", "user-1")
+			).toBeNull();
+		});
 	});
 
 	describe("create", () => {

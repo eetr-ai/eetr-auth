@@ -72,6 +72,21 @@ describe("listClientApiKeys", () => {
 describe("createClientApiKey", () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it("omits userId entirely when self-service should infer it from the token", async () => {
+    const created = { ...apiKeyRecord, apiKey: "eak_3f2a9c1b4d5e6f70_deadbeef" };
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(jsonResponse(created, { status: 201 }));
+
+    await createClientApiKey("cli_abc", { name: "deploy" }, config);
+
+    // Sending `userId: undefined` would serialize the key away anyway, but an explicit
+    // `null` would reach the server as a bad reference — so assert the field is absent.
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(body).not.toHaveProperty("userId");
+    expect(body).toEqual({ name: "deploy" });
+  });
+
   it("POSTs the binding and returns the one-time credential", async () => {
     const created = { ...apiKeyRecord, apiKey: "eak_3f2a9c1b4d5e6f70_deadbeef" };
     const fetchMock = vi
