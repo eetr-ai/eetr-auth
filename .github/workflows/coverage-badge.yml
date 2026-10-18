@@ -54,7 +54,7 @@ jobs:
           echo "Aggregate line coverage: $PCT%"
 
       - name: Write coverage badge to gist
-        uses: schneegans/dynamic-badges-action@v1.7.0
+        uses: schneegans/dynamic-badges-action@v1.9.0
         with:
           auth: ${{ secrets.GIST_SECRET }}
           gistID: 6c3e9b0934625c845df2ffb18bfe4f6d
