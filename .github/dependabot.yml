@@ -1,0 +1,49 @@
+# Dependabot version updates. Weekly, with minor/patch bumps grouped per ecosystem so
+# routine upgrades land as one PR instead of a dozen; majors still come one at a time
+# because those are the ones that need reading. Commit messages use the `chore(deps)`
+# conventional-commit prefix, so release-please lists them without cutting a release.
+version: 2
+updates:
+  # One lockfile at the root covers every npm workspace (apps/auth, apps/docs, packages/*).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      actions:
+        update-types: [minor, patch]
+
+  # The argon2id hashing worker.
+  - package-ecosystem: cargo
+    directory: /apps/argon-hasher
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      cargo-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: terraform
+    directory: /infra/terraform
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
