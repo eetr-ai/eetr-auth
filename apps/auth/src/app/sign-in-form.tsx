@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { startAuthentication, browserSupportsWebAuthnAutofill } from "@simplewebauthn/browser";
-import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/types";
+import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/browser";
 import {
 	beginSignInChallenge,
 	changePasswordAtSignIn,
@@ -60,7 +60,7 @@ export function SignInForm({ mfaEnabled, callbackUrl }: Props) {
 				options: PublicKeyCredentialRequestOptionsJSON;
 			};
 
-			const authResponse = await startAuthentication(options, useBrowserAutofill);
+			const authResponse = await startAuthentication({ optionsJSON: options, useBrowserAutofill });
 
 			const verifyRes = await fetch("/api/auth/passkey/verify", {
 				method: "POST",

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { startRegistration } from "@simplewebauthn/browser";
-import type { PublicKeyCredentialCreationOptionsJSON } from "@simplewebauthn/types";
+import type { PublicKeyCredentialCreationOptionsJSON } from "@simplewebauthn/browser";
 import { Fingerprint, Loader2 } from "lucide-react";
 
 type Status = "loading" | "prompt" | "enrolling" | "enrolled" | "dismissed" | "hidden";
@@ -42,7 +42,7 @@ export default function PasskeyPrompt() {
 				options: PublicKeyCredentialCreationOptionsJSON;
 			};
 
-			const regResponse = await startRegistration(options);
+			const regResponse = await startRegistration({ optionsJSON: options });
 
 			const registerRes = await fetch("/api/users/passkey/register", {
 				method: "POST",

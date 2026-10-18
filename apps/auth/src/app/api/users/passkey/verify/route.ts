@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { withApiContext } from "@/lib/context/with-api-context";
 import { authenticateSessionOrBearerUser } from "@/lib/auth/authenticate-session-or-bearer-user";
-import type { AuthenticationResponseJSON } from "@simplewebauthn/types";
+import type { AuthenticationResponseJSON } from "@simplewebauthn/server";
 
 function toErrorResponse(error: unknown) {
 	const message = error instanceof Error ? error.message : "Unexpected error.";

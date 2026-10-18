@@ -5,7 +5,7 @@ import { startRegistration, startAuthentication } from "@simplewebauthn/browser"
 import type {
 	PublicKeyCredentialCreationOptionsJSON,
 	PublicKeyCredentialRequestOptionsJSON,
-} from "@simplewebauthn/types";
+} from "@simplewebauthn/browser";
 import { UserCircle } from "lucide-react";
 import { FullPageSpinner, PageHeader } from "@/components/ui";
 import {
@@ -229,7 +229,7 @@ export default function SettingsPage() {
 				options: PublicKeyCredentialCreationOptionsJSON;
 			};
 
-			const regResponse = await startRegistration(options);
+			const regResponse = await startRegistration({ optionsJSON: options });
 
 			const registerRes = await fetch("/api/users/passkey/register", {
 				method: "POST",
@@ -348,7 +348,7 @@ export default function SettingsPage() {
 				options: PublicKeyCredentialRequestOptionsJSON;
 			};
 
-			const authResponse = await startAuthentication(options);
+			const authResponse = await startAuthentication({ optionsJSON: options });
 
 			const verifyRes = await fetch("/api/users/passkey/verify", {
 				method: "POST",

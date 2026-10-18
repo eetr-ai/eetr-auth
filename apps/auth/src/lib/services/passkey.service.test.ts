@@ -5,7 +5,7 @@ import {
 	verifyAuthenticationResponse,
 	verifyRegistrationResponse,
 } from "@simplewebauthn/server";
-import type { AuthenticationResponseJSON, RegistrationResponseJSON } from "@simplewebauthn/types";
+import type { AuthenticationResponseJSON, RegistrationResponseJSON } from "@simplewebauthn/server";
 
 import type { UserRepository } from "@/lib/repositories/admin.repository";
 import type {
@@ -142,9 +142,7 @@ function setupRegistrationSuccess() {
 	verifyRegistrationResponseMock.mockResolvedValue({
 		verified: true,
 		registrationInfo: {
-			credentialID: new Uint8Array([1, 2, 3]),
-			credentialPublicKey: new Uint8Array([4, 5, 6]),
-			counter: 7,
+			credential: { id: "AQID", publicKey: new Uint8Array([4, 5, 6]), counter: 7 },
 			credentialDeviceType: "singleDevice",
 			credentialBackedUp: false,
 		},
@@ -232,7 +230,7 @@ describe("PasskeyService", () => {
 				rpID: "auth.example.com",
 				userName: "alice",
 				userDisplayName: "Alice",
-				userID: "user-1",
+				userID: new TextEncoder().encode("user-1"),
 			})
 		);
 		expect(repo.insertChallenge).toHaveBeenCalledWith({
@@ -295,9 +293,7 @@ describe("PasskeyService", () => {
 		verifyRegistrationResponseMock.mockResolvedValue({
 			verified: true,
 			registrationInfo: {
-				credentialID: new Uint8Array([1, 2, 3]),
-				credentialPublicKey: new Uint8Array([4, 5, 6]),
-				counter: 7,
+				credential: { id: "AQID", publicKey: new Uint8Array([4, 5, 6]), counter: 7 },
 				credentialDeviceType: "singleDevice",
 				credentialBackedUp: false,
 			},
@@ -321,6 +317,9 @@ describe("PasskeyService", () => {
 			expect.objectContaining({
 				id: "challenge-1",
 				userId: "user-1",
+				// Stored as base64url of the raw bytes, the same format v9 wrote.
+				credentialId: "AQID",
+				publicKey: "BAUG",
 				counter: 7,
 				deviceType: "singleDevice",
 				backedUp: false,
@@ -488,6 +487,10 @@ describe("PasskeyService", () => {
 				expectedChallenge: "authentication-challenge",
 				expectedOrigin: "https://auth.sub.example.com",
 				expectedRPID: ["auth.sub.example.com", "example.com"],
+				credential: expect.objectContaining({
+					id: "credential-base64url",
+					publicKey: new Uint8Array([4, 5, 6]),
+				}),
 			})
 		);
 		expect(repo.updateCredentialCounter).toHaveBeenCalledWith(
@@ -649,10 +652,10 @@ describe("PasskeyService", () => {
 		expect(result?.challengeId).toBeTypeOf("string");
 		// Challenge is scoped to exactly the requested credential.
 		const optsArg = generateAuthenticationOptionsMock.mock.calls[0][0] as unknown as {
-			allowCredentials: { id: Buffer }[];
+			allowCredentials: { id: string }[];
 		};
 		expect(optsArg.allowCredentials).toHaveLength(1);
-		expect(optsArg.allowCredentials[0].id.toString("base64url")).toBe("credential-base64url");
+		expect(optsArg.allowCredentials[0].id).toBe("credential-base64url");
 		// Challenge row is bound to the user (so verify can re-check ownership).
 		expect(repo.insertChallenge).toHaveBeenCalledWith(
 			expect.objectContaining({ userId: "user-1", kind: "authentication", challenge: "availability-challenge" })
