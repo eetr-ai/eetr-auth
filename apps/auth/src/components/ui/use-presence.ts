@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 /**
  * Keeps a conditionally-rendered overlay mounted long enough for its exit
@@ -32,19 +32,38 @@ import { useEffect, useState } from "react";
  * `durationMs` MUST match the `duration-*` class on the animated node.
  */
 export function usePresence(open: boolean, durationMs: number): { mounted: boolean } {
-	// Always starts false so createPortal is never called during SSR or the
-	// first hydration render.
-	const [mounted, setMounted] = useState(false);
+	// False on the server and through the hydration render, true from then on, so
+	// createPortal is never called during SSR or the first hydration render.
+	const hydrated = useSyncExternalStore(subscribeNever, isClient, isServer);
+
+	// `lingering` covers the exit window after `open` drops. It is adjusted during render
+	// when `open` flips (React's pattern for state that tracks a prop) rather than in an
+	// effect, so the overlay does not paint one frame unmounted on the way up. Reopening
+	// mid-exit clears it, which also cancels the pending timer below.
+	const [lingering, setLingering] = useState(false);
+	const [prevOpen, setPrevOpen] = useState(open);
+	if (prevOpen !== open) {
+		setPrevOpen(open);
+		setLingering(!open);
+	}
 
 	useEffect(() => {
-		if (open) {
-			setMounted(true);
-			return;
-		}
-		if (!mounted) return;
-		const timer = setTimeout(() => setMounted(false), durationMs);
+		if (!lingering) return;
+		const timer = setTimeout(() => setLingering(false), durationMs);
 		return () => clearTimeout(timer);
-	}, [open, mounted, durationMs]);
+	}, [lingering, durationMs]);
 
-	return { mounted };
+	return { mounted: hydrated && (open || lingering) };
+}
+
+// Nothing to subscribe to: the value only changes between the server/hydration
+// snapshot and the client one, which useSyncExternalStore handles on its own.
+function subscribeNever() {
+	return () => {};
+}
+function isClient() {
+	return true;
+}
+function isServer() {
+	return false;
 }
