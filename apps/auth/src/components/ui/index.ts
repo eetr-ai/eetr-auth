@@ -36,6 +36,7 @@ export { PageHeader, type PageHeaderProps } from "./page-header";
 export { EmptyState, type EmptyStateProps } from "./empty-state";
 // The overlay hooks (use-presence / use-focus-trap / use-scroll-lock) are
 // implementation details of these two and are intentionally not exported.
+export { useLatestRef } from "./use-latest-ref";
 export { SidePanel, type SidePanelProps, type SidePanelWidth } from "./side-panel";
 export { ConfirmDialog, type ConfirmDialogProps } from "./confirm-dialog";
 export {

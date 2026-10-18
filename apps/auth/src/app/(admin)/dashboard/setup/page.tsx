@@ -3,7 +3,14 @@
 import { ReducerAction, bootstrapProvider } from "@eetr/react-reducer-utils";
 import { useEffect, useRef } from "react";
 import { Layers, Pencil, Plus, Settings, Tag } from "lucide-react";
-import { Button, ConfirmDialog, FullPageSpinner, PageHeader, SidePanel } from "@/components/ui";
+import {
+	Button,
+	ConfirmDialog,
+	FullPageSpinner,
+	PageHeader,
+	SidePanel,
+	useLatestRef,
+} from "@/components/ui";
 import {
 	listEnvironments,
 	createEnvironment,
@@ -164,13 +171,12 @@ function SetupPageContent() {
 
 	// The save, clear and replace paths each revoke the previous preview, but
 	// leaving the page with one staged unmounts without passing through them.
-	const logoPreviewUrlRef = useRef<string | null>(null);
-	logoPreviewUrlRef.current = logoPreviewUrl;
+	const logoPreviewUrlRef = useLatestRef(logoPreviewUrl);
 	useEffect(
 		() => () => {
 			if (logoPreviewUrlRef.current) URL.revokeObjectURL(logoPreviewUrlRef.current);
 		},
-		[],
+		[logoPreviewUrlRef],
 	);
 
 	const envDirty = isEnvironmentDraftDirty(envDraft, envBaseline);
