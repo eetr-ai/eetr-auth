@@ -1,5 +1,5 @@
 {
   "title": "Architecture",
-  "icon": "Building2",
+  "icon": "BuildingComplex",
   "pages": ["index", "argon-hasher"]
 }
