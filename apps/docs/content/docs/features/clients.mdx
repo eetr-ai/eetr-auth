@@ -74,6 +74,23 @@ a session they already hold, and that case goes through the consent screen.
   sessions with one click. Refused by the service and by a DB `CHECK`.
 </Callout>
 
+## Home link
+
+A client can carry an optional **home link**: where the application lives, so the auth app can send
+users there. It has three fields in the client panel, stored as `clients.home_url`,
+`home_display_name` and `show_on_home`:
+
+| Field | Meaning |
+| --- | --- |
+| Home URL | The application's address. Must be `http://` or `https://`. |
+| Display name | The label shown for it. Falls back to the client name, then the `client_id`. At most 80 characters. |
+| Show on the user home page | Lists the link on the page a signed-in non-admin sees at `/`. Needs a URL. |
+
+That page is where a regular user ends up when there is nowhere else to send them, most often
+straight after a [password reset](/docs/features/authentication), whose link carries no callback.
+Instead of a dead end, they get the [non-admin landing page](/docs/features/admin#non-admin-landing)
+listing every client marked to show there. Test clients and expired clients are never listed.
+
 ## Dynamic Client Registration (RFC 7591)
 
 `POST /api/register` lets clients self-register without an admin. It is a public endpoint,

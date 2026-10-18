@@ -1,6 +1,6 @@
 import type { FormEvent } from "react";
 import { LogOut, Mail, ShieldCheck, Smartphone } from "lucide-react";
-import { Banner, Button, Input } from "@/components/ui";
+import { Banner, Button, Input, Label } from "@/components/ui";
 
 interface OtpStepProps {
 	otpPurpose: "mfa" | "email_verification";
@@ -40,9 +40,9 @@ export function OtpStep({
 				}
 			/>
 			<div className="space-y-2">
-				<label htmlFor="otp" className="block text-sm font-medium text-foreground">
+				<Label htmlFor="otp" flush>
 					Verification code
-				</label>
+				</Label>
 				<Input
 					id="otp"
 					name="otp"

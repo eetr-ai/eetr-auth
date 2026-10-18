@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Check, Copy, TriangleAlert } from "lucide-react";
-import { Banner } from "@/components/ui";
+import { Banner, LabelText } from "@/components/ui";
 
 interface SecretRevealProps {
 	clientId: string;
@@ -78,7 +78,7 @@ interface FieldProps {
 function Field({ label, value, copied, onCopy }: FieldProps) {
 	return (
 		<div>
-			<span className="mb-1 block text-sm text-muted-foreground">{label}</span>
+			<LabelText>{label}</LabelText>
 			<div className="flex items-center gap-2">
 				<code className="min-w-0 flex-1 truncate rounded-control border border-border bg-surface-sunken px-3 py-2 font-mono text-xs">
 					{value}

@@ -26,6 +26,9 @@ export async function createClient(params: {
 	name?: string | null;
 	/** Immutable after creation; there is deliberately no update counterpart. */
 	isTest?: boolean;
+	homeUrl?: string | null;
+	homeDisplayName?: string | null;
+	showOnHome?: boolean;
 }) {
 	return onAdminServerAction(async (_ctx, getServices) => {
 		const session = await auth();
@@ -92,5 +95,17 @@ export async function updateClientName(id: string, name: string | null) {
 	return onAdminServerAction(async (_ctx, getServices) => {
 		const { clientService } = getServices();
 		return clientService.updateName(id, name, actorUserId);
+	});
+}
+
+export async function updateClientHome(
+	id: string,
+	home: { homeUrl: string | null; homeDisplayName: string | null; showOnHome: boolean }
+) {
+	const session = await auth();
+	const actorUserId = session?.user?.id ?? null;
+	return onAdminServerAction(async (_ctx, getServices) => {
+		const { clientService } = getServices();
+		return clientService.updateHome(id, home, actorUserId);
 	});
 }

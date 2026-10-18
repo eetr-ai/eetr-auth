@@ -4,6 +4,8 @@ As of version `0.1.0`, the auth app uses versioned schema patches. The current r
 
 Patch `0.6.0.sql` also adds `api_keys` and `api_key_scopes` (see [API keys](../apps/docs/content/docs/features/api-keys.mdx)), plus `tokens.api_key_id` — set only on tokens minted by the API-key exchange, so the self-service API-key routes can refuse one and stop a key from issuing itself a successor with a later expiry or wider scopes.
 
+Patch `0.6.0.sql` also adds the optional per-client home link (`clients.home_url`, `home_display_name`, `show_on_home`) listed on the non-admin landing page at `/`.
+
 `schema.sql` seeds the default OIDC scopes `openid`, `profile`, and `email` (idempotent `INSERT OR IGNORE`) so a fresh install can perform OpenID Connect out of the box. Patch `0.4.2.sql` backfills them for existing databases, and `0.6.0.sql` backfills their consent-screen copy (`display_name` / `description`). Seeding only defines the scopes — an admin still grants them to individual clients.
 
 `client_claims` holds static custom JWT claims per client; `value_type` preserves the JSON type so a numeric claim mints as a number.
@@ -58,7 +60,9 @@ For local development, `npm run setup:local` is the fresh-environment bootstrap:
 
 For a brand-new database, the runner uses `schema.sql`. For an existing pre-metadata database, the runner starts with `db/patches/0.1.0.sql`.
 
-Patch files are release-versioned, not change-by-change migration files. During development, schema changes for the next database release accumulate into the next unreleased patch file. When that schema is released, the patch version should match the released schema version.
+Patch files are release-versioned, not change-by-change migration files. During development, schema changes for the next release accumulate into one unreleased patch file.
+
+**The patch version must match the release tag it ships in.** `db/patches/0.6.0.sql` ships in `v0.6.0`, and only there. The schema version and the app version are the same number. Breaking this rule is how databases ended up stamped `0.6.0` by app builds `v0.5.1`–`v0.5.3`.
 
 Do not treat a patch file as a second copy of `schema.sql`. The snapshot is allowed to include everything in the current release; the patch should include only what is needed to upgrade from the latest previous release to the new one.
 
@@ -68,10 +72,14 @@ Not every app release needs a database patch. If a release does not change the s
 
 When the schema changes in a future release:
 
-1. Update `schema.sql` so it matches the new latest schema.
-2. Add or continue updating the unreleased patch file in `db/patches`, named with the target schema release version, with only the delta from the previous released schema.
-3. Make the patch idempotent enough for the expected upgrade path.
-4. End the patch by updating `schema_metadata.schema_version` to the released version.
+1. **Work out the next release number** before naming anything. Release-please computes it from the commits since the last tag (`.release-please-manifest.json`), and pre-1.0 `feat:` and `fix:` both bump the *patch* (`bump-patch-for-minor-pre-major`): `0.6.0` → `0.6.1`. A breaking change bumps the minor: `0.6.0` → `0.7.0`.
+2. If a patch for an unreleased version already exists, keep adding to it. Otherwise create `db/patches/<next release>.sql` holding only the delta from the previous release.
+3. If you need the release to carry a different number than release-please would pick, force it with a `Release-As: x.y.z` commit footer. Never name the patch after a version that differs from the tag it will ship in.
+4. Update `schema.sql` to match, including its `schema_version`.
+5. Make the patch idempotent enough for the expected upgrade path, and end it by setting `schema_metadata.schema_version` to its own version.
+6. Never edit a patch whose version has already been released. Deployed databases already report that version, so the migrator skips it.
+
+`npm run db:check-version` (`scripts/check-schema-version.mjs`) enforces this. CI runs it on every PR: patch stamps match their file names, `schema.sql` matches the newest patch, and released patches are frozen. The release workflow runs it again with `--release` on the push that merges a release-please PR, and refuses to cut the tag if the newest patch is ahead of that release. Release-please PRs don't trigger CI, so this second run is the only check on them.
 
 ## Create an admin user
 

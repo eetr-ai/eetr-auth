@@ -10,7 +10,40 @@ permissions:
   pull-requests: write
 
 jobs:
+  # Release-please PRs are opened with the default GITHUB_TOKEN, so CI never runs on them.
+  # Check here instead, on the push that merges one, before the tag is cut: the newest
+  # schema patch must ship in the release whose number it carries.
+  schema-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history and tags: the check diffs db/patches against the previous release.
+          fetch-depth: 0
+
+      - name: Check schema patch matches the release
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # Diff the whole push, not just its last commit: a push carrying several commits
+          # could bump the manifest in an earlier one. Fail closed -- if we cannot tell
+          # whether this push is a release, we must not let release-please run unchecked.
+          if [ -z "$BEFORE" ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "::error::Push baseline '$BEFORE' is not an available commit; cannot verify the schema patch."
+            exit 1
+          fi
+          if ! changed=$(git diff --name-only "$BEFORE" HEAD); then
+            echo "::error::git diff $BEFORE..HEAD failed; cannot verify the schema patch."
+            exit 1
+          fi
+          if printf '%s\n' "$changed" | grep -qx '.release-please-manifest.json'; then
+            node scripts/check-schema-version.mjs --release
+          else
+            echo "Not a release commit; nothing to check."
+          fi
+
   release-please:
+    needs: schema-version
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}

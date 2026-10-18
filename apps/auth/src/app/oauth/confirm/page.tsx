@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { auth, signOut } from "@/auth";
+import { auth } from "@/auth";
 import { buildRequestContext } from "@/lib/context/build-context";
 import { getServices } from "@/lib/services/registry";
 import {
 	decodePendingAuthorizationCookie,
 	getPendingCookieName,
 } from "@/lib/auth/oauth-pending-cookie";
+import ConsentActions from "./consent-actions";
 import PasskeyPrompt from "./passkey-prompt";
 
 export default async function OAuthConfirmPage() {
@@ -76,10 +77,10 @@ export default async function OAuthConfirmPage() {
 		])
 	);
 	// The screen is shown on every authorization, even when the user has already consented
-	// to everything being asked for. Skipping it also removed the only place in the flow
-	// that offers "sign in with a different account", which left a signed-in user with no
-	// way to switch — so the skip is disabled for now. `prompt=consent` is therefore a
-	// no-op today; the consent record still drives the incremental copy below.
+	// to everything being asked for: it is the only place in the flow that offers "sign in
+	// with a different account", so skipping it would leave a signed-in user with no way to
+	// switch. What the consent record changes is the copy — a fully covered request drops
+	// the scope list and just asks which account to continue with.
 	const unconsentedScopeNames = client
 		? await services.consentService.getUnconsentedScopeNames(
 				session.user.id,
@@ -88,12 +89,21 @@ export default async function OAuthConfirmPage() {
 			)
 		: effectiveScopeNames;
 
-	// Ask about what actually changed: on a re-authorization that adds a scope, list only
-	// the new one rather than re-presenting everything the user already agreed to.
+	// `prompt=consent` asks us to show the full grant again, new scopes or not.
+	const forceConsent = (pendingParams.prompt ?? "").split(/\s+/).includes("consent");
+	// Otherwise ask about what actually changed: on a re-authorization that adds a scope,
+	// list only the new one rather than re-presenting everything the user already agreed to.
 	const scopesToShow =
-		unconsentedScopeNames.length > 0 ? unconsentedScopeNames : effectiveScopeNames;
+		!forceConsent && unconsentedScopeNames.length > 0 ? unconsentedScopeNames : effectiveScopeNames;
 	const isIncrementalConsent =
-		unconsentedScopeNames.length > 0 && unconsentedScopeNames.length < effectiveScopeNames.length;
+		!forceConsent &&
+		unconsentedScopeNames.length > 0 &&
+		unconsentedScopeNames.length < effectiveScopeNames.length;
+	const alreadyConsented =
+		client !== null &&
+		!forceConsent &&
+		effectiveScopeNames.length > 0 &&
+		unconsentedScopeNames.length === 0;
 
 	const consentScopes = scopesToShow.map((name) => ({
 		name,
@@ -109,7 +119,13 @@ export default async function OAuthConfirmPage() {
 			<div className="mx-auto mt-16 w-full max-w-xl rounded-card border border-border bg-background p-8">
 				<h1 className="text-2xl font-semibold">Authorize {clientName}</h1>
 				<p className="mt-2 text-sm text-muted-foreground">
-					{isIncrementalConsent ? (
+					{alreadyConsented ? (
+						<>
+							You&apos;ve already authorized{" "}
+							<span className="font-medium text-foreground">{clientName}</span>. Choose which
+							account to continue with.
+						</>
+					) : isIncrementalConsent ? (
 						<>
 							<span className="font-medium text-foreground">{clientName}</span> is asking for
 							additional access to your account.
@@ -122,43 +138,52 @@ export default async function OAuthConfirmPage() {
 					)}
 				</p>
 
-				<div className="mt-6 rounded-card border border-border p-4">
-						<p className="text-sm font-medium">
-						{isIncrementalConsent ? "This will additionally grant access to:" : "This will grant access to:"}
-					</p>
-					{consentScopes.length > 0 ? (
-						<ul className="mt-3 flex flex-col gap-3">
-							{consentScopes.map((scope) => (
-								<li key={scope.name}>
-									{scope.label ? (
-										<>
-											<span className="block text-sm font-medium">{scope.label}</span>
-											{scope.description && (
-												<span className="block text-sm text-muted-foreground">
-													{scope.description}
-												</span>
-											)}
-										</>
-									) : (
-										<span className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 font-mono text-xs text-foreground">
-											{scope.name}
-										</span>
-									)}
-								</li>
-							))}
-						</ul>
-					) : (
-						<p className="mt-1 text-sm text-muted-foreground">
-							No scopes are granted to this application.
-						</p>
-					)}
-					{requestedResource && (
-						<p className="mt-3 text-sm text-muted-foreground">
+				{alreadyConsented ? (
+					requestedResource && (
+						<p className="mt-6 text-sm text-muted-foreground">
 							Resource:{" "}
 							<span className="font-mono text-xs text-foreground">{requestedResource}</span>
 						</p>
-					)}
-				</div>
+					)
+				) : (
+					<div className="mt-6 rounded-card border border-border p-4">
+						<p className="text-sm font-medium">
+							{isIncrementalConsent ? "This will additionally grant access to:" : "This will grant access to:"}
+						</p>
+						{consentScopes.length > 0 ? (
+							<ul className="mt-3 flex flex-col gap-3">
+								{consentScopes.map((scope) => (
+									<li key={scope.name}>
+										{scope.label ? (
+											<>
+												<span className="block text-sm font-medium">{scope.label}</span>
+												{scope.description && (
+													<span className="block text-sm text-muted-foreground">
+														{scope.description}
+													</span>
+												)}
+											</>
+										) : (
+											<span className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 font-mono text-xs text-foreground">
+												{scope.name}
+											</span>
+										)}
+									</li>
+								))}
+							</ul>
+						) : (
+							<p className="mt-1 text-sm text-muted-foreground">
+								No scopes are granted to this application.
+							</p>
+						)}
+						{requestedResource && (
+							<p className="mt-3 text-sm text-muted-foreground">
+								Resource:{" "}
+								<span className="font-mono text-xs text-foreground">{requestedResource}</span>
+							</p>
+						)}
+					</div>
+				)}
 
 				<div className="mt-4 flex items-center gap-4 rounded-card border border-border p-4">
 					{session.user.image ? (
@@ -182,29 +207,7 @@ export default async function OAuthConfirmPage() {
 
 				<PasskeyPrompt />
 
-				<a
-					href="/api/authorize/complete"
-					className="mt-6 block w-full rounded-full bg-brand px-4 py-2 text-center font-medium text-white hover:bg-brand-hover"
-				>
-					Continue as {displayName}
-				</a>
-
-				<form
-					action={async () => {
-						"use server";
-						await signOut({
-							redirectTo: `/?callbackUrl=${encodeURIComponent("/oauth/confirm")}`,
-						});
-					}}
-					className="mt-3"
-				>
-					<button
-						type="submit"
-						className="w-full rounded-full border border-border px-4 py-2 font-medium hover:bg-surface-hover"
-					>
-						Sign in with a different account
-					</button>
-				</form>
+				<ConsentActions displayName={displayName} />
 			</div>
 		</main>
 	);

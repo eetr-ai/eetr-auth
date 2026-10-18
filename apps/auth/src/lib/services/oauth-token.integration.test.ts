@@ -6,7 +6,7 @@ import type {
 	AuthorizationCodeRow,
 	AuthorizationCodeWithScopeIds,
 } from "@/lib/repositories/authorization-code.repository";
-import type { Client, ClientRepository, ClientRow } from "@/lib/repositories/client.repository";
+import type { Client, ClientHomeInput, ClientRepository, ClientRow } from "@/lib/repositories/client.repository";
 import type { Environment, EnvironmentRepository } from "@/lib/repositories/environment.repository";
 import type {
 	RefreshTokenActivity,
@@ -115,6 +115,9 @@ class InMemoryClientRepo implements ClientRepository {
 			tokenEndpointAuthMethod: row.token_endpoint_auth_method,
 			isDynamic: row.is_dynamic === 1,
 			isTest: row.is_test === 1,
+			homeUrl: null,
+			homeDisplayName: null,
+			showOnHome: false,
 		});
 	}
 
@@ -147,6 +150,16 @@ class InMemoryClientRepo implements ClientRepository {
 		const current = this.clientsById.get(id);
 		if (!current) return;
 		this.clientsById.set(id, { ...current, name });
+	}
+
+	async updateHome(id: string, home: ClientHomeInput): Promise<void> {
+		const current = this.clientsById.get(id);
+		if (!current) return;
+		this.clientsById.set(id, { ...current, ...home });
+	}
+
+	async listHomeLinks(): Promise<Client[]> {
+		return [...this.clientsById.values()].filter((client) => client.showOnHome);
 	}
 }
 
@@ -583,6 +596,9 @@ function buildHarness(options?: {
 		tokenEndpointAuthMethod: authMethod,
 		isDynamic: isPublic,
 		isTest: false,
+		homeUrl: null,
+		homeDisplayName: null,
+		showOnHome: false,
 	} satisfies Client;
 
 	const envRepo = new InMemoryEnvironmentRepo(new Map([["env-1", { id: "env-1", name: "production", displayName: null }]]));

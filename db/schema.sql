@@ -103,6 +103,12 @@ CREATE TABLE IF NOT EXISTS clients (
   -- instead of the password form, and it is the ONLY kind of client a test user may
   -- authenticate against. Set at creation and immutable, like environment_id.
   is_test INTEGER NOT NULL DEFAULT 0,
+  -- Optional home link. When show_on_home = 1 and home_url is set, the client is listed
+  -- on the landing page a signed-in non-admin sees at "/", labelled with
+  -- home_display_name (falling back to name, then client_id).
+  home_url TEXT,
+  home_display_name TEXT,
+  show_on_home INTEGER NOT NULL DEFAULT 0,
   -- A dynamically registered (RFC 7591) client is created by an unauthenticated caller,
   -- so it must never be able to become a test client.
   CHECK (is_test = 0 OR is_dynamic = 0),

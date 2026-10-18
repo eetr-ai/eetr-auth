@@ -1,5 +1,5 @@
 import { Plus, Trash2 } from "lucide-react";
-import { Banner, IconButton, Input, Select } from "@/components/ui";
+import { Banner, IconButton, Input, Select, LabelText } from "@/components/ui";
 import type { Environment } from "@/lib/repositories/environment.repository";
 import type { Scope } from "@/lib/repositories/scope.repository";
 import type { ClaimDraft, ClientDraft } from "./client-draft";
@@ -68,7 +68,7 @@ export function ClientForm({
 			<Banner variant="error" message={error} />
 
 			<label className="block text-sm">
-				<span className="mb-1 block text-muted-foreground">Name (optional)</span>
+				<LabelText>Name (optional)</LabelText>
 				<Input
 					type="text"
 					data-autofocus
@@ -76,12 +76,12 @@ export function ClientForm({
 					disabled={readOnly}
 					value={draft.name}
 					onChange={(e) => onChange({ name: e.target.value })}
-					placeholder="Web app"
+					placeholder="e.g. Web app"
 				/>
 			</label>
 
 			<label className="block text-sm">
-				<span className="mb-1 block text-muted-foreground">Environment</span>
+				<LabelText>Environment</LabelText>
 				{editingId || readOnly ? (
 					// Moving a client between environments would invalidate its tokens,
 					// so it is fixed at creation. Shown disabled rather than hidden.
@@ -124,8 +124,57 @@ export function ClientForm({
 			</p>
 
 			<div>
-				<span className="mb-1 block text-sm text-muted-foreground">Redirect URIs</span>
-				<div className="space-y-2">
+				<LabelText>Home link (optional)</LabelText>
+				<p className="mb-2 text-xs text-muted-foreground">
+					Where this application lives. When shown, it is listed for signed-in users who are
+					not administrators — for example after a password reset.
+				</p>
+				<div className="space-y-2 text-sm">
+					<label className="block">
+						<LabelText variant="sub">URL</LabelText>
+						<Input
+							type="url"
+							readOnly={readOnly}
+							disabled={readOnly}
+							value={draft.homeUrl}
+							onChange={(e) => {
+								const homeUrl = e.target.value;
+								// Without a URL there is nothing to show, so clearing it unticks the box.
+								onChange(homeUrl.trim() ? { homeUrl } : { homeUrl, showOnHome: false });
+							}}
+							placeholder="e.g. https://app.example.com"
+						/>
+					</label>
+					<label className="block">
+						<LabelText variant="sub">
+							Display name (defaults to the client name)
+						</LabelText>
+						<Input
+							type="text"
+							readOnly={readOnly}
+							disabled={readOnly}
+							maxLength={80}
+							value={draft.homeDisplayName}
+							onChange={(e) => onChange({ homeDisplayName: e.target.value })}
+							placeholder={draft.name.trim() ? `Defaults to “${draft.name.trim()}”` : "e.g. My App"}
+						/>
+					</label>
+					<label className="flex items-center gap-2 text-sm">
+						<input
+							type="checkbox"
+							checked={draft.showOnHome}
+							disabled={readOnly || !draft.homeUrl.trim()}
+							onChange={(e) => onChange({ showOnHome: e.target.checked })}
+							className="rounded-chip border-border disabled:opacity-50"
+						/>
+						Show on the user home page
+					</label>
+				</div>
+			</div>
+
+			<div>
+				<LabelText>Redirect URIs</LabelText>
+				<div className="space-y-2 text-sm">
 					{/* Keyed by position: an unsaved URI row has no stable id. */}
 					{draft.redirectUris.map((uri, index) => (
 						<div key={index} className="flex items-center gap-2">
@@ -136,7 +185,7 @@ export function ClientForm({
 								disabled={readOnly}
 								value={uri}
 								onChange={(e) => setUriAt(index, e.target.value)}
-								placeholder="https://app.example.com/callback"
+								placeholder="e.g. https://app.example.com/callback"
 								className="flex-1"
 							/>
 							{readOnly ? null : (
@@ -166,7 +215,7 @@ export function ClientForm({
 			</div>
 
 			<div>
-				<span className="mb-1 block text-sm text-muted-foreground">Scopes</span>
+				<LabelText>Scopes</LabelText>
 				{scopes.length === 0 ? (
 					<p className="text-sm text-muted-foreground">
 						No scopes defined. Add them under Setup › Basic.
@@ -190,7 +239,7 @@ export function ClientForm({
 			</div>
 
 			<div>
-				<span className="mb-1 block text-sm text-muted-foreground">Custom JWT claims</span>
+				<LabelText>Custom JWT claims</LabelText>
 				<p className="mb-2 text-xs text-muted-foreground">
 					Added to every access token this client is issued. Registered claims (sub, aud,
 					scope, client_id, environment, …) cannot be overridden.
@@ -198,7 +247,7 @@ export function ClientForm({
 				{draft.claims.length === 0 ? (
 					<p className="text-sm text-muted-foreground">No custom claims.</p>
 				) : (
-					<div className="space-y-2">
+					<div className="space-y-2 text-sm">
 						{/* Keyed by position: an unsaved claim row has no stable id. */}
 						{draft.claims.map((claim, index) => (
 							<div key={index} className="flex items-center gap-2">
@@ -209,7 +258,7 @@ export function ClientForm({
 									disabled={readOnly}
 									value={claim.claimName}
 									onChange={(e) => setClaimAt(index, { claimName: e.target.value })}
-									placeholder="tenant"
+									placeholder="e.g. tenant"
 									className="flex-1"
 								/>
 								<Input
@@ -219,7 +268,7 @@ export function ClientForm({
 									disabled={readOnly}
 									value={claim.claimValue}
 									onChange={(e) => setClaimAt(index, { claimValue: e.target.value })}
-									placeholder="acme"
+									placeholder="e.g. acme"
 									className="flex-1"
 								/>
 								<Select
@@ -274,7 +323,7 @@ export function ClientForm({
 
 			{editingId ? null : (
 				<label className="block text-sm">
-					<span className="mb-1 block text-muted-foreground">Expires at (optional)</span>
+					<LabelText>Expires at (optional)</LabelText>
 					<Input
 						type="datetime-local"
 						value={draft.expiresAt}

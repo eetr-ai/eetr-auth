@@ -1,4 +1,4 @@
-import { Banner, Input } from "@/components/ui";
+import { Banner, Input, LabelText } from "@/components/ui";
 import type { ScopeDraft } from "./scope-draft";
 
 interface ScopeFormProps {
@@ -28,7 +28,7 @@ export function ScopeForm({
 			<Banner variant="error" message={error} />
 
 			<label className="block text-sm">
-				<span className="mb-1 block text-muted-foreground">Scope name</span>
+				<LabelText>Scope name</LabelText>
 				<Input
 					type="text"
 					required
@@ -36,7 +36,7 @@ export function ScopeForm({
 					disabled={readOnlyName}
 					value={draft.scopeName}
 					onChange={(e) => onChange({ scopeName: e.target.value })}
-					placeholder="read:users"
+					placeholder="e.g. read:users"
 				/>
 				<span className="mt-1 block text-xs text-muted-foreground">
 					{readOnlyName
@@ -46,24 +46,24 @@ export function ScopeForm({
 			</label>
 
 			<label className="block text-sm">
-				<span className="mb-1 block text-muted-foreground">Consent label (optional)</span>
+				<LabelText>Consent label (optional)</LabelText>
 				<Input
 					type="text"
 					value={draft.displayName}
 					onChange={(e) => onChange({ displayName: e.target.value })}
-					placeholder="Your email address"
+					placeholder="e.g. Your email address"
 				/>
 			</label>
 
 			<label className="block text-sm">
-				<span className="mb-1 block text-muted-foreground">
+				<LabelText>
 					What the user is agreeing to (optional)
-				</span>
+				</LabelText>
 				<Input
 					type="text"
 					value={draft.description}
 					onChange={(e) => onChange({ description: e.target.value })}
-					placeholder="See your email address and whether it is verified."
+					placeholder="e.g. See your email address and whether it is verified."
 				/>
 				<span className="mt-1 block text-xs text-muted-foreground">
 					Shown on the consent screen. Leave both blank to show the scope name instead.

@@ -9,6 +9,7 @@ import {
 	InlineDeleteConfirm,
 	Select,
 	SidePanel,
+	LabelText,
 } from "@/components/ui";
 import type { Environment } from "@/lib/repositories/environment.repository";
 import type {
@@ -182,7 +183,7 @@ export function PasswordPoliciesSection({
 
 			<div className="mb-6 rounded-card border border-border p-4">
 				<label className="text-sm" htmlFor="admin-password-policy">
-					<span className="mb-1 block font-medium">Admin sign-in policy</span>
+					<LabelText>Admin sign-in policy</LabelText>
 					<span className="mb-2 block text-xs text-muted-foreground">
 						Admins don&apos;t belong to an environment, so choose the policy that applies when an
 						admin signs in. Leave as <span className="font-medium">None</span> to enforce no policy
