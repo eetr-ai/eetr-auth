@@ -28,7 +28,7 @@ export function OtpStep({
 	onSignOut,
 }: OtpStepProps) {
 	return (
-		<form onSubmit={onSubmit} className="space-y-6">
+		<form method="post" onSubmit={onSubmit} className="space-y-6">
 			<Banner
 				variant="info"
 				message={

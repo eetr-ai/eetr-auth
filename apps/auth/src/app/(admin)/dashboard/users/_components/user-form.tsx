@@ -46,7 +46,7 @@ export function UserForm({
 	};
 
 	return (
-		<form id={formId} onSubmit={onSubmit} className="space-y-4">
+		<form method="post" id={formId} onSubmit={onSubmit} className="space-y-4">
 			<Banner variant="error" message={error} />
 
 			{user ? (

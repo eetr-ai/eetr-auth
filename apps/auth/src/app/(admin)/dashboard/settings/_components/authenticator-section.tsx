@@ -95,7 +95,7 @@ export function AuthenticatorSection({
 					)}
 				</div>
 			) : enroll ? (
-				<form onSubmit={onConfirm} className="space-y-4">
+				<form method="post" onSubmit={onConfirm} className="space-y-4">
 					<p className="text-sm text-muted-foreground">
 						Scan this QR code with your authenticator app, then enter the 6-digit code it shows.
 					</p>
