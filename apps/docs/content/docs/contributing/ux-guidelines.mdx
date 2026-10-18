@@ -340,6 +340,11 @@ moment the form moves into a panel.
 
 ## Forms
 
+- Any `<form>` that carries a credential, one-time code or personal data (sign-in, OTP, password
+  reset/change, TOTP enrolment, user create/edit) sets `method="post"` next to its `onSubmit`. Until
+  React hydrates, the handler is not attached and the browser submits natively; the default GET
+  would put the values in the URL, browser history and access logs. The handler still calls
+  `preventDefault()`, so hydrated behaviour is unchanged.
 - Labels come from `Label` (a `<label htmlFor>`) and `LabelText` (a `<span>` inside a `<label>`
   that wraps its control, or a heading over a checkbox group), both in `components/ui/label.tsx`.
   Never hand-write label classes: the look lives in `labelVariants`, so one edit there restyles every

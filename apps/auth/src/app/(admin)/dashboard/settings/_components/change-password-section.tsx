@@ -56,7 +56,7 @@ export function ChangePasswordSection({
 		<SectionCard title="Change password" icon={Lock}>
 			<Banner variant="error" message={error} />
 			<Banner variant="success" message={success} />
-			<form onSubmit={onSubmit} className="space-y-4">
+			<form method="post" onSubmit={onSubmit} className="space-y-4">
 				<FormField label="Current password">
 					<Input
 						type="password"

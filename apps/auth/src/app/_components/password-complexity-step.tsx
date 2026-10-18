@@ -47,7 +47,7 @@ export function PasswordComplexityStep({
 	};
 
 	return (
-		<form onSubmit={handleSubmit} className="space-y-6">
+		<form method="post" onSubmit={handleSubmit} className="space-y-6">
 			<div className="flex items-center gap-3">
 				<Lock className="h-6 w-6 shrink-0 text-muted-foreground" />
 				<h2 className="text-base font-medium text-foreground">Update your password</h2>

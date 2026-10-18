@@ -29,8 +29,11 @@ export function PasswordStep({
 	onSubmit,
 	onPasskeySignIn,
 }: PasswordStepProps) {
+	// method="post": until React hydrates, onSubmit is not attached and the browser submits
+	// natively. The default GET would put the username and password in the URL (history,
+	// logs, Referer). A plain POST to this page just renders it again.
 	return (
-		<form onSubmit={onSubmit} className="space-y-6">
+		<form method="post" onSubmit={onSubmit} className="space-y-6">
 			<input type="hidden" name="callbackUrl" value={callbackUrl} readOnly />
 			<div className="space-y-2">
 				<Label htmlFor="username" flush>
