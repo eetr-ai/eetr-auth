@@ -17,6 +17,8 @@ const nextConfig = {
 	turbopack: {
 		root: workspaceRoot,
 	},
+	// Next 16.4 writes an AGENTS.md on `next dev`; agent guidance lives in apps/docs, so we opt out.
+	agentRules: false,
 };
 
 export default nextConfig;
