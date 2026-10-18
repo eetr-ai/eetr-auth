@@ -73,10 +73,12 @@ export default function UsersPage() {
 	// Consents belong to a saved user, so they load when the panel opens on an existing one;
 	// a create panel has nothing to show. What is shown and whether it is loading are derived
 	// from which user the last result belongs to, so the effect never resets state up front.
+	// The rows key off editingId rather than panelOpen so they stay put while the panel
+	// animates out, the same reason closePanel leaves editingId alone.
 	const consentsUserId = panelOpen ? editingId : null;
 	const consentsLoading = consentsUserId != null && consentsResult?.userId !== consentsUserId;
 	const consents =
-		consentsUserId != null && consentsResult?.userId === consentsUserId ? consentsResult.rows : [];
+		editingId != null && consentsResult?.userId === editingId ? consentsResult.rows : [];
 
 	useEffect(() => {
 		if (!consentsUserId) return;
@@ -92,11 +94,15 @@ export default function UsersPage() {
 	}, [consentsUserId]);
 
 	const handleRevokeConsent = async (clientRowId: string) => {
-		if (!editingId) return;
+		const userId = editingId;
+		if (!userId) return;
 		setRevokingClientId(clientRowId);
 		try {
-			await revokeUserConsent(editingId, clientRowId);
-			setConsentsResult({ userId: editingId, rows: await listUserConsents(editingId) });
+			await revokeUserConsent(userId, clientRowId);
+			const rows = await listUserConsents(userId);
+			// The admin may have moved to another user while this ran. Writing the old user's
+			// rows then would leave the new user's section waiting on a result that never comes.
+			if (editingIdRef.current === userId) setConsentsResult({ userId, rows });
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to revoke consent");
 		} finally {

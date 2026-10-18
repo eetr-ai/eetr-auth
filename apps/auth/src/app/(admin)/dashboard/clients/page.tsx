@@ -12,6 +12,7 @@ import {
 	PageHeader,
 	Select,
 	SidePanel,
+	useLatestRef,
 } from "@/components/ui";
 import {
 	createClient,
@@ -110,9 +111,14 @@ export default function ClientsPage() {
 		setError(err instanceof Error ? err.message : "Failed to load clients");
 	}, []);
 
+	// A mutation refresh can outlive the filter it was started under; applying it then would
+	// paint the previous environment's clients over the newly filtered list.
+	const envFilterRef = useLatestRef(envFilter);
 	const refresh = async () => {
+		const filter = envFilter;
 		try {
-			applyPageData(await fetchPageData());
+			const data = await fetchPageData();
+			if (envFilterRef.current === filter) applyPageData(data);
 		} catch (err) {
 			reportLoadError(err);
 		}
