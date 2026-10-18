@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ClipboardList } from "lucide-react";
 import { listAdminAuditLogs } from "@/app/actions/admin-audit-log-actions";
 import type {
@@ -17,12 +17,15 @@ import { Banner, PageHeader } from "@/components/ui";
 
 const PAGE_SIZE = 50;
 
-export default function AuditLogPage() {
-	const [rows, setRows] = useState<AdminAuditLogListEntry[]>([]);
-	const [total, setTotal] = useState(0);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
+interface AuditLogResult {
+	/** The query this result answers; a mismatch with the current one means a fetch is in flight. */
+	params: ListAdminAuditLogParams;
+	rows: AdminAuditLogListEntry[];
+	total: number;
+	error: string | null;
+}
 
+export default function AuditLogPage() {
 	const [filters, setFilters] = useState<AuditLogFilterValues>({
 		action: "",
 		resourceType: "",
@@ -32,37 +35,49 @@ export default function AuditLogPage() {
 		untilIso: "",
 	});
 	const [page, setPage] = useState(0);
+	const [result, setResult] = useState<AuditLogResult | null>(null);
 
-	const loadLogs = useCallback(async () => {
-		setLoading(true);
-		setError(null);
-		const params: ListAdminAuditLogParams = {
+	const params = useMemo(() => {
+		const ret: ListAdminAuditLogParams = {
 			limit: PAGE_SIZE,
 			offset: page * PAGE_SIZE,
 		};
-		if (filters.action) params.action = filters.action;
-		if (filters.resourceType) params.resourceType = filters.resourceType;
-		if (filters.resourceId) params.resourceId = filters.resourceId;
-		if (filters.actorUserId) params.actorUserId = filters.actorUserId;
-		if (filters.sinceIso) params.sinceIso = filters.sinceIso;
-		if (filters.untilIso) params.untilIso = filters.untilIso;
-
-		try {
-			const result = await listAdminAuditLogs(params);
-			setRows(result.rows);
-			setTotal(result.total);
-		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to load audit log");
-			setRows([]);
-			setTotal(0);
-		} finally {
-			setLoading(false);
-		}
+		if (filters.action) ret.action = filters.action;
+		if (filters.resourceType) ret.resourceType = filters.resourceType;
+		if (filters.resourceId) ret.resourceId = filters.resourceId;
+		if (filters.actorUserId) ret.actorUserId = filters.actorUserId;
+		if (filters.sinceIso) ret.sinceIso = filters.sinceIso;
+		if (filters.untilIso) ret.untilIso = filters.untilIso;
+		return ret;
 	}, [page, filters]);
 
+	// The effect only writes state once the fetch settles, and a response for a query
+	// the admin has already moved past is dropped rather than painted over the newer one.
 	useEffect(() => {
-		loadLogs();
-	}, [loadLogs]);
+		let cancelled = false;
+		listAdminAuditLogs(params)
+			.then(
+				(res) => ({ params, rows: res.rows, total: res.total, error: null }),
+				(err: unknown) => ({
+					params,
+					rows: [],
+					total: 0,
+					error: err instanceof Error ? err.message : "Failed to load audit log",
+				}),
+			)
+			.then((next) => {
+				if (!cancelled) setResult(next);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [params]);
+
+	// The previous page stays on screen while the next one loads, as it did before.
+	const loading = result?.params !== params;
+	const rows = result?.rows ?? [];
+	const total = result?.total ?? 0;
+	const error = loading ? null : (result?.error ?? null);
 
 	const totalPages = Math.ceil(total / PAGE_SIZE);
 
