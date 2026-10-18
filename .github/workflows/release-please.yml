@@ -22,8 +22,17 @@ jobs:
           fetch-depth: 0
 
       - name: Check schema patch matches the release
+        env:
+          BEFORE: ${{ github.event.before }}
         run: |
-          if git diff --name-only HEAD^ HEAD | grep -qx '.release-please-manifest.json'; then
+          # Diff the whole push, not just its last commit: a push carrying several commits
+          # could bump the manifest in an earlier one. Fall back to HEAD^ when there is no
+          # usable "before" (a new branch reports all zeros).
+          base="$BEFORE"
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            base="HEAD^"
+          fi
+          if git diff --name-only "$base" HEAD | grep -qx '.release-please-manifest.json'; then
             node scripts/check-schema-version.mjs --release
           else
             echo "Not a release commit; nothing to check."
