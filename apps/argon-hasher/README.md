@@ -36,7 +36,7 @@ See [Workers Logs](https://developers.cloudflare.com/workers/observability/logs/
 
 ## Toolchain
 
-1. Install [Rust](https://rustup.rs/) (this repo uses `rust-toolchain.toml`: **stable** + `wasm32-unknown-unknown`).
+1. Install [Rust](https://rustup.rs/) (this repo uses `rust-toolchain.toml`: **stable**, 1.91 or newer, + `wasm32-unknown-unknown`).
 2. Add the Wasm target:
 
    ```bash
