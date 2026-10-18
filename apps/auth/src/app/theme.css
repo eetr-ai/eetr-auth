@@ -78,6 +78,9 @@
 
 	--foreground: var(--gray-950);
 	--muted-foreground: var(--gray-500);
+	/* Placeholder text: a clear step fainter than labels and help text, so an example
+	   value never reads as a filled-in one. */
+	--placeholder: rgb(15 23 42 / 0.35);
 
 	/* Delicate edges: a hairline that separates without demanding attention.
 	   --border-strong is for emphasis; --brand is reserved for focus. */
@@ -127,6 +130,7 @@
 
 	--foreground: #fafafa;
 	--muted-foreground: #a1a1aa;
+	--placeholder: rgb(255 255 255 / 0.30);
 
 	--border: rgb(255 255 255 / 0.08);
 	--border-strong: rgb(255 255 255 / 0.14);
@@ -170,6 +174,7 @@
 
 		--foreground: #fafafa;
 		--muted-foreground: #a1a1aa;
+		--placeholder: rgb(255 255 255 / 0.30);
 
 		--border: rgb(255 255 255 / 0.08);
 		--border-strong: rgb(255 255 255 / 0.14);
@@ -209,6 +214,7 @@
 
 	--color-foreground: var(--foreground);
 	--color-muted-foreground: var(--muted-foreground);
+	--color-placeholder: var(--placeholder);
 
 	--color-border: var(--border);
 	--color-border-strong: var(--border-strong);

@@ -68,7 +68,7 @@ export function ClientForm({
 			<Banner variant="error" message={error} />
 
 			<label className="block text-sm">
-				<span className="mb-1 block text-muted-foreground">Name (optional)</span>
+				<span className="mb-1 block font-medium text-foreground">Name (optional)</span>
 				<Input
 					type="text"
 					data-autofocus
@@ -76,12 +76,12 @@ export function ClientForm({
 					disabled={readOnly}
 					value={draft.name}
 					onChange={(e) => onChange({ name: e.target.value })}
-					placeholder="Web app"
+					placeholder="e.g. Web app"
 				/>
 			</label>
 
 			<label className="block text-sm">
-				<span className="mb-1 block text-muted-foreground">Environment</span>
+				<span className="mb-1 block font-medium text-foreground">Environment</span>
 				{editingId || readOnly ? (
 					// Moving a client between environments would invalidate its tokens,
 					// so it is fixed at creation. Shown disabled rather than hidden.
@@ -124,35 +124,41 @@ export function ClientForm({
 			</p>
 
 			<div>
-				<span className="mb-1 block text-sm text-muted-foreground">Home link (optional)</span>
+				<span className="mb-1 block text-sm font-medium text-foreground">Home link (optional)</span>
 				<p className="mb-2 text-xs text-muted-foreground">
 					Where this application lives. When shown, it is listed for signed-in users who are
 					not administrators — for example after a password reset.
 				</p>
-				<div className="space-y-2">
-					<Input
-						type="url"
-						aria-label="Home URL"
-						readOnly={readOnly}
-						disabled={readOnly}
-						value={draft.homeUrl}
-						onChange={(e) => {
-							const homeUrl = e.target.value;
-							// Without a URL there is nothing to show, so clearing it unticks the box.
-							onChange(homeUrl.trim() ? { homeUrl } : { homeUrl, showOnHome: false });
-						}}
-						placeholder="https://app.example.com"
-					/>
-					<Input
-						type="text"
-						aria-label="Home display name"
-						readOnly={readOnly}
-						disabled={readOnly}
-						maxLength={80}
-						value={draft.homeDisplayName}
-						onChange={(e) => onChange({ homeDisplayName: e.target.value })}
-						placeholder={draft.name.trim() || "Display name"}
-					/>
+				<div className="space-y-2 text-sm">
+					<label className="block">
+						<span className="mb-1 block text-xs text-muted-foreground">URL</span>
+						<Input
+							type="url"
+							readOnly={readOnly}
+							disabled={readOnly}
+							value={draft.homeUrl}
+							onChange={(e) => {
+								const homeUrl = e.target.value;
+								// Without a URL there is nothing to show, so clearing it unticks the box.
+								onChange(homeUrl.trim() ? { homeUrl } : { homeUrl, showOnHome: false });
+							}}
+							placeholder="e.g. https://app.example.com"
+						/>
+					</label>
+					<label className="block">
+						<span className="mb-1 block text-xs text-muted-foreground">
+							Display name (defaults to the client name)
+						</span>
+						<Input
+							type="text"
+							readOnly={readOnly}
+							disabled={readOnly}
+							maxLength={80}
+							value={draft.homeDisplayName}
+							onChange={(e) => onChange({ homeDisplayName: e.target.value })}
+							placeholder={draft.name.trim() ? `Defaults to “${draft.name.trim()}”` : "e.g. My App"}
+						/>
+					</label>
 					<label className="flex items-center gap-2 text-sm">
 						<input
 							type="checkbox"
@@ -167,8 +173,8 @@ export function ClientForm({
 			</div>
 
 			<div>
-				<span className="mb-1 block text-sm text-muted-foreground">Redirect URIs</span>
-				<div className="space-y-2">
+				<span className="mb-1 block text-sm font-medium text-foreground">Redirect URIs</span>
+				<div className="space-y-2 text-sm">
 					{/* Keyed by position: an unsaved URI row has no stable id. */}
 					{draft.redirectUris.map((uri, index) => (
 						<div key={index} className="flex items-center gap-2">
@@ -179,7 +185,7 @@ export function ClientForm({
 								disabled={readOnly}
 								value={uri}
 								onChange={(e) => setUriAt(index, e.target.value)}
-								placeholder="https://app.example.com/callback"
+								placeholder="e.g. https://app.example.com/callback"
 								className="flex-1"
 							/>
 							{readOnly ? null : (
@@ -209,7 +215,7 @@ export function ClientForm({
 			</div>
 
 			<div>
-				<span className="mb-1 block text-sm text-muted-foreground">Scopes</span>
+				<span className="mb-1 block text-sm font-medium text-foreground">Scopes</span>
 				{scopes.length === 0 ? (
 					<p className="text-sm text-muted-foreground">
 						No scopes defined. Add them under Setup › Basic.
@@ -233,7 +239,7 @@ export function ClientForm({
 			</div>
 
 			<div>
-				<span className="mb-1 block text-sm text-muted-foreground">Custom JWT claims</span>
+				<span className="mb-1 block text-sm font-medium text-foreground">Custom JWT claims</span>
 				<p className="mb-2 text-xs text-muted-foreground">
 					Added to every access token this client is issued. Registered claims (sub, aud,
 					scope, client_id, environment, …) cannot be overridden.
@@ -241,7 +247,7 @@ export function ClientForm({
 				{draft.claims.length === 0 ? (
 					<p className="text-sm text-muted-foreground">No custom claims.</p>
 				) : (
-					<div className="space-y-2">
+					<div className="space-y-2 text-sm">
 						{/* Keyed by position: an unsaved claim row has no stable id. */}
 						{draft.claims.map((claim, index) => (
 							<div key={index} className="flex items-center gap-2">
@@ -252,7 +258,7 @@ export function ClientForm({
 									disabled={readOnly}
 									value={claim.claimName}
 									onChange={(e) => setClaimAt(index, { claimName: e.target.value })}
-									placeholder="tenant"
+									placeholder="e.g. tenant"
 									className="flex-1"
 								/>
 								<Input
@@ -262,7 +268,7 @@ export function ClientForm({
 									disabled={readOnly}
 									value={claim.claimValue}
 									onChange={(e) => setClaimAt(index, { claimValue: e.target.value })}
-									placeholder="acme"
+									placeholder="e.g. acme"
 									className="flex-1"
 								/>
 								<Select
@@ -317,7 +323,7 @@ export function ClientForm({
 
 			{editingId ? null : (
 				<label className="block text-sm">
-					<span className="mb-1 block text-muted-foreground">Expires at (optional)</span>
+					<span className="mb-1 block font-medium text-foreground">Expires at (optional)</span>
 					<Input
 						type="datetime-local"
 						value={draft.expiresAt}

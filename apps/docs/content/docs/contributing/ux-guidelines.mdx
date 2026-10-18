@@ -340,9 +340,16 @@ moment the form moves into a panel.
 
 ## Forms
 
-- Labels: `mb-1 block text-sm text-muted-foreground`.
+- Field labels: `mb-1 block text-sm font-medium text-foreground`. A label must read as a label at a
+  glance, never in the same grey as help text or a placeholder.
+- Sub-labels inside a grouped field (e.g. the URL and display name under "Home link") and help
+  text: `text-xs text-muted-foreground`.
 - Inputs: `w-full rounded-control border border-border bg-background px-3 py-2 ...` with
   `focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand disabled:opacity-50`.
+  Wrap them in a `text-sm` container so every input in a form shares one text size.
+- Placeholders use the `placeholder` role (`placeholder:text-placeholder`, built into `Input`), a step
+  fainter than `muted-foreground`. Write example values as `e.g. …` and defaults as `Defaults to …`,
+  so an empty field never looks filled in.
 - Read-only fields: keep the same input classes and add `readOnly disabled`. Do not hide them; show
   them disabled so the user sees the value.
 - Two-column layouts: `grid gap-4 sm:grid-cols-2`. Collapse to one column on mobile.
@@ -397,7 +404,7 @@ Always use role tokens; raw Tailwind color ramps are rejected by the lint step.
 |---|---|
 | Page / raised / recessed background | `bg-background`, `bg-surface`, `bg-surface-sunken` |
 | Hover fill | `bg-surface-hover` |
-| Text | `text-foreground`, `text-muted-foreground` |
+| Text | `text-foreground`, `text-muted-foreground`, `placeholder:text-placeholder` (input placeholders) |
 | Edges | `border-border` (default hairline), `border-border-strong` (emphasis) |
 | Brand | `bg-brand`, `hover:bg-brand-hover`, `text-brand-fg` |
 | Destructive | `bg-danger-bg`, `hover:bg-danger-bg-hover`, `text-danger-fg`, `border-danger-border` |
