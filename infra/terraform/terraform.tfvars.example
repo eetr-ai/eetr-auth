@@ -14,4 +14,4 @@
 # resend_api_key = "re_..."
 
 # Optional R2 location hint: WNAM, ENAM, WEUR, EEUR, APAC, OC
-# r2_location = "WEUR"
+# r2_location = "weur"
