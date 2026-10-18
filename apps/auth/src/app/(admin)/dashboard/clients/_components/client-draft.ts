@@ -18,6 +18,9 @@ export interface ClientDetails {
 	tokenEndpointAuthMethod: string;
 	isDynamic: boolean;
 	isTest: boolean;
+	homeUrl: string | null;
+	homeDisplayName: string | null;
+	showOnHome: boolean;
 	claims: ClaimDraft[];
 }
 
@@ -39,6 +42,11 @@ export interface ClientDraft {
 	claims: ClaimDraft[];
 	/** Create-only; blank means "no expiry". */
 	expiresAt: string;
+	/** Optional link listed on the landing page a signed-in non-admin sees at "/". */
+	homeUrl: string;
+	/** Blank falls back to the client name. */
+	homeDisplayName: string;
+	showOnHome: boolean;
 }
 
 export const emptyDraft: ClientDraft = {
@@ -49,6 +57,9 @@ export const emptyDraft: ClientDraft = {
 	scopeIds: [],
 	claims: [],
 	expiresAt: "",
+	homeUrl: "",
+	homeDisplayName: "",
+	showOnHome: false,
 };
 
 export function draftFromClient(client: ClientDetails): ClientDraft {
@@ -61,6 +72,9 @@ export function draftFromClient(client: ClientDetails): ClientDraft {
 		scopeIds: [...client.scopeIds],
 		claims: client.claims.map((claim) => ({ ...claim })),
 		expiresAt: client.expiresAt ?? "",
+		homeUrl: client.homeUrl ?? "",
+		homeDisplayName: client.homeDisplayName ?? "",
+		showOnHome: client.showOnHome,
 	};
 }
 
@@ -74,6 +88,26 @@ export function cleanClaims(claims: ClaimDraft[]): ClaimDraft[] {
 	return claims
 		.map((claim) => ({ ...claim, claimName: claim.claimName.trim() }))
 		.filter((claim) => claim.claimName.length > 0);
+}
+
+/** The home link as the server will store it: trimmed, blanks as null. */
+export function cleanHome(draft: ClientDraft): {
+	homeUrl: string | null;
+	homeDisplayName: string | null;
+	showOnHome: boolean;
+} {
+	const homeUrl = draft.homeUrl.trim() || null;
+	return {
+		homeUrl,
+		homeDisplayName: draft.homeDisplayName.trim() || null,
+		// The checkbox means nothing without a URL, so clearing the URL clears it too.
+		showOnHome: homeUrl !== null && draft.showOnHome,
+	};
+}
+
+function homeSignature(draft: ClientDraft): [string | null, string | null, boolean] {
+	const home = cleanHome(draft);
+	return [home.homeUrl, home.homeDisplayName, home.showOnHome];
 }
 
 /**
@@ -93,6 +127,7 @@ function clientSignature(draft: ClientDraft): string {
 			.map((claim) => [claim.claimName, claim.claimValue, claim.valueType])
 			.sort((a, b) => a[0].localeCompare(b[0])),
 		draft.expiresAt.trim(),
+		...homeSignature(draft),
 	]);
 }
 

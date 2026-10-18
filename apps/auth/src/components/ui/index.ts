@@ -18,7 +18,14 @@ export {
 } from "./card";
 export { Input, inputClass, type InputProps } from "./input";
 export { Select, selectClass, type SelectProps } from "./select";
-export { Label, type LabelProps } from "./label";
+export {
+	Label,
+	LabelText,
+	labelVariants,
+	type LabelProps,
+	type LabelTextProps,
+	type LabelVariant,
+} from "./label";
 export { FormField, type FormFieldProps } from "./form-field";
 export { Spinner, FullPageSpinner, type SpinnerProps } from "./spinner";
 export {

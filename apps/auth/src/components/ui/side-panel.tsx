@@ -77,7 +77,7 @@ export function SidePanel({
 				onClick={onRequestClose}
 				className={cn(
 					"absolute inset-0 bg-scrim duration-300 motion-reduce:animate-none",
-					open ? "animate-in fade-in" : "animate-out fade-out",
+					open ? "animate-in fade-in" : "animate-out fill-mode-forwards fade-out",
 				)}
 			/>
 			<div
@@ -89,7 +89,7 @@ export function SidePanel({
 				className={cn(
 					"absolute inset-y-0 right-0 flex w-full flex-col border-l border-border bg-surface text-foreground shadow-xl outline-none duration-300 ease-panel motion-reduce:animate-none",
 					panelWidth[width],
-					open ? "animate-in slide-in-from-right" : "animate-out slide-out-to-right",
+					open ? "animate-in slide-in-from-right" : "animate-out fill-mode-forwards slide-out-to-right",
 				)}
 			>
 				<div className="flex items-start justify-between gap-3 border-b border-border p-6 pb-4">

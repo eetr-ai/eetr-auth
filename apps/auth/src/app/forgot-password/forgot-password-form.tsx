@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { requestPasswordReset } from "@/app/actions/password-reset-actions";
+import { Input, Label } from "@/components/ui";
 
 export function ForgotPasswordForm() {
 	const [email, setEmail] = useState("");
@@ -33,18 +34,17 @@ export function ForgotPasswordForm() {
 	return (
 		<form onSubmit={onSubmit} className="space-y-4">
 			<div>
-				<label htmlFor="email" className="mb-1 block text-sm font-medium">
+				<Label htmlFor="email">
 					Email
-				</label>
-				<input
+				</Label>
+				<Input
 					id="email"
 					type="email"
 					required
 					autoComplete="email"
 					value={email}
 					onChange={(e) => setEmail(e.target.value)}
-					className="w-full rounded-card border border-border bg-background px-3 py-2 text-foreground focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-					placeholder="you@example.com"
+					placeholder="e.g. you@example.com"
 				/>
 			</div>
 			{error ? (

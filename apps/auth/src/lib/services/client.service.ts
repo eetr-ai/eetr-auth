@@ -2,6 +2,7 @@ import { hashClientSecretForStorage, resolveHmacKey } from "@/lib/auth/secret-at
 import { resolveClientKeyPrefix } from "@/lib/config/client-key-prefix";
 import type {
 	Client,
+	ClientHomeInput,
 	ClientRepository,
 	ClientWithDetails,
 } from "@/lib/repositories/client.repository";
@@ -25,6 +26,49 @@ function generateClientSecret(): string {
 	return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+const HOME_DISPLAY_NAME_MAX_LENGTH = 80;
+
+/** One entry on the non-admin landing page. */
+export interface ClientHomeLink {
+	/** The client's row id: two clients may share a home URL, so it is the stable key. */
+	id: string;
+	label: string;
+	url: string;
+}
+
+export class ClientHomeValidationError extends Error {}
+
+/**
+ * Normalize an admin-entered home link. Blank fields become null, the URL must be
+ * http(s) so the landing page never renders a `javascript:` href, and the checkbox
+ * means nothing without a URL to link to.
+ */
+export function normalizeClientHome(input: Partial<ClientHomeInput>): ClientHomeInput {
+	const homeUrl = input.homeUrl?.trim() || null;
+	const homeDisplayName = input.homeDisplayName?.trim() || null;
+	const showOnHome = Boolean(input.showOnHome);
+	if (homeUrl) {
+		let parsed: URL;
+		try {
+			parsed = new URL(homeUrl);
+		} catch {
+			throw new ClientHomeValidationError("The home URL is not a valid URL.");
+		}
+		if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+			throw new ClientHomeValidationError("The home URL must start with http:// or https://.");
+		}
+	}
+	if (showOnHome && !homeUrl) {
+		throw new ClientHomeValidationError("Set a home URL before showing the client on the home page.");
+	}
+	if (homeDisplayName && homeDisplayName.length > HOME_DISPLAY_NAME_MAX_LENGTH) {
+		throw new ClientHomeValidationError(
+			`The home display name can be at most ${HOME_DISPLAY_NAME_MAX_LENGTH} characters.`
+		);
+	}
+	return { homeUrl, homeDisplayName, showOnHome };
+}
+
 export interface CreateClientParams {
 	environmentId: string;
 	// The creating admin's user id, or null for dynamically registered (RFC 7591) clients
@@ -43,6 +87,10 @@ export interface CreateClientParams {
 	// the only kind of client a test user may authenticate against. Immutable afterwards --
 	// there is deliberately no updateIsTest.
 	isTest?: boolean;
+	// Optional home link for the non-admin landing page; validated by normalizeClientHome.
+	homeUrl?: string | null;
+	homeDisplayName?: string | null;
+	showOnHome?: boolean;
 }
 
 export interface CreateClientResult {
@@ -132,6 +180,7 @@ export class ClientService {
 		if (params.isTest && params.isDynamic) {
 			throw new Error("A dynamically registered client cannot be a test client.");
 		}
+		const home = normalizeClientHome(params);
 		const tokenEndpointAuthMethod = params.tokenEndpointAuthMethod ?? "client_secret_basic";
 		const isPublic = tokenEndpointAuthMethod === "none";
 		const id = crypto.randomUUID();
@@ -159,6 +208,9 @@ export class ClientService {
 			token_endpoint_auth_method: tokenEndpointAuthMethod,
 			is_dynamic: params.isDynamic ? 1 : 0,
 			is_test: params.isTest ? 1 : 0,
+			home_url: home.homeUrl,
+			home_display_name: home.homeDisplayName,
+			show_on_home: home.showOnHome ? 1 : 0,
 		});
 		const uris = (params.redirectUris ?? []).filter((u) => u?.trim());
 		const scopeIds = (params.scopeIds ?? []).filter(Boolean);
@@ -180,6 +232,7 @@ export class ClientService {
 				tokenEndpointAuthMethod,
 				isDynamic: params.isDynamic ?? false,
 				isTest: params.isTest ?? false,
+				...home,
 			},
 		});
 		return {
@@ -242,6 +295,49 @@ export class ClientService {
 			details: { clientId: client.clientId, field: "name", from: client.name, to: name },
 		});
 		return this.getClientWithDetails(id);
+	}
+
+	async updateHome(
+		id: string,
+		input: Partial<ClientHomeInput>,
+		actorUserId: string | null = null
+	): Promise<ClientWithDetails | null> {
+		const client = await this.clientRepo.getById(id);
+		if (!client) return null;
+		const home = normalizeClientHome(input);
+		await this.clientRepo.updateHome(id, home);
+		await this.adminAuditLogService.logAction({
+			actorUserId,
+			action: AUDIT_ACTION.clientUpdate,
+			resourceType: AUDIT_RESOURCE.client,
+			resourceId: id,
+			details: {
+				clientId: client.clientId,
+				field: "home",
+				from: {
+					homeUrl: client.homeUrl,
+					homeDisplayName: client.homeDisplayName,
+					showOnHome: client.showOnHome,
+				},
+				to: home,
+			},
+		});
+		return this.getClientWithDetails(id);
+	}
+
+	/** Links for the landing page a signed-in non-admin sees at "/". */
+	async listHomeLinks(now: Date = new Date()): Promise<ClientHomeLink[]> {
+		const clients = await this.clientRepo.listHomeLinks(now.toISOString());
+		const ret: ClientHomeLink[] = [];
+		for (const client of clients) {
+			if (!client.homeUrl) continue;
+			ret.push({
+				id: client.id,
+				label: client.homeDisplayName?.trim() || client.name?.trim() || client.clientId,
+				url: client.homeUrl,
+			});
+		}
+		return ret;
 	}
 
 	async delete(id: string, actorUserId: string | null = null): Promise<boolean> {

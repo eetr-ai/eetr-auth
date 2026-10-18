@@ -24,6 +24,8 @@ function createClientRepoMock() {
 		setClientScopes: vi.fn(),
 		updateSecret: vi.fn(),
 		updateName: vi.fn(),
+		updateHome: vi.fn(),
+		listHomeLinks: vi.fn(),
 	} satisfies ClientRepository;
 }
 
@@ -151,6 +153,9 @@ function makeClient(overrides?: Partial<Client>): Client {
 		tokenEndpointAuthMethod: "client_secret_basic",
 		isDynamic: false,
 		isTest: false,
+		homeUrl: null,
+		homeDisplayName: null,
+		showOnHome: false,
 		...overrides,
 	};
 }

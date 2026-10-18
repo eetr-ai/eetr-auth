@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	cleanClaims,
+	cleanHome,
 	cleanRedirectUris,
 	draftFromClient,
 	emptyDraft,
@@ -85,6 +86,9 @@ describe("draftFromClient", () => {
 			tokenEndpointAuthMethod: "client_secret_basic",
 			isDynamic: false,
 			isTest: false,
+			homeUrl: null,
+			homeDisplayName: null,
+			showOnHome: false,
 			claims: [],
 		};
 		const draft = draftFromClient(client);
@@ -106,9 +110,38 @@ describe("draftFromClient", () => {
 			tokenEndpointAuthMethod: "client_secret_basic",
 			isDynamic: false,
 			isTest: true,
+			homeUrl: null,
+			homeDisplayName: null,
+			showOnHome: false,
 			claims: [],
 		};
 		expect(draftFromClient(client).isTest).toBe(true);
+	});
+
+	it("carries the home link through", () => {
+		const client: ClientDetails = {
+			id: "c1",
+			clientId: "cid",
+			environmentId: "env-a",
+			name: "Web app",
+			expiresAt: null,
+			redirectUris: [],
+			scopeIds: [],
+			tokenEndpointAuthMethod: "client_secret_basic",
+			isDynamic: false,
+			isTest: false,
+			homeUrl: "https://app.example",
+			homeDisplayName: "My App",
+			showOnHome: true,
+			claims: [],
+		};
+		const draft = draftFromClient(client);
+		expect(cleanHome(draft)).toEqual({
+			homeUrl: "https://app.example",
+			homeDisplayName: "My App",
+			showOnHome: true,
+		});
+		expect(isClientDraftDirty(draft, draft)).toBe(false);
 	});
 });
 
@@ -178,5 +211,37 @@ describe("isClientDraftDirty — custom claims", () => {
 				withClaims([{ claimName: "tier", claimValue: "3", valueType: "string" }])
 			)
 		).toBe(true);
+	});
+});
+
+describe("cleanHome", () => {
+	it("trims and turns blanks into null", () => {
+		expect(
+			cleanHome(withDraft({ homeUrl: " https://app.example ", homeDisplayName: "  ", showOnHome: true })),
+		).toEqual({ homeUrl: "https://app.example", homeDisplayName: null, showOnHome: true });
+	});
+
+	it("drops the show flag when there is no URL", () => {
+		expect(cleanHome(withDraft({ homeUrl: " ", showOnHome: true }))).toEqual({
+			homeUrl: null,
+			homeDisplayName: null,
+			showOnHome: false,
+		});
+	});
+});
+
+describe("isClientDraftDirty home link", () => {
+	it("detects a new home URL", () => {
+		expect(isClientDraftDirty(withDraft({ homeUrl: "https://app.example" }), baseline)).toBe(true);
+	});
+
+	it("detects ticking show on home", () => {
+		const linked = withDraft({ homeUrl: "https://app.example" });
+		expect(isClientDraftDirty({ ...linked, showOnHome: true }, linked)).toBe(true);
+	});
+
+	it("ignores whitespace around the home URL", () => {
+		const linked = withDraft({ homeUrl: "https://app.example" });
+		expect(isClientDraftDirty({ ...linked, homeUrl: " https://app.example " }, linked)).toBe(false);
 	});
 });

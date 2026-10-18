@@ -46,10 +46,10 @@ Consent is **recorded**: when an authorization succeeds, the scopes actually gra
 against the (user, client) pair, accumulating across authorizations. What that record drives today is
 the *wording* of the screen, not whether it appears.
 
-- The consent screen is shown on **every** authorization by a normal user. Skipping it when
-  everything was already consented to is disabled for now: it also removed the only step offering
-  "sign in with a different account", leaving a signed-in user no way to switch. `prompt=consent` is
-  a no-op while that is the case.
+- The consent screen is shown on **every** authorization by a normal user, because it is the only
+  step offering "sign in with a different account". When the record already covers everything being
+  asked for, the screen drops the scope list and just asks which account to continue with.
+  `prompt=consent` brings the full scope list back.
 - The one exception is a synthetic [test user](/docs/features/admin#test-users) on a
   [test client](/docs/features/clients#test-clients), which goes straight through — the consent row
   is still recorded. Any other user on a test client sees the screen.

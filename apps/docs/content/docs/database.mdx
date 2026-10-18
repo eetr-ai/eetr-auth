@@ -90,8 +90,9 @@ Key tables include `users`, `user_totp` (encrypted TOTP secrets), `clients`, `en
 `value_type` so a numeric or boolean claim keeps its JSON type in the JWT.
 
 `user_consents` records what an end user has authorized: one row per (user, client) holding the
-accumulated union of consented scope names. The authorize flow skips the consent screen when that
-set already covers every requested scope, and deleting a row withdraws consent.
+accumulated union of consented scope names. When that set already covers every requested
+scope, the consent screen still appears (to allow switching accounts) but no longer lists the scopes.
+Deleting a row withdraws consent.
 
 `api_keys` holds the long-lived [API keys](/docs/features/api-keys) a machine caller exchanges for
 an access token. `key_id` is stored in the clear as a lookup handle — an Argon2id digest is not
@@ -113,6 +114,10 @@ which `verifyPassword()` rejects on shape, so the column stays `NOT NULL` withou
 Both flags are set at creation and immutable, and each carries a `CHECK` that SQLite applies on
 `INSERT` and `UPDATE` alike: a test user can never be an admin, and a dynamically registered client
 can never be a test client.
+
+`clients.home_url`, `clients.home_display_name` and `clients.show_on_home` (patch `0.6.0`) are the
+optional [home link](/docs/features/clients#home-link): a client with the flag set and a URL is listed
+on the page a signed-in non-admin sees at `/`.
 
 <Callout type="warn" title="Identifiers vs labels">
   `environments.name` and `scopes.scope_name` are **identifiers**, not display text.

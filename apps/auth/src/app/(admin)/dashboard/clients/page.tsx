@@ -20,6 +20,7 @@ import {
 	listClients,
 	rotateClientSecret,
 	updateClientName,
+	updateClientHome,
 	updateClientRedirectUris,
 	updateClientScopes,
 	updateClientClaims,
@@ -32,6 +33,7 @@ import type { Scope } from "@/lib/repositories/scope.repository";
 import {
 	cleanClaims,
 	cleanRedirectUris,
+	cleanHome,
 	draftFromClient,
 	emptyDraft,
 	isClientDraftDirty,
@@ -216,8 +218,9 @@ export default function ClientsPage() {
 				await updateClientName(editingId, draft.name.trim() || null);
 				await updateClientRedirectUris(editingId, uris);
 				await updateClientScopes(editingId, draft.scopeIds);
-				// Last: it is the only step that can reject on validation, and doing it after
-				// the others means a rejected claim does not also roll back a valid rename.
+				// Last: these are the steps that can reject on validation, and doing them after
+				// the others means a rejected link or claim does not also roll back a valid rename.
+				await updateClientHome(editingId, cleanHome(draft));
 				await updateClientClaims(editingId, claims);
 				await load({ silent: true });
 				closePanel();
@@ -233,6 +236,7 @@ export default function ClientsPage() {
 					redirectUris: uris,
 					scopeIds: draft.scopeIds.length > 0 ? draft.scopeIds : undefined,
 					expiresAt: draft.expiresAt.trim() || undefined,
+					...cleanHome(draft),
 				});
 				if (claims.length > 0) {
 					await updateClientClaims(result.client.id, claims);

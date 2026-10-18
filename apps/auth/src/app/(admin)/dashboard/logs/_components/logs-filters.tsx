@@ -1,3 +1,4 @@
+import { Label } from "@/components/ui";
 import type { Environment } from "@/lib/repositories/environment.repository";
 import type { TokenActivityRequestType } from "@/lib/repositories/token-activity-log.repository";
 import { environmentLabel } from "@/lib/repositories/environment.repository";
@@ -28,13 +29,12 @@ interface LogsFiltersProps {
 
 const selectClass = "rounded-lg border border-border bg-background px-2 py-1.5 text-sm";
 const inputClass = "rounded-lg border border-border bg-background px-2 py-1.5 text-sm";
-const labelClass = "mb-1 block text-xs text-muted-foreground";
 
 export function LogsFilters({ filters, environments, onChange, onApply }: LogsFiltersProps) {
 	return (
 		<div className="mb-4 flex shrink-0 flex-wrap items-end gap-4 rounded-card border border-border bg-surface-sunken p-4">
 			<div>
-				<label className={labelClass}>Request type</label>
+				<Label variant="compact">Request type</Label>
 				<select
 					value={filters.requestType}
 					onChange={(e) => {
@@ -55,7 +55,7 @@ export function LogsFilters({ filters, environments, onChange, onApply }: LogsFi
 				</select>
 			</div>
 			<div>
-				<label className={labelClass}>Environment</label>
+				<Label variant="compact">Environment</Label>
 				<select
 					value={filters.environmentName}
 					onChange={(e) => {
@@ -76,7 +76,7 @@ export function LogsFilters({ filters, environments, onChange, onApply }: LogsFi
 				</select>
 			</div>
 			<div>
-				<label className={labelClass}>Success</label>
+				<Label variant="compact">Success</Label>
 				<select
 					value={filters.succeeded}
 					onChange={(e) => {
@@ -94,7 +94,7 @@ export function LogsFilters({ filters, environments, onChange, onApply }: LogsFi
 				</select>
 			</div>
 			<div>
-				<label className={labelClass}>From (date)</label>
+				<Label variant="compact">From (date)</Label>
 				<input
 					type="date"
 					value={filters.sinceIso ? filters.sinceIso.slice(0, 10) : ""}
@@ -109,7 +109,7 @@ export function LogsFilters({ filters, environments, onChange, onApply }: LogsFi
 				/>
 			</div>
 			<div>
-				<label className={labelClass}>To (date)</label>
+				<Label variant="compact">To (date)</Label>
 				<input
 					type="date"
 					value={filters.untilIso ? filters.untilIso.slice(0, 10) : ""}

@@ -1,6 +1,6 @@
 import type { FormEvent } from "react";
 import Link from "next/link";
-import { Banner, Button, Input } from "@/components/ui";
+import { Banner, Button, Input, Label } from "@/components/ui";
 
 interface PasswordStepProps {
 	callbackUrl: string;
@@ -33,9 +33,9 @@ export function PasswordStep({
 		<form onSubmit={onSubmit} className="space-y-6">
 			<input type="hidden" name="callbackUrl" value={callbackUrl} readOnly />
 			<div className="space-y-2">
-				<label htmlFor="username" className="block text-sm font-medium text-foreground">
+				<Label htmlFor="username" flush>
 					Username
-				</label>
+				</Label>
 				<Input
 					id="username"
 					name="username"
@@ -48,9 +48,9 @@ export function PasswordStep({
 				/>
 			</div>
 			<div className="space-y-2">
-				<label htmlFor="password" className="block text-sm font-medium text-foreground">
+				<Label htmlFor="password" flush>
 					Password
-				</label>
+				</Label>
 				<Input
 					id="password"
 					name="password"

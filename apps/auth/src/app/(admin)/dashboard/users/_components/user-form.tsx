@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { ImageIcon } from "lucide-react";
-import { Banner, Button, Input } from "@/components/ui";
+import { Banner, Button, Input, LabelText } from "@/components/ui";
 import type { UserRecord } from "@/lib/repositories/admin.repository";
 import type { Environment } from "@/lib/repositories/environment.repository";
 import { UserAvatar } from "./user-avatar";
@@ -97,41 +97,41 @@ export function UserForm({
 			) : null}
 
 			<label className="block text-sm">
-				<span className="mb-1 block text-muted-foreground">Username</span>
+				<LabelText>Username</LabelText>
 				<Input
 					type="text"
 					required
 					data-autofocus
 					value={draft.username}
 					onChange={(e) => onChange({ username: e.target.value })}
-					placeholder="username"
+					placeholder="e.g. ada"
 				/>
 			</label>
 
 			<label className="block text-sm">
-				<span className="mb-1 block text-muted-foreground">Display name (optional)</span>
+				<LabelText>Display name (optional)</LabelText>
 				<Input
 					type="text"
 					value={draft.name}
 					onChange={(e) => onChange({ name: e.target.value })}
-					placeholder="Ada Lovelace"
+					placeholder="e.g. Ada Lovelace"
 				/>
 			</label>
 
 			<label className="block text-sm">
-				<span className="mb-1 block text-muted-foreground">Email (optional)</span>
+				<LabelText>Email (optional)</LabelText>
 				<Input
 					type="email"
 					value={draft.email}
 					onChange={(e) => onChange({ email: e.target.value })}
-					placeholder="ada@example.com"
+					placeholder="e.g. ada@example.com"
 				/>
 			</label>
 
 			<label className="block text-sm">
-				<span className="mb-1 block text-muted-foreground">
+				<LabelText>
 					{editingId ? "New password (leave blank to keep)" : "Password"}
-				</span>
+				</LabelText>
 				<Input
 					type="password"
 					// A test user has no password at all, so the field is neither required nor
@@ -187,7 +187,7 @@ export function UserForm({
 			</label>
 
 			<div>
-				<span className="mb-1 block text-sm text-muted-foreground">Environments</span>
+				<LabelText>Environments</LabelText>
 				{environments.length === 0 ? (
 					<p className="text-sm text-muted-foreground">No environments defined.</p>
 				) : (

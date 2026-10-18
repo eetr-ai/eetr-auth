@@ -78,6 +78,10 @@
 
 	--foreground: var(--gray-950);
 	--muted-foreground: var(--gray-500);
+	/* Placeholder text: a step fainter than help text (muted-foreground) so an example
+	   value never reads as a filled-in one, yet still WCAG AA (~4.7:1 here, ~4.5:1 in
+	   dark) -- placeholders are text someone has to read. */
+	--placeholder: rgb(15 23 42 / 0.6);
 
 	/* Delicate edges: a hairline that separates without demanding attention.
 	   --border-strong is for emphasis; --brand is reserved for focus. */
@@ -127,6 +131,7 @@
 
 	--foreground: #fafafa;
 	--muted-foreground: #a1a1aa;
+	--placeholder: rgb(255 255 255 / 0.45);
 
 	--border: rgb(255 255 255 / 0.08);
 	--border-strong: rgb(255 255 255 / 0.14);
@@ -170,6 +175,7 @@
 
 		--foreground: #fafafa;
 		--muted-foreground: #a1a1aa;
+		--placeholder: rgb(255 255 255 / 0.45);
 
 		--border: rgb(255 255 255 / 0.08);
 		--border-strong: rgb(255 255 255 / 0.14);
@@ -209,6 +215,7 @@
 
 	--color-foreground: var(--foreground);
 	--color-muted-foreground: var(--muted-foreground);
+	--color-placeholder: var(--placeholder);
 
 	--color-border: var(--border);
 	--color-border-strong: var(--border-strong);

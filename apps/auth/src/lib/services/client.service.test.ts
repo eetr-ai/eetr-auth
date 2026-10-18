@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Client, ClientRepository } from "@/lib/repositories/client.repository";
 import type { AdminAuditLogRepository } from "@/lib/repositories/admin-audit-log.repository";
-import { ClientService } from "@/lib/services/client.service";
+import {
+	ClientHomeValidationError,
+	ClientService,
+	normalizeClientHome,
+} from "@/lib/services/client.service";
 import type { ClientClaimService } from "@/lib/services/client-claim.service";
 import { AdminAuditLogService } from "@/lib/services/admin-audit-log.service";
 
@@ -19,6 +23,8 @@ function createClientRepoMock() {
 		setClientScopes: vi.fn(),
 		updateSecret: vi.fn(),
 		updateName: vi.fn(),
+		updateHome: vi.fn(),
+		listHomeLinks: vi.fn(),
 	} satisfies ClientRepository;
 }
 
@@ -57,6 +63,9 @@ function makeClient(overrides?: Partial<Client>): Client {
 		tokenEndpointAuthMethod: "client_secret_basic",
 		isDynamic: false,
 		isTest: false,
+		homeUrl: null,
+		homeDisplayName: null,
+		showOnHome: false,
 		...overrides,
 	};
 }
@@ -327,6 +336,109 @@ describe("ClientService", () => {
 		});
 	});
 
+	describe("normalizeClientHome", () => {
+		it("turns blank fields into null", () => {
+			expect(normalizeClientHome({ homeUrl: "  ", homeDisplayName: "", showOnHome: false })).toEqual({
+				homeUrl: null,
+				homeDisplayName: null,
+				showOnHome: false,
+			});
+		});
+
+		it("trims and keeps a valid https link", () => {
+			expect(
+				normalizeClientHome({
+					homeUrl: " https://app.example.com/ ",
+					homeDisplayName: " My App ",
+					showOnHome: true,
+				})
+			).toEqual({ homeUrl: "https://app.example.com/", homeDisplayName: "My App", showOnHome: true });
+		});
+
+		it("rejects a non-http scheme so the landing page never renders a script href", () => {
+			expect(() => normalizeClientHome({ homeUrl: "javascript:alert(1)" })).toThrow(
+				ClientHomeValidationError
+			);
+		});
+
+		it("rejects something that is not a URL", () => {
+			expect(() => normalizeClientHome({ homeUrl: "not a url" })).toThrow(ClientHomeValidationError);
+		});
+
+		it("rejects showing on home without a URL", () => {
+			expect(() => normalizeClientHome({ showOnHome: true })).toThrow(ClientHomeValidationError);
+		});
+
+		it("rejects an overlong display name", () => {
+			expect(() =>
+				normalizeClientHome({ homeUrl: "https://a.example", homeDisplayName: "x".repeat(81) })
+			).toThrow(ClientHomeValidationError);
+		});
+	});
+
+	describe("updateHome", () => {
+		it("returns null when the client is not found", async () => {
+			const repo = createClientRepoMock();
+			repo.getById.mockResolvedValue(null);
+			const service = createService(repo);
+
+			await expect(
+				service.updateHome("missing", { homeUrl: null, homeDisplayName: null, showOnHome: false })
+			).resolves.toBeNull();
+			expect(repo.updateHome).not.toHaveBeenCalled();
+		});
+
+		it("stores the normalized home link", async () => {
+			const repo = createClientRepoMock();
+			repo.getById.mockResolvedValue(makeClient());
+			repo.getRedirectUris.mockResolvedValue([]);
+			repo.getClientScopes.mockResolvedValue([]);
+			const service = createService(repo);
+
+			await service.updateHome("client-row-1", {
+				homeUrl: " https://app.example.com ",
+				homeDisplayName: "",
+				showOnHome: true,
+			});
+			expect(repo.updateHome).toHaveBeenCalledWith("client-row-1", {
+				homeUrl: "https://app.example.com",
+				homeDisplayName: null,
+				showOnHome: true,
+			});
+		});
+
+		it("does not write an invalid link", async () => {
+			const repo = createClientRepoMock();
+			repo.getById.mockResolvedValue(makeClient());
+			const service = createService(repo);
+
+			await expect(
+				service.updateHome("client-row-1", { homeUrl: "ftp://x", homeDisplayName: null, showOnHome: true })
+			).rejects.toBeInstanceOf(ClientHomeValidationError);
+			expect(repo.updateHome).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("listHomeLinks", () => {
+		it("labels each link with the display name, then the client name, then the client id", async () => {
+			const repo = createClientRepoMock();
+			repo.listHomeLinks.mockResolvedValue([
+				makeClient({ id: "a", homeUrl: "https://a.example", homeDisplayName: "Alpha", showOnHome: true }),
+				makeClient({ id: "b", homeUrl: "https://b.example", name: "Bravo", showOnHome: true }),
+				makeClient({ id: "c", homeUrl: "https://c.example", name: null, clientId: "pfx_c", showOnHome: true }),
+			]);
+			const service = createService(repo);
+
+			const now = new Date("2026-10-17T00:00:00.000Z");
+			await expect(service.listHomeLinks(now)).resolves.toEqual([
+				{ id: "a", label: "Alpha", url: "https://a.example" },
+				{ id: "b", label: "Bravo", url: "https://b.example" },
+				{ id: "c", label: "pfx_c", url: "https://c.example" },
+			]);
+			expect(repo.listHomeLinks).toHaveBeenCalledWith("2026-10-17T00:00:00.000Z");
+		});
+	});
+
 	describe("delete", () => {
 		it("returns false when the client is not found", async () => {
 			const repo = createClientRepoMock();
@@ -397,6 +509,9 @@ describe("ClientService", () => {
 					createdBy: null,
 					isDynamic: true,
 					isTest: true,
+					homeUrl: null,
+					homeDisplayName: null,
+					showOnHome: false,
 				})
 			).rejects.toThrow("A dynamically registered client cannot be a test client.");
 			expect(repo.create).not.toHaveBeenCalled();
@@ -438,6 +553,9 @@ describe("ClientService", () => {
 				tokenEndpointAuthMethod: "client_secret_basic",
 				isDynamic: false,
 				isTest: false,
+				homeUrl: null,
+				homeDisplayName: null,
+				showOnHome: false,
 			});
 		});
 

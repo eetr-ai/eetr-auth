@@ -24,6 +24,11 @@ import { useEffect, useState } from "react";
  * is. (This also makes exit timing unmeasurable in a hidden page — check
  * `document.visibilityState` before concluding the panel is slow.)
  *
+ * The exit classes MUST include `fill-mode-forwards`. tw-animate-css defaults to
+ * `animation-fill-mode: none`, so the moment the exit animation ends the node snaps
+ * back to fully visible -- and it stays that way until this timer unmounts it, which
+ * starts a little after the animation does. That gap shows as a one-frame blink.
+ *
  * `durationMs` MUST match the `duration-*` class on the animated node.
  */
 export function usePresence(open: boolean, durationMs: number): { mounted: boolean } {

@@ -31,6 +31,26 @@ There is one version for the whole monorepo, tracked in `.release-please-manifes
 `packages/eetr-auth-client/package.json`, and `README.md` via `extra-files` — so the npm client's
 version always matches the release tag. Never hand-edit those versions.
 
+### Schema patches follow the tag
+
+The D1 schema shares that version. A schema change ships as `db/patches/<release>.sql`, named after
+the tag it ships in, so a database stamped `0.6.0` was always upgraded by `v0.6.0`. Before you name
+a new patch, work out the number release-please will pick: before 1.0, `feat:` and `fix:` bump the
+patch (`0.6.0` → `0.6.1`) and a breaking change bumps the minor. If the release needs a different
+number, force it with a `Release-As: x.y.z` commit footer rather than naming the patch after a
+version it won't ship in. The full procedure is in
+[`db/README.md`](https://github.com/eetr-ai/eetr-auth/blob/main/db/README.md).
+
+`scripts/check-schema-version.mjs` enforces this twice:
+
+- **On every PR** (`ci.yml`). Each patch stamps its own version, `schema.sql` matches the newest
+  patch, and no patch that has already been released has changed.
+- **On the release merge** (`release-please.yml`, `--release`). The `schema-version` job runs ahead
+  of `release-please` and fails if the newest patch is ahead of the release being cut, or if any
+  patch added or edited since the previous tag carries a different number than this release. In that case
+  no tag is created until a `Release-As:` footer fixes the number. CI never runs on the release PR
+  itself (it's opened with the default `GITHUB_TOKEN`), so this is the only check it gets.
+
 ## Dependency updates
 
 Dependabot (`.github/dependabot.yml`) opens weekly update PRs for npm (the root lockfile covers
