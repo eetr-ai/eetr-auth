@@ -51,6 +51,13 @@ version it won't ship in. The full procedure is in
   no tag is created until a `Release-As:` footer fixes the number. CI never runs on the release PR
   itself (it's opened with the default `GITHUB_TOKEN`), so this is the only check it gets.
 
+## Dependency updates
+
+Dependabot (`.github/dependabot.yml`) opens weekly update PRs for npm (the root lockfile covers
+every workspace), GitHub Actions, the `argon-hasher` Cargo crate and the Terraform providers.
+Minor and patch bumps are grouped into one PR per ecosystem; majors arrive individually. They commit
+as `chore(deps): …`, so merging one shows up in the changelog without cutting a release on its own.
+
 ## npm publishing
 
 The client publishes with **npm trusted publishing** (OIDC): there is no `NPM_TOKEN` secret. The
