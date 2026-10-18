@@ -16,7 +16,7 @@ jobs:
   schema-version:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Full history and tags: the check diffs db/patches against the previous release.
           fetch-depth: 0

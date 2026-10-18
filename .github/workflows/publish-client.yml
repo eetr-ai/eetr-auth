@@ -36,7 +36,7 @@ jobs:
       # Required for npm trusted publishing (OIDC token exchange).
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # No `registry-url:` on purpose. It makes setup-node write an .npmrc with
       # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`; with no token
