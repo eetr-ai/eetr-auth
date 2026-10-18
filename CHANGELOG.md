@@ -4,6 +4,39 @@ All notable changes to this monorepo are documented in this file.
 
 The current released baseline for both the auth server and the client library is 0.3.1.
 
+## [0.6.0](https://github.com/eetr-ai/eetr-auth/compare/v0.5.3...v0.6.0) (2026-10-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* **deps:** @eetr/eetr-auth-client now requires Node.js 22 or newer.
+* **clients:** the columns are added to schema patch 0.6.0, which earlier builds already stamped on deployed databases. Those databases skip the patch, so apply the three `ALTER TABLE clients ADD COLUMN` statements at the end of db/patches/0.6.0.sql by hand before deploying. Released as v0.6.0 so the patch version matches the tag.
+
+### Features
+
+* **admin:** name the admin console and list home links for non-admins ([af0d232](https://github.com/eetr-ai/eetr-auth/commit/af0d232d3d941996cce8590acbdd99d49f785fa0))
+* **clients:** edit the home link in the admin client form ([16636f3](https://github.com/eetr-ai/eetr-auth/commit/16636f3992875893c230465aefa12ebb7b420eaf))
+* **clients:** optional home link per client ([3cc0a14](https://github.com/eetr-ai/eetr-auth/commit/3cc0a148e3116a27e37ae5b9167050193e491fbf))
+* consent loading states, remembered-consent screen, non-admin landing with client home links ([cef14e9](https://github.com/eetr-ai/eetr-auth/commit/cef14e995c32eff768d42f5b869922c9f844c98e))
+* **consent:** keep the screen but hide scopes already granted ([be8fe25](https://github.com/eetr-ai/eetr-auth/commit/be8fe256e56739b11047865bea0f7fea17b25cf3))
+* **consent:** show loading state on the consent buttons ([1fb4cf7](https://github.com/eetr-ai/eetr-auth/commit/1fb4cf749b9f29e392cb78cc648a43d905756946))
+* **oauth:** set typ "at+jwt" on JWT access tokens (RFC 9068) ([#77](https://github.com/eetr-ai/eetr-auth/issues/77)) ([fb5654f](https://github.com/eetr-ai/eetr-auth/commit/fb5654f8d82331154f8fc55715632b530d8569cc))
+
+
+### Bug Fixes
+
+* address review feedback ([077ea2f](https://github.com/eetr-ai/eetr-auth/commit/077ea2fe2f07fc2c532960d863757d9975c86dca))
+* **auth:** post credential forms so a pre-hydration submit can't leak them ([#87](https://github.com/eetr-ai/eetr-auth/issues/87)) ([657b34c](https://github.com/eetr-ai/eetr-auth/commit/657b34c9d9c1a8855c13212ef0015bec49fd9ce1))
+* **ci:** run release checks on the release-please PR ([#89](https://github.com/eetr-ai/eetr-auth/issues/89)) ([d548ad0](https://github.com/eetr-ai/eetr-auth/commit/d548ad00163844de617d20937ad9cf10a23ad330))
+* **deps:** bump next-auth to 5.0.0-beta.32 (@auth/core 0.41.3) ([1a04524](https://github.com/eetr-ai/eetr-auth/commit/1a045247cf147a74c5c0142463ab9592bff4779f))
+* **deps:** clear next-auth/@auth/core criticals, bump Next-family deps ([cc2b215](https://github.com/eetr-ai/eetr-auth/commit/cc2b215414d788099399db4a2e267bd74fd81e1e))
+* **ui:** hold the drawer and dialog exit state until unmount ([a8c2959](https://github.com/eetr-ai/eetr-auth/commit/a8c295928dc1cae0ff5be8ce95d9c6c4082a18b1))
+
+
+### Miscellaneous Chores
+
+* **deps:** jose 6, lucide-react 1.x, mermaid 12, vitest 5, @types/node 26 ([#79](https://github.com/eetr-ai/eetr-auth/issues/79)) ([d202c69](https://github.com/eetr-ai/eetr-auth/commit/d202c69c6345bc2887075b6289023ce57864b9bf))
+
 ## [0.5.3](https://github.com/eetr-ai/eetr-auth/compare/v0.5.2...v0.5.3) (2026-08-30)
 
 
