@@ -58,6 +58,16 @@ every workspace), GitHub Actions, the `argon-hasher` Cargo crate and the Terrafo
 Minor and patch bumps are grouped into one PR per ecosystem; majors arrive individually. They commit
 as `chore(deps): …`, so merging one shows up in the changelog without cutting a release on its own.
 
+Some majors are held back on purpose with an `ignore` rule in `dependabot.yml`:
+
+- **TypeScript** stays on 5.x for as long as 5.x is supported. Minor and patch releases still come
+  through the grouped PR.
+
+`next-auth` v5 ships only as a prerelease (`5.0.0-beta.*`). Because we are already on a beta,
+Dependabot may propose a newer one, but it has not done so reliably (beta.30 → beta.32 never got a
+PR). Check `npm audit --omit=dev` after each release-please cycle, and when it reports a
+`next-auth` / `@auth/core` advisory that no open Dependabot PR covers, bump the beta by hand.
+
 ## npm publishing
 
 The client publishes with **npm trusted publishing** (OIDC): there is no `NPM_TOKEN` secret. The

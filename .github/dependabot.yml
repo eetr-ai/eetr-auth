@@ -16,6 +16,11 @@ updates:
     groups:
       npm-minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # We stay on TypeScript 5.x for as long as it is supported; minor/patch bumps still come
+      # through the group above, only the major is held back.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
