@@ -33,7 +33,7 @@
 		"resend": "^6.33.0"
 	},
 	"devDependencies": {
-		"@simplewebauthn/server": "^9.0.3",
+		"@simplewebauthn/server": "^14.0.3",
 		"@tailwindcss/postcss": "^4",
 		"@types/node": "^26.6.5",
 		"@types/react": "^19.3.0",
