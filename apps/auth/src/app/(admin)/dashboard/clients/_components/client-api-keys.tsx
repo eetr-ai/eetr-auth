@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Copy, KeyRound, Plus, Trash2, TriangleAlert } from "lucide-react";
 import {
 	Banner,
@@ -85,28 +85,14 @@ export function ClientApiKeys({ clientId, scopes, grantedScopeIds }: ClientApiKe
 
 	const grantedScopes = scopes.filter((scope) => grantedScopeIds.includes(scope.id));
 
-	// `clientId` is read through a ref inside the guard so a refresh started for one client
-	// cannot land after the panel has switched to another.
-	const activeClientId = useRef(clientId);
-	activeClientId.current = clientId;
-
-	const reload = useCallback(async (id: string) => {
-		const items = await listClientApiKeys(id);
-		if (activeClientId.current === id) setApiKeys(items);
-	}, []);
-
+	// The parent keys this component by client, so `clientId` is fixed for its lifetime and
+	// switching clients remounts it with fresh state (form and revealed key included) instead
+	// of resetting it here. A refresh that resolves after the switch goes nowhere.
 	useEffect(() => {
 		if (!clientId) return;
 		let cancelled = false;
-		setApiKeys(null);
-		setError(null);
-		setRevealed(null);
-		setCreating(false);
-		setConfirmingRevokeId(null);
 		Promise.all([listClientApiKeys(clientId), listUsers()])
 			.then(([items, userList]) => {
-				// The panel can be reopened on another client before this resolves; without
-				// the guard the previous client's keys would land.
 				if (cancelled) return;
 				setApiKeys(items);
 				setUsers(userList.map((user) => ({ id: user.id, username: user.username })));
@@ -145,7 +131,7 @@ export function ClientApiKeys({ clientId, scopes, grantedScopeIds }: ClientApiKe
 			setRevealed({ keyId: result.apiKey.keyId, apiKey: result.presentedKey });
 			setCreating(false);
 			resetForm();
-			await reload(clientId);
+			setApiKeys(await listClientApiKeys(clientId));
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to create the API key");
 		} finally {
@@ -160,7 +146,7 @@ export function ClientApiKeys({ clientId, scopes, grantedScopeIds }: ClientApiKe
 		try {
 			await revokeClientApiKey(id);
 			setConfirmingRevokeId(null);
-			await reload(clientId);
+			setApiKeys(await listClientApiKeys(clientId));
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to revoke the API key");
 		} finally {

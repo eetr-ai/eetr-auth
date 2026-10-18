@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ListTodo } from "lucide-react";
 import { Banner, EmptyState, Spinner } from "@/components/ui";
 import {
@@ -34,26 +34,14 @@ export function ClientTokens({ clientId, oauthClientId, environments }: ClientTo
 
 	const envById = Object.fromEntries(environments.map((env) => [env.id, env]));
 
-	// `clientId` is read through a ref inside the guard so a refresh started for
-	// one client cannot land after the panel has switched to another.
-	const activeClientId = useRef(clientId);
-	activeClientId.current = clientId;
-
-	const reload = useCallback(async (id: string) => {
-		const items = await listTokenActivityByClient(id);
-		if (activeClientId.current === id) setTokens(items);
-	}, []);
-
+	// The parent keys this component by client, so `clientId` is fixed for its lifetime and
+	// switching clients remounts it with fresh state instead of resetting it here. A refresh
+	// that resolves after the switch lands on the unmounted instance and goes nowhere.
 	useEffect(() => {
 		if (!clientId) return;
 		let cancelled = false;
-		setTokens(null);
-		setError(null);
-		setConfirming(null);
 		listTokenActivityByClient(clientId)
 			.then((items) => {
-				// The panel can be closed and reopened on another client before this
-				// resolves; without the guard the previous client's tokens would land.
 				if (!cancelled) setTokens(items);
 			})
 			.catch((err: unknown) => {
@@ -72,7 +60,7 @@ export function ClientTokens({ clientId, oauthClientId, environments }: ClientTo
 			if (action === "revoke") await revokeTokenByValue(token.tokenId);
 			else await deleteTokenByValue(token.tokenId);
 			setConfirming(null);
-			await reload(clientId);
+			setTokens(await listTokenActivityByClient(clientId));
 		} catch (err) {
 			setError(
 				err instanceof Error ? err.message : `Failed to ${action} token`,

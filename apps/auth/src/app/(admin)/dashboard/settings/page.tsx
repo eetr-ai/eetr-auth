@@ -40,6 +40,34 @@ type UserInfo = {
 	avatarUrl?: string | null;
 };
 
+type TotpStatus = {
+	enrolled: boolean;
+	createdAt: string | null;
+	lastUsedAt: string | null;
+};
+
+// Pure fetchers: they resolve to what the page should show, falling back on failure, and
+// leave the state writes to the caller. That keeps the mount effects free of setters that
+// run before the fetch settles.
+async function fetchPasskeys(): Promise<PasskeyItem[]> {
+	try {
+		const res = await fetch("/api/users/passkey");
+		if (!res.ok) throw new Error("Failed to load passkeys.");
+		const data = (await res.json()) as { passkeys: PasskeyItem[] };
+		return data.passkeys ?? [];
+	} catch {
+		return [];
+	}
+}
+
+async function fetchTotpStatus(): Promise<TotpStatus> {
+	try {
+		return await getTotpStatus();
+	} catch {
+		return { enrolled: false, createdAt: null, lastUsedAt: null };
+	}
+}
+
 export default function SettingsPage() {
 	const [user, setUser] = useState<UserInfo | null>(null);
 
@@ -81,11 +109,7 @@ export default function SettingsPage() {
 	const [adminPolicy, setAdminPolicy] = useState<PasswordPolicy | null>(null);
 
 	// Authenticator app (TOTP)
-	const [totpStatus, setTotpStatus] = useState<{
-		enrolled: boolean;
-		createdAt: string | null;
-		lastUsedAt: string | null;
-	} | null>(null);
+	const [totpStatus, setTotpStatus] = useState<TotpStatus | null>(null);
 	const [totpEnroll, setTotpEnroll] = useState<{ otpauthUri: string; secret: string } | null>(null);
 	const [totpCode, setTotpCode] = useState("");
 	const [totpError, setTotpError] = useState<string | null>(null);
@@ -115,33 +139,28 @@ export default function SettingsPage() {
 	);
 
 	const loadPasskeys = useCallback(async () => {
-		try {
-			const res = await fetch("/api/users/passkey");
-			if (!res.ok) throw new Error("Failed to load passkeys.");
-			const data = (await res.json()) as { passkeys: PasskeyItem[] };
-			setPasskeys(data.passkeys ?? []);
-		} catch {
-			setPasskeys([]);
-		}
+		setPasskeys(await fetchPasskeys());
 	}, []);
-
-	useEffect(() => {
-		if (!user?.id) return;
-		void loadPasskeys();
-	}, [user?.id, loadPasskeys]);
 
 	const loadTotpStatus = useCallback(async () => {
-		try {
-			setTotpStatus(await getTotpStatus());
-		} catch {
-			setTotpStatus({ enrolled: false, createdAt: null, lastUsedAt: null });
-		}
+		setTotpStatus(await fetchTotpStatus());
 	}, []);
 
+	// Both wait for the signed-in user, so they load once the profile lookup above lands.
+	const userId = user?.id;
 	useEffect(() => {
-		if (!user?.id) return;
-		void loadTotpStatus();
-	}, [user?.id, loadTotpStatus]);
+		if (!userId) return;
+		let cancelled = false;
+		fetchPasskeys().then((items) => {
+			if (!cancelled) setPasskeys(items);
+		});
+		fetchTotpStatus().then((status) => {
+			if (!cancelled) setTotpStatus(status);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [userId]);
 
 	const handleProfileSave = (e: React.FormEvent) => {
 		e.preventDefault();

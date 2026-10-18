@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { Sun, Moon, Monitor } from "lucide-react";
 
 type Theme = "light" | "dark" | "system";
@@ -25,17 +25,29 @@ function applyTheme(theme: Theme) {
 	root.toggle("light", !dark);
 }
 
-export function ThemeSwitcher() {
-	const [theme, setTheme] = useState<Theme>("system");
-	// Gate the active highlight on mount so server/client first render match
-	// (the real preference lives in localStorage, unknown during SSR).
-	const [mounted, setMounted] = useState(false);
+// localStorage is the store; `choose` notifies after writing so every mounted switcher
+// re-reads it. Cross-tab `storage` events are not followed, as before.
+const listeners = new Set<() => void>();
 
-	useEffect(() => {
-		const stored = (localStorage.getItem(STORAGE_KEY) as Theme | null) ?? "system";
-		setTheme(stored);
-		setMounted(true);
-	}, []);
+function subscribe(listener: () => void) {
+	listeners.add(listener);
+	return () => {
+		listeners.delete(listener);
+	};
+}
+
+function readStoredTheme(): Theme {
+	return (localStorage.getItem(STORAGE_KEY) as Theme | null) ?? "system";
+}
+
+// Unknown during SSR and hydration, so no option renders as active until the client
+// snapshot takes over and the server and client first renders match.
+function readServerTheme(): Theme | null {
+	return null;
+}
+
+export function ThemeSwitcher() {
+	const theme = useSyncExternalStore(subscribe, readStoredTheme, readServerTheme);
 
 	// Keep following the OS while "system" is selected.
 	useEffect(() => {
@@ -47,9 +59,9 @@ export function ThemeSwitcher() {
 	}, [theme]);
 
 	function choose(next: Theme) {
-		setTheme(next);
 		localStorage.setItem(STORAGE_KEY, next);
 		applyTheme(next);
+		for (const listener of listeners) listener();
 	}
 
 	return (
@@ -59,7 +71,7 @@ export function ThemeSwitcher() {
 			className="inline-flex items-center gap-0.5 rounded-full border border-border p-0.5"
 		>
 			{options.map(({ value, label, icon: Icon }) => {
-				const isActive = mounted && theme === value;
+				const isActive = theme === value;
 				return (
 					<button
 						key={value}

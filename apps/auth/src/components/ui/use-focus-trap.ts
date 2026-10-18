@@ -1,4 +1,5 @@
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, type RefObject } from "react";
+import { useLatestRef } from "./use-latest-ref";
 
 const FOCUSABLE_SELECTOR = [
 	"a[href]",
@@ -33,8 +34,7 @@ export function useFocusTrap(
 ) {
 	// Kept in a ref so changing the handler does not tear down the trap and
 	// re-run the focus-in/focus-restore effect.
-	const escapeRef = useRef(onEscape);
-	escapeRef.current = onEscape;
+	const escapeRef = useLatestRef(onEscape);
 
 	useEffect(() => {
 		const root = ref.current;
@@ -82,5 +82,5 @@ export function useFocusTrap(
 			// that opened the overlay while it was up.
 			if (previous?.isConnected) previous.focus({ preventScroll: true });
 		};
-	}, [ref, active]);
+	}, [ref, active, escapeRef]);
 }

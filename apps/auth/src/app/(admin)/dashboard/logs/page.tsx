@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ListTodo } from "lucide-react";
 import { listTokenActivityLogs } from "@/app/actions/token-activity-actions";
 import { listEnvironments } from "@/app/actions/environment-actions";
@@ -17,11 +17,15 @@ import { Banner, PageHeader } from "@/components/ui";
 
 const PAGE_SIZE = 50;
 
+interface LogsResult {
+	/** The query this result answers; a mismatch with the current one means a fetch is in flight. */
+	params: ListLogsParams;
+	rows: TokenActivityLogRow[];
+	total: number;
+	error: string | null;
+}
+
 export default function LogsPage() {
-	const [rows, setRows] = useState<TokenActivityLogRow[]>([]);
-	const [total, setTotal] = useState(0);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
 	const [environments, setEnvironments] = useState<Environment[]>([]);
 
 	const [filters, setFilters] = useState<LogsFiltersState>({
@@ -34,43 +38,55 @@ export default function LogsPage() {
 	const [orderBy, setOrderBy] = useState<TokenActivityLogOrderBy>("created_at");
 	const [orderDir, setOrderDir] = useState<"asc" | "desc">("desc");
 	const [page, setPage] = useState(0);
+	const [result, setResult] = useState<LogsResult | null>(null);
 
-	const loadLogs = useCallback(async () => {
-		setLoading(true);
-		setError(null);
-		const params: ListLogsParams = {
+	const params = useMemo(() => {
+		const ret: ListLogsParams = {
 			limit: PAGE_SIZE,
 			offset: page * PAGE_SIZE,
 			orderBy,
 			orderDir,
 		};
-		if (filters.requestType) params.requestType = filters.requestType;
-		if (filters.environmentName) params.environmentName = filters.environmentName;
-		if (filters.succeeded === "yes") params.succeeded = true;
-		if (filters.succeeded === "no") params.succeeded = false;
-		if (filters.sinceIso) params.sinceIso = filters.sinceIso;
-		if (filters.untilIso) params.untilIso = filters.untilIso;
-
-		try {
-			const result = await listTokenActivityLogs(params);
-			setRows(result.rows);
-			setTotal(result.total);
-		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to load logs");
-			setRows([]);
-			setTotal(0);
-		} finally {
-			setLoading(false);
-		}
+		if (filters.requestType) ret.requestType = filters.requestType;
+		if (filters.environmentName) ret.environmentName = filters.environmentName;
+		if (filters.succeeded === "yes") ret.succeeded = true;
+		if (filters.succeeded === "no") ret.succeeded = false;
+		if (filters.sinceIso) ret.sinceIso = filters.sinceIso;
+		if (filters.untilIso) ret.untilIso = filters.untilIso;
+		return ret;
 	}, [page, orderBy, orderDir, filters]);
 
 	useEffect(() => {
 		listEnvironments().then(setEnvironments);
 	}, []);
 
+	// The effect only writes state once the fetch settles, and a response for a query
+	// the admin has already moved past is dropped rather than painted over the newer one.
 	useEffect(() => {
-		loadLogs();
-	}, [loadLogs]);
+		let cancelled = false;
+		listTokenActivityLogs(params)
+			.then(
+				(res) => ({ params, rows: res.rows, total: res.total, error: null }),
+				(err: unknown) => ({
+					params,
+					rows: [],
+					total: 0,
+					error: err instanceof Error ? err.message : "Failed to load logs",
+				}),
+			)
+			.then((next) => {
+				if (!cancelled) setResult(next);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [params]);
+
+	// The previous page stays on screen while the next one loads, as it did before.
+	const loading = result?.params !== params;
+	const rows = result?.rows ?? [];
+	const total = result?.total ?? 0;
+	const error = loading ? null : (result?.error ?? null);
 
 	const handleSort = (column: TokenActivityLogOrderBy) => {
 		if (orderBy === column) {
