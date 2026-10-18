@@ -63,9 +63,10 @@ Some majors are held back on purpose with an `ignore` rule in `dependabot.yml`:
 - **TypeScript** stays on 5.x for as long as 5.x is supported. Minor and patch releases still come
   through the grouped PR.
 
-`next-auth` v5 ships only as a prerelease (`5.0.0-beta.*`), and Dependabot never proposes
-prereleases, so security fixes there are bumped by hand. Check `npm audit --omit=dev` after each
-release-please cycle.
+`next-auth` v5 ships only as a prerelease (`5.0.0-beta.*`). Because we are already on a beta,
+Dependabot may propose a newer one, but it has not done so reliably (beta.30 → beta.32 never got a
+PR). Check `npm audit --omit=dev` after each release-please cycle, and when it reports a
+`next-auth` / `@auth/core` advisory that no open Dependabot PR covers, bump the beta by hand.
 
 ## npm publishing
 
