@@ -13,7 +13,7 @@ npm install @eetr/eetr-auth-client
 ```
 
 <Callout type="info" title="Requirements">
-  Node.js 18+ (relies on global `fetch`; `decodeJwtPayload` uses `Buffer`). `jose` is the only runtime
+  Node.js 22+ (relies on global `fetch` and WebCrypto via `jose` 6; `decodeJwtPayload` uses `Buffer`). `jose` is the only runtime
   dependency. The package is ESM-only and works in the browser, Node.js, and Cloudflare Workers.
 </Callout>
 

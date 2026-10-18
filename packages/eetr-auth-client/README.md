@@ -18,7 +18,7 @@ pnpm add @eetr/eetr-auth-client
 yarn add @eetr/eetr-auth-client
 ```
 
-**Requirements:** Node.js 18+ (the library relies on the global `fetch`; `decodeJwtPayload`
+**Requirements:** Node.js 22+ (the library relies on the global `fetch` and, through `jose` 6, the global WebCrypto `crypto.subtle`; `decodeJwtPayload`
 also uses Node's `Buffer`). `jose` is a runtime dependency used for JWT verification.
 
 The package is ESM-only (`"type": "module"`) and exports both JavaScript and `.d.ts` types.
