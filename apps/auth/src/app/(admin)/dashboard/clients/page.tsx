@@ -89,29 +89,53 @@ export default function ClientsPage() {
 
 	const dirty = isClientDraftDirty(draft, baseline);
 
-	const load = useCallback(
-		async ({ silent = false }: { silent?: boolean } = {}) => {
-			try {
-				const [clientsList, envs, scopesList] = await Promise.all([
-					listClients(envFilter || undefined),
-					listEnvironments(),
-					listScopes(),
-				]);
-				setClients(clientsList);
-				setEnvironments(envs);
-				setScopes(scopesList);
-			} catch (err) {
-				setError(err instanceof Error ? err.message : "Failed to load clients");
-			} finally {
-				if (!silent) setInitialLoading(false);
-			}
-		},
+	// Fetching and applying are split so the mount/filter effect only writes state once the
+	// fetch settles, while the mutation handlers keep a one-line `refresh` that never brings
+	// back the full-page spinner (that would unmount an open panel mid-animation).
+	const fetchPageData = useCallback(
+		() => Promise.all([listClients(envFilter || undefined), listEnvironments(), listScopes()]),
 		[envFilter],
 	);
 
+	const applyPageData = useCallback(
+		([clientsList, envs, scopesList]: Awaited<ReturnType<typeof fetchPageData>>) => {
+			setClients(clientsList);
+			setEnvironments(envs);
+			setScopes(scopesList);
+		},
+		[],
+	);
+
+	const reportLoadError = useCallback((err: unknown) => {
+		setError(err instanceof Error ? err.message : "Failed to load clients");
+	}, []);
+
+	const refresh = async () => {
+		try {
+			applyPageData(await fetchPageData());
+		} catch (err) {
+			reportLoadError(err);
+		}
+	};
+
 	useEffect(() => {
-		load();
-	}, [load]);
+		let cancelled = false;
+		fetchPageData()
+			.then(
+				(data) => {
+					if (!cancelled) applyPageData(data);
+				},
+				(err: unknown) => {
+					if (!cancelled) reportLoadError(err);
+				},
+			)
+			.finally(() => {
+				if (!cancelled) setInitialLoading(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [fetchPageData, applyPageData, reportLoadError]);
 
 	// Panel state is mirrored in the URL so a client stays linkable now that
 	// /dashboard/clients/[id] is gone; that route redirects here.
@@ -175,6 +199,9 @@ export default function ClientsPage() {
 	const requestedNew = searchParams.get("new");
 	useEffect(() => {
 		if (panelOpen || initialLoading) return;
+		// The URL is the external system here: this runs once the first load lands (or when
+		// the requested target changes) and is guarded by panelOpen, so it cannot cascade.
+		// eslint-disable-next-line react-hooks/set-state-in-effect
 		if (requestedNew) openCreate();
 		else if (requestedClient) void startEdit(requestedClient);
 		// Only re-run when the requested target changes, not on every panel toggle.
@@ -222,7 +249,7 @@ export default function ClientsPage() {
 				// the others means a rejected link or claim does not also roll back a valid rename.
 				await updateClientHome(editingId, cleanHome(draft));
 				await updateClientClaims(editingId, claims);
-				await load({ silent: true });
+				await refresh();
 				closePanel();
 			} else {
 				if (!draft.environmentId.trim()) {
@@ -241,7 +268,7 @@ export default function ClientsPage() {
 				if (claims.length > 0) {
 					await updateClientClaims(result.client.id, claims);
 				}
-				await load({ silent: true });
+				await refresh();
 				// Keep the panel open: the secret is shown exactly once.
 				setBaseline(draft);
 				setRevealedSecret({
@@ -288,7 +315,7 @@ export default function ClientsPage() {
 			await deleteClient(client.id);
 			setConfirmingDeleteId(null);
 			if (editingId === client.id) closePanel();
-			await load({ silent: true });
+			await refresh();
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to delete client");
 		} finally {
@@ -458,14 +485,18 @@ export default function ClientsPage() {
 							error={error}
 							onSubmit={handleSubmit}
 						/>
-						{/* baseline, not draft: the service validates a key's scopes against the
+						{/* Keyed by client so switching clients starts both sections from a clean
+						    slate (no previous client's list, half-filled form or revealed key).
+						    baseline, not draft: the service validates a key's scopes against the
 						    SAVED grants, so offering an unsaved tick would fail on create. */}
 						<ClientApiKeys
+							key={`keys-${editingId}`}
 							clientId={editingId}
 							scopes={scopes}
 							grantedScopeIds={baseline.scopeIds}
 						/>
 						<ClientTokens
+							key={`tokens-${editingId}`}
 							clientId={editingId}
 							oauthClientId={editingOauthClientId}
 							environments={environments}
