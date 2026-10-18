@@ -41,7 +41,7 @@ variable "resend_api_key" {
 }
 
 variable "r2_location" {
-  description = "Optional R2 location hint (e.g. WEUR)."
+  description = "Optional R2 location hint, lowercase (e.g. weur). Only honored when the bucket is first created."
   type        = string
   default     = null
 }

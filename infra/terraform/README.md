@@ -36,6 +36,10 @@ terraform plan
 terraform apply
 ```
 
+### Upgrading from Cloudflare provider v4
+
+The config targets `cloudflare/cloudflare` v5. On an existing install, run `terraform init -upgrade` and read the `terraform plan` carefully before applying: neither resource should be replaced. If you set `r2_location`, use the lowercase value v5 expects (for example `weur` instead of `WEUR`).
+
 Write outputs for the Node scripts (path is gitignored):
 
 ```bash
