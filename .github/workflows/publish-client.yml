@@ -43,7 +43,7 @@ jobs:
       # supplied that expands to a placeholder, and npm then attempts classic
       # token auth instead of OIDC and fails with a misleading 404 on PUT.
       # Installing public dependencies needs no auth.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
