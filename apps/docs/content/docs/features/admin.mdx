@@ -31,6 +31,18 @@ It provides:
   name.
 - **Setup** area (`Dashboard → Setup`) — a tabbed page covering **Basic** (environments and scopes, side by side), **Site identity** (title, logo, URL, CDN URL), **Admin API**, and **Password policies** (per-environment complexity rules + max password age).
 
+## Non-admin landing
+
+Only admins can use the dashboard. A signed-in user who isn't an admin and reaches `/` with no
+callback to follow (for example, after resetting their password) sees a page that says plainly this
+is the **eetr auth admin console** and that their account isn't an administrator. When there is no
+OAuth sign-in in progress, the sign-in page's subtitle reads "eetr auth admin console" too, so the
+context is clear before they sign in.
+
+Below that message, the page lists **Your applications**: every client with a
+[home link](/docs/features/clients#home-link) marked *Show on the user home page*. Each entry links
+to the client's home URL. When no client is marked, only the message and **Sign out** appear.
+
 ## User management
 
 ### Profiles

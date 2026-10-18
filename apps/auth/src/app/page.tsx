@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { ArrowUpRight, ShieldOff } from "lucide-react";
 import { signOut, auth } from "@/auth";
 import { getPublicSiteSettings } from "@/lib/public-site-settings";
 import { SignInForm } from "@/app/sign-in-form";
@@ -71,6 +72,11 @@ export default async function HomePage({
 			redirect("/dashboard");
 		}
 	}
+	// A signed-in non-admin ends up here when there is nowhere else to send them -- most
+	// often straight after a password reset, whose link carries no callback. Rather than a
+	// dead end, list the applications an admin chose to show (clients.show_on_home).
+	const homeLinks = session?.user?.id ? await services.clientService.listHomeLinks() : [];
+	const subtitle = isOAuthSignIn ? "Sign in" : "eetr auth admin console";
 
 	return (
 		<div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 text-foreground">
@@ -89,7 +95,7 @@ export default async function HomePage({
 					/>
 					<div className="text-center">
 						<h1 className="text-2xl font-semibold text-foreground">{displayTitle}</h1>
-						<p className="mt-1 text-sm text-muted-foreground">Sign in</p>
+						<p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
 					</div>
 					{siteUrl ? (
 						<a
@@ -119,10 +125,43 @@ export default async function HomePage({
 				)}
 				{session?.user?.id ? (
 					<div className="space-y-4">
-						<p className="rounded-card bg-surface-sunken px-3 py-2 text-sm">
-							Signed in as <strong>{session.user.name ?? session.user.id}</strong>. This account
-							does not have admin dashboard access.
-						</p>
+						<div className="flex gap-3 rounded-card bg-surface-sunken px-3 py-3 text-sm">
+							<ShieldOff className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+							<div className="space-y-1">
+								<p className="font-medium">This is the eetr auth admin console.</p>
+								<p className="text-muted-foreground">
+									You&apos;re signed in as{" "}
+									<strong className="text-foreground">
+										{session.user.name ?? session.user.email ?? session.user.id}
+									</strong>
+									, but this account isn&apos;t an administrator, so the console isn&apos;t
+									available.
+								</p>
+							</div>
+						</div>
+						{homeLinks.length > 0 ? (
+							<div>
+								<p className="mb-2 text-sm font-medium">Your applications</p>
+								<ul className="divide-y divide-border overflow-hidden rounded-card border border-border">
+									{homeLinks.map((link) => (
+										<li key={link.url}>
+											<a
+												href={link.url}
+												className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-hover"
+											>
+												<span className="min-w-0 flex-1">
+													<span className="block truncate text-sm font-medium">{link.label}</span>
+													<span className="block truncate text-xs text-muted-foreground">
+														{new URL(link.url).host}
+													</span>
+												</span>
+												<ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+											</a>
+										</li>
+									))}
+								</ul>
+							</div>
+						) : null}
 						<form
 							action={async () => {
 								"use server";
