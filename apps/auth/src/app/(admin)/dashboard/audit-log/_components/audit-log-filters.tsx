@@ -1,3 +1,4 @@
+import { Label } from "@/components/ui";
 export interface AuditLogFilterValues {
 	action: string;
 	resourceType: string;
@@ -12,9 +13,9 @@ interface AuditLogFiltersProps {
 	onChange: (next: AuditLogFilterValues) => void;
 }
 
+// Compact toolbar inputs: sized for the filter row, but sharing Input's placeholder role.
 const fieldInputClass =
-	"rounded-lg border border-border bg-background px-2 py-1.5 text-sm";
-const fieldLabelClass = "mb-1 block text-xs font-medium text-foreground";
+	"rounded-lg border border-border bg-background px-2 py-1.5 text-sm placeholder:text-placeholder";
 
 export function AuditLogFilters({ filters, onChange }: AuditLogFiltersProps) {
 	const set = (patch: Partial<AuditLogFilterValues>) => onChange({ ...filters, ...patch });
@@ -22,7 +23,7 @@ export function AuditLogFilters({ filters, onChange }: AuditLogFiltersProps) {
 	return (
 		<div className="mb-4 flex shrink-0 flex-wrap items-end gap-4 rounded-card border border-border bg-surface-sunken p-4">
 			<div>
-				<label className={fieldLabelClass}>Action contains</label>
+				<Label variant="compact">Action contains</Label>
 				<input
 					type="text"
 					value={filters.action}
@@ -32,7 +33,7 @@ export function AuditLogFilters({ filters, onChange }: AuditLogFiltersProps) {
 				/>
 			</div>
 			<div>
-				<label className={fieldLabelClass}>Resource type</label>
+				<Label variant="compact">Resource type</Label>
 				<input
 					type="text"
 					value={filters.resourceType}
@@ -42,7 +43,7 @@ export function AuditLogFilters({ filters, onChange }: AuditLogFiltersProps) {
 				/>
 			</div>
 			<div>
-				<label className={fieldLabelClass}>Resource id</label>
+				<Label variant="compact">Resource id</Label>
 				<input
 					type="text"
 					value={filters.resourceId}
@@ -51,7 +52,7 @@ export function AuditLogFilters({ filters, onChange }: AuditLogFiltersProps) {
 				/>
 			</div>
 			<div>
-				<label className={fieldLabelClass}>Actor user id</label>
+				<Label variant="compact">Actor user id</Label>
 				<input
 					type="text"
 					value={filters.actorUserId}
@@ -60,7 +61,7 @@ export function AuditLogFilters({ filters, onChange }: AuditLogFiltersProps) {
 				/>
 			</div>
 			<div>
-				<label className={fieldLabelClass}>From (date)</label>
+				<Label variant="compact">From (date)</Label>
 				<input
 					type="date"
 					value={filters.sinceIso ? filters.sinceIso.slice(0, 10) : ""}
@@ -71,7 +72,7 @@ export function AuditLogFilters({ filters, onChange }: AuditLogFiltersProps) {
 				/>
 			</div>
 			<div>
-				<label className={fieldLabelClass}>To (date)</label>
+				<Label variant="compact">To (date)</Label>
 				<input
 					type="date"
 					value={filters.untilIso ? filters.untilIso.slice(0, 10) : ""}

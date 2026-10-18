@@ -1,7 +1,7 @@
 import type { ChangeEvent, FormEvent, RefObject } from "react";
 import type { ReducerAction } from "@eetr/react-reducer-utils";
 import { ImageIcon, Upload } from "lucide-react";
-import { Banner, Button, Input, Label } from "@/components/ui";
+import { Banner, Button, Input, Label, LabelText } from "@/components/ui";
 import type { SiteSettingsDto } from "@/lib/services/site-settings.service";
 import { SetupPageActionType, type SetupTabId } from "./state";
 
@@ -130,7 +130,7 @@ export function SiteIdentitySection({
 
 				<div className="flex flex-wrap items-end gap-4">
 					<div>
-						<span className="mb-1 block text-sm font-medium text-foreground">Logo</span>
+						<LabelText>Logo</LabelText>
 						<div className="flex items-center gap-3">
 							{previewLogoUrl ? (
 								// eslint-disable-next-line @next/next/no-img-element

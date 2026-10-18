@@ -1,4 +1,4 @@
-import { Banner, Input } from "@/components/ui";
+import { Banner, Input, LabelText } from "@/components/ui";
 import type { EnvironmentDraft } from "./environment-draft";
 
 interface EnvironmentFormProps {
@@ -23,7 +23,7 @@ export function EnvironmentForm({
 			<Banner variant="error" message={error} />
 
 			<label className="block text-sm">
-				<span className="mb-1 block font-medium text-foreground">Environment name</span>
+				<LabelText>Environment name</LabelText>
 				<Input
 					type="text"
 					required
@@ -38,7 +38,7 @@ export function EnvironmentForm({
 			</label>
 
 			<label className="block text-sm">
-				<span className="mb-1 block font-medium text-foreground">Display name (optional)</span>
+				<LabelText>Display name (optional)</LabelText>
 				<Input
 					type="text"
 					value={draft.displayName}

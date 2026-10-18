@@ -1,4 +1,4 @@
-import { Banner, Input } from "@/components/ui";
+import { Banner, Input, LabelText } from "@/components/ui";
 import type { ScopeDraft } from "./scope-draft";
 
 interface ScopeFormProps {
@@ -28,7 +28,7 @@ export function ScopeForm({
 			<Banner variant="error" message={error} />
 
 			<label className="block text-sm">
-				<span className="mb-1 block font-medium text-foreground">Scope name</span>
+				<LabelText>Scope name</LabelText>
 				<Input
 					type="text"
 					required
@@ -46,7 +46,7 @@ export function ScopeForm({
 			</label>
 
 			<label className="block text-sm">
-				<span className="mb-1 block font-medium text-foreground">Consent label (optional)</span>
+				<LabelText>Consent label (optional)</LabelText>
 				<Input
 					type="text"
 					value={draft.displayName}
@@ -56,9 +56,9 @@ export function ScopeForm({
 			</label>
 
 			<label className="block text-sm">
-				<span className="mb-1 block font-medium text-foreground">
+				<LabelText>
 					What the user is agreeing to (optional)
-				</span>
+				</LabelText>
 				<Input
 					type="text"
 					value={draft.description}

@@ -1,5 +1,5 @@
 import { Plus, Trash2 } from "lucide-react";
-import { Banner, IconButton, Input, Select } from "@/components/ui";
+import { Banner, IconButton, Input, Select, LabelText } from "@/components/ui";
 import type { Environment } from "@/lib/repositories/environment.repository";
 import type { Scope } from "@/lib/repositories/scope.repository";
 import type { ClaimDraft, ClientDraft } from "./client-draft";
@@ -68,7 +68,7 @@ export function ClientForm({
 			<Banner variant="error" message={error} />
 
 			<label className="block text-sm">
-				<span className="mb-1 block font-medium text-foreground">Name (optional)</span>
+				<LabelText>Name (optional)</LabelText>
 				<Input
 					type="text"
 					data-autofocus
@@ -81,7 +81,7 @@ export function ClientForm({
 			</label>
 
 			<label className="block text-sm">
-				<span className="mb-1 block font-medium text-foreground">Environment</span>
+				<LabelText>Environment</LabelText>
 				{editingId || readOnly ? (
 					// Moving a client between environments would invalidate its tokens,
 					// so it is fixed at creation. Shown disabled rather than hidden.
@@ -124,14 +124,14 @@ export function ClientForm({
 			</p>
 
 			<div>
-				<span className="mb-1 block text-sm font-medium text-foreground">Home link (optional)</span>
+				<LabelText>Home link (optional)</LabelText>
 				<p className="mb-2 text-xs text-muted-foreground">
 					Where this application lives. When shown, it is listed for signed-in users who are
 					not administrators — for example after a password reset.
 				</p>
 				<div className="space-y-2 text-sm">
 					<label className="block">
-						<span className="mb-1 block text-xs text-muted-foreground">URL</span>
+						<LabelText variant="sub">URL</LabelText>
 						<Input
 							type="url"
 							readOnly={readOnly}
@@ -146,9 +146,9 @@ export function ClientForm({
 						/>
 					</label>
 					<label className="block">
-						<span className="mb-1 block text-xs text-muted-foreground">
+						<LabelText variant="sub">
 							Display name (defaults to the client name)
-						</span>
+						</LabelText>
 						<Input
 							type="text"
 							readOnly={readOnly}
@@ -173,7 +173,7 @@ export function ClientForm({
 			</div>
 
 			<div>
-				<span className="mb-1 block text-sm font-medium text-foreground">Redirect URIs</span>
+				<LabelText>Redirect URIs</LabelText>
 				<div className="space-y-2 text-sm">
 					{/* Keyed by position: an unsaved URI row has no stable id. */}
 					{draft.redirectUris.map((uri, index) => (
@@ -215,7 +215,7 @@ export function ClientForm({
 			</div>
 
 			<div>
-				<span className="mb-1 block text-sm font-medium text-foreground">Scopes</span>
+				<LabelText>Scopes</LabelText>
 				{scopes.length === 0 ? (
 					<p className="text-sm text-muted-foreground">
 						No scopes defined. Add them under Setup › Basic.
@@ -239,7 +239,7 @@ export function ClientForm({
 			</div>
 
 			<div>
-				<span className="mb-1 block text-sm font-medium text-foreground">Custom JWT claims</span>
+				<LabelText>Custom JWT claims</LabelText>
 				<p className="mb-2 text-xs text-muted-foreground">
 					Added to every access token this client is issued. Registered claims (sub, aud,
 					scope, client_id, environment, …) cannot be overridden.
@@ -323,7 +323,7 @@ export function ClientForm({
 
 			{editingId ? null : (
 				<label className="block text-sm">
-					<span className="mb-1 block font-medium text-foreground">Expires at (optional)</span>
+					<LabelText>Expires at (optional)</LabelText>
 					<Input
 						type="datetime-local"
 						value={draft.expiresAt}

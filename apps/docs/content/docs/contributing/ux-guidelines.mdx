@@ -23,7 +23,7 @@ spec, but the primitives are the canonical way to apply them:
   `sm` | `md` | `none`.
 - `PageHeader` — the icon + title row every page starts with, plus an optional right-aligned `action`.
 - `Table` / `THead` / `TBody` / `Th` / `Td` — table chrome (see [Directory surfaces](#directory-surfaces)).
-- `Input`, `Select`, `Label`, `FormField`.
+- `Input`, `Select`, `Label`, `LabelText`, `FormField`.
 - `Spinner` and `FullPageSpinner`.
 - `InlineDeleteConfirm` — the inline destructive-confirmation control (see below).
 - `SidePanel` and `ConfirmDialog` — the overlays (see [Overlays](#overlays)).
@@ -340,15 +340,20 @@ moment the form moves into a panel.
 
 ## Forms
 
-- Field labels: `mb-1 block text-sm font-medium text-foreground`. A label must read as a label at a
-  glance, never in the same grey as help text or a placeholder.
-- Sub-labels inside a grouped field (e.g. the URL and display name under "Home link") and help
-  text: `text-xs text-muted-foreground`.
+- Labels come from `Label` (a `<label htmlFor>`) and `LabelText` (a `<span>` inside a `<label>`
+  that wraps its control, or a heading over a checkbox group), both in `components/ui/label.tsx`.
+  Never hand-write label classes: the look lives in `labelVariants`, so one edit there restyles every
+  form.
+  - `variant="field"` (default): the label above a control. It must read as a label at a glance,
+    never in the grey used for help text and placeholders.
+  - `variant="compact"`: the same, sized for dense filter toolbars.
+  - `variant="sub"`: a secondary label inside a grouped field (e.g. "URL" under "Home link").
+  - `flush` drops the bottom margin when the container already spaces its children (`space-y-*`).
 - Inputs: `w-full rounded-control border border-border bg-background px-3 py-2 ...` with
   `focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand disabled:opacity-50`.
   Wrap them in a `text-sm` container so every input in a form shares one text size.
-- Placeholders use the `placeholder` role (`placeholder:text-placeholder`, built into `Input`), a step
-  fainter than `muted-foreground`. Write example values as `e.g. …` and defaults as `Defaults to …`,
+- Use `Input` for text fields so the placeholder style comes from one place: the `placeholder` role
+  (`placeholder:text-placeholder`), a step fainter than `muted-foreground`. Write example values as `e.g. …` and defaults as `Defaults to …`,
   so an empty field never looks filled in.
 - Read-only fields: keep the same input classes and add `readOnly disabled`. Do not hide them; show
   them disabled so the user sees the value.

@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { ArrowLeft, Check, Circle, Lock } from "lucide-react";
-import { Banner, Button, Input } from "@/components/ui";
+import { Banner, Button, Input, Label } from "@/components/ui";
 import type { PasswordPolicy } from "@/lib/repositories/password-policy.repository";
 import {
 	listPolicyRequirements,
@@ -59,9 +59,9 @@ export function PasswordComplexityStep({
 			<Banner variant="error" message={error} />
 
 			<div className="space-y-2">
-				<label htmlFor="new-password" className="block text-sm font-medium text-foreground">
+				<Label htmlFor="new-password" flush>
 					New password
-				</label>
+				</Label>
 				<Input
 					id="new-password"
 					type="password"
@@ -73,9 +73,9 @@ export function PasswordComplexityStep({
 				/>
 			</div>
 			<div className="space-y-2">
-				<label htmlFor="confirm-password" className="block text-sm font-medium text-foreground">
+				<Label htmlFor="confirm-password" flush>
 					Confirm new password
-				</label>
+				</Label>
 				<Input
 					id="confirm-password"
 					type="password"
