@@ -2,19 +2,19 @@
 name = "argon-hasher"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.91"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-argon2 = "0.5"
+argon2 = { version = "0.6", default-features = false, features = ["alloc", "password-hash"] }
 getrandom = { version = "0.2", features = ["js"] }
 js-sys = "0.3"
 rand_core = { version = "0.6", features = ["getrandom"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-worker = "0.7.5"
+worker = "0.8.7"
 
 [profile.release]
 lto = true

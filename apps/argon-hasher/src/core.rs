@@ -1,6 +1,6 @@
-use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
+use argon2::password_hash::{phc::PasswordHash, PasswordHasher, PasswordVerifier};
 use argon2::{Algorithm, Argon2, Params, Version};
-use rand_core::OsRng;
+use rand_core::{OsRng, RngCore};
 
 #[cfg(test)]
 const SEEDED_ADMIN_HASH: &str = "$argon2id$v=19$m=19456,t=3,p=1$5TIfE1Imf5CSupfO5v0x4Q$pUgZNbxjX7XRTr/he0pqQ0NWmcDWsUu6al6LGpcd2Qk";
@@ -11,6 +11,8 @@ pub const T_COST: u32 = 3;
 pub const P_COST: u32 = 1;
 /// PHC output length (bytes), matches the worker implementation.
 pub const HASH_OUTPUT_LEN: usize = 32;
+/// Salt length (bytes), the PHC recommendation and what SaltString::generate used before.
+const SALT_LEN: usize = 16;
 
 pub fn configured_argon2() -> Result<Argon2<'static>, String> {
 	let params = Params::new(M_COST_KIB, T_COST, P_COST, Some(HASH_OUTPUT_LEN))
@@ -23,9 +25,12 @@ pub fn hash_password(password: &str) -> Result<String, String> {
 		return Err("password must not be empty".to_string());
 	}
 	let argon2 = configured_argon2()?;
-	let salt = SaltString::generate(&mut OsRng);
+	// argon2 0.6 takes raw salt bytes; we keep drawing them from OsRng (backed by the
+	// js getrandom feature on Workers) instead of enabling argon2's own getrandom.
+	let mut salt = [0u8; SALT_LEN];
+	OsRng.fill_bytes(&mut salt);
 	let hash = argon2
-		.hash_password(password.as_bytes(), &salt)
+		.hash_password_with_salt(password.as_bytes(), &salt)
 		.map_err(|err| format!("hash failed: {err}"))?;
 	Ok(hash.to_string())
 }

@@ -13,7 +13,7 @@ together. This section takes you from an empty Cloudflare account to a running s
 | Requirement | Notes |
 |---|---|
 | [Node.js](https://nodejs.org/) 20+ | Runs the workspace tooling and `apps/auth` build |
-| [Rust](https://rustup.rs/) + `wasm32-unknown-unknown` | Builds the `argon-hasher` Worker |
+| [Rust](https://rustup.rs/) 1.91+ + `wasm32-unknown-unknown` | Builds the `argon-hasher` Worker |
 | [`worker-build`](https://crates.io/crates/worker-build) `^0.7` | `cargo install worker-build --version '^0.7'` |
 | [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/) v4+ | Deploys Workers, applies D1 schema |
 | [Terraform CLI](https://developer.hashicorp.com/terraform/install) v1.5+ | Provisions D1 + R2 |
