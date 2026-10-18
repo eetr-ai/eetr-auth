@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Pencil, Plus, Users } from "lucide-react";
 import {
 	createUser,
@@ -21,6 +21,7 @@ import {
 	FullPageSpinner,
 	PageHeader,
 	SidePanel,
+	useLatestRef,
 } from "@/components/ui";
 import {
 	draftFromUser,
@@ -53,50 +54,49 @@ export default function UsersPage() {
 		null,
 	);
 	const [confirmingDeleteUserId, setConfirmingDeleteUserId] = useState<string | null>(null);
-	const [consents, setConsents] = useState<ConsentWithClient[]>([]);
-	const [consentsLoading, setConsentsLoading] = useState(false);
+	/** Tagged with the user it was fetched for, so a mismatch means a fetch is in flight. */
+	const [consentsResult, setConsentsResult] = useState<{
+		userId: string;
+		rows: ConsentWithClient[];
+	} | null>(null);
 	const [revokingClientId, setRevokingClientId] = useState<string | null>(null);
 	const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
 	const dirty = isUserDraftDirty(draft, baseline);
 	// An upload can outlive the panel it was started from. Results are applied
 	// only while the same user is still being edited.
-	const editingIdRef = useRef<string | null>(null);
-	editingIdRef.current = editingId;
+	const editingIdRef = useLatestRef(editingId);
 	// Derived from `users` rather than snapshotted, so the silent refetch after an
 	// avatar upload refreshes the picture in the open panel.
 	const editingUser = editingId ? (users.find((user) => user.id === editingId) ?? null) : null;
 
-	// Consents belong to a saved user, so they load when the panel opens on an existing one
-	// and are cleared otherwise — a create panel has nothing to show.
+	// Consents belong to a saved user, so they load when the panel opens on an existing one;
+	// a create panel has nothing to show. What is shown and whether it is loading are derived
+	// from which user the last result belongs to, so the effect never resets state up front.
+	const consentsUserId = panelOpen ? editingId : null;
+	const consentsLoading = consentsUserId != null && consentsResult?.userId !== consentsUserId;
+	const consents =
+		consentsUserId != null && consentsResult?.userId === consentsUserId ? consentsResult.rows : [];
+
 	useEffect(() => {
-		if (!panelOpen || !editingId) {
-			setConsents([]);
-			return;
-		}
+		if (!consentsUserId) return;
 		let cancelled = false;
-		setConsentsLoading(true);
-		listUserConsents(editingId)
+		listUserConsents(consentsUserId)
+			.catch((): ConsentWithClient[] => [])
 			.then((rows) => {
-				if (!cancelled) setConsents(rows);
-			})
-			.catch(() => {
-				if (!cancelled) setConsents([]);
-			})
-			.finally(() => {
-				if (!cancelled) setConsentsLoading(false);
+				if (!cancelled) setConsentsResult({ userId: consentsUserId, rows });
 			});
 		return () => {
 			cancelled = true;
 		};
-	}, [panelOpen, editingId]);
+	}, [consentsUserId]);
 
 	const handleRevokeConsent = async (clientRowId: string) => {
 		if (!editingId) return;
 		setRevokingClientId(clientRowId);
 		try {
 			await revokeUserConsent(editingId, clientRowId);
-			setConsents(await listUserConsents(editingId));
+			setConsentsResult({ userId: editingId, rows: await listUserConsents(editingId) });
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to revoke consent");
 		} finally {
@@ -104,36 +104,59 @@ export default function UsersPage() {
 		}
 	};
 
-	/**
-	 * `silent` skips the full-page spinner. Post-mutation refreshes must be
-	 * silent: swapping the page for a spinner would unmount an open side panel
-	 * mid-animation, and the acting control shows its own in-flight state.
-	 */
-	const load = async ({ silent = false }: { silent?: boolean } = {}) => {
-		try {
-			const [items, envs] = await Promise.all([listUsers(), listEnvironments()]);
+	// Fetching and applying are split so the mount effect only writes state once the fetch
+	// settles. Mutation handlers use `refresh`, which never brings back the full-page
+	// spinner: swapping the page for one would unmount an open side panel mid-animation,
+	// and the acting control shows its own in-flight state.
+	const fetchPageData = useCallback(() => Promise.all([listUsers(), listEnvironments()]), []);
+
+	const applyPageData = useCallback(
+		([items, envs]: Awaited<ReturnType<typeof fetchPageData>>) => {
 			setUsers(items);
 			setEnvironments(envs);
+		},
+		[],
+	);
+
+	const reportLoadError = useCallback((err: unknown) => {
+		setError(err instanceof Error ? err.message : "Failed to load users");
+	}, []);
+
+	const refresh = async () => {
+		try {
+			applyPageData(await fetchPageData());
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to load users");
-		} finally {
-			if (!silent) setInitialLoading(false);
+			reportLoadError(err);
 		}
 	};
 
 	useEffect(() => {
-		load();
-	}, []);
+		let cancelled = false;
+		fetchPageData()
+			.then(
+				(data) => {
+					if (!cancelled) applyPageData(data);
+				},
+				(err: unknown) => {
+					if (!cancelled) reportLoadError(err);
+				},
+			)
+			.finally(() => {
+				if (!cancelled) setInitialLoading(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [fetchPageData, applyPageData, reportLoadError]);
 
 	// closePanel releases the preview on every normal dismissal, but navigating
 	// away with the panel open unmounts without passing through it.
-	const avatarPreviewUrlRef = useRef<string | null>(null);
-	avatarPreviewUrlRef.current = draft.avatarPreviewUrl;
+	const avatarPreviewUrlRef = useLatestRef(draft.avatarPreviewUrl);
 	useEffect(
 		() => () => {
 			if (avatarPreviewUrlRef.current) URL.revokeObjectURL(avatarPreviewUrlRef.current);
 		},
-		[],
+		[avatarPreviewUrlRef],
 	);
 
 	const openCreate = () => {
@@ -218,7 +241,7 @@ export default function UsersPage() {
 					try {
 						await updateUser(created.id, { environmentIds: draft.environmentIds });
 					} catch (err) {
-						await load({ silent: true });
+						await refresh();
 						setError(
 							`User created, but assigning environments failed: ${
 								err instanceof Error ? err.message : "unknown error"
@@ -228,7 +251,7 @@ export default function UsersPage() {
 					}
 				}
 			}
-			await load({ silent: true });
+			await refresh();
 			closePanel();
 		} catch (err) {
 			setError(
@@ -247,7 +270,7 @@ export default function UsersPage() {
 		try {
 			await deleteUser(user.id);
 			setConfirmingDeleteUserId(null);
-			await load({ silent: true });
+			await refresh();
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to delete user");
 		} finally {
@@ -300,7 +323,7 @@ export default function UsersPage() {
 		setResettingVerificationUserId(user.id);
 		try {
 			await updateUser(user.id, { emailVerifiedAt: null });
-			await load({ silent: true });
+			await refresh();
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to reset email verification");
 		} finally {
