@@ -23,13 +23,13 @@ export function EnvironmentForm({
 			<Banner variant="error" message={error} />
 
 			<label className="block text-sm">
-				<span className="mb-1 block text-muted-foreground">Environment name</span>
+				<span className="mb-1 block font-medium text-foreground">Environment name</span>
 				<Input
 					type="text"
 					required
 					value={draft.name}
 					onChange={(e) => onChange({ name: e.target.value })}
-					placeholder="production"
+					placeholder="e.g. production"
 				/>
 				<span className="mt-1 block text-xs text-muted-foreground">
 					The identifier used in the <code>environment</code> token claim, in token
@@ -38,12 +38,12 @@ export function EnvironmentForm({
 			</label>
 
 			<label className="block text-sm">
-				<span className="mb-1 block text-muted-foreground">Display name (optional)</span>
+				<span className="mb-1 block font-medium text-foreground">Display name (optional)</span>
 				<Input
 					type="text"
 					value={draft.displayName}
 					onChange={(e) => onChange({ displayName: e.target.value })}
-					placeholder={draft.name.trim() || "Production (EU)"}
+					placeholder={draft.name.trim() ? `Defaults to “${draft.name.trim()}”` : "e.g. Production (EU)"}
 				/>
 				<span className="mt-1 block text-xs text-muted-foreground">
 					Shown throughout the dashboard. Leave blank to show the environment name.

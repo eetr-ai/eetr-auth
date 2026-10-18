@@ -14,7 +14,7 @@ interface AuditLogFiltersProps {
 
 const fieldInputClass =
 	"rounded-lg border border-border bg-background px-2 py-1.5 text-sm";
-const fieldLabelClass = "mb-1 block text-xs text-muted-foreground";
+const fieldLabelClass = "mb-1 block text-xs font-medium text-foreground";
 
 export function AuditLogFilters({ filters, onChange }: AuditLogFiltersProps) {
 	const set = (patch: Partial<AuditLogFilterValues>) => onChange({ ...filters, ...patch });
@@ -26,7 +26,7 @@ export function AuditLogFilters({ filters, onChange }: AuditLogFiltersProps) {
 				<input
 					type="text"
 					value={filters.action}
-					placeholder="user.delete"
+					placeholder="e.g. user.delete"
 					onChange={(e) => set({ action: e.target.value })}
 					className={fieldInputClass}
 				/>
@@ -36,7 +36,7 @@ export function AuditLogFilters({ filters, onChange }: AuditLogFiltersProps) {
 				<input
 					type="text"
 					value={filters.resourceType}
-					placeholder="user"
+					placeholder="e.g. user"
 					onChange={(e) => set({ resourceType: e.target.value })}
 					className={fieldInputClass}
 				/>

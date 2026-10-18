@@ -40,7 +40,7 @@ export function PolicyForm({
 			<Banner variant="error" message={error} />
 
 			<label className="block text-sm">
-				<span className="mb-1 block text-muted-foreground">Name</span>
+				<span className="mb-1 block font-medium text-foreground">Name</span>
 				<Input
 					type="text"
 					data-autofocus
@@ -62,7 +62,7 @@ export function PolicyForm({
 
 			<div className="grid gap-4 sm:grid-cols-2">
 				<label className="text-sm">
-					<span className="mb-1 block text-muted-foreground">Min length</span>
+					<span className="mb-1 block font-medium text-foreground">Min length</span>
 					<Input
 						type="number"
 						min={1}
@@ -71,7 +71,7 @@ export function PolicyForm({
 					/>
 				</label>
 				<label className="text-sm">
-					<span className="mb-1 block text-muted-foreground">Max length (optional)</span>
+					<span className="mb-1 block font-medium text-foreground">Max length (optional)</span>
 					<Input
 						type="number"
 						min={1}
@@ -83,7 +83,7 @@ export function PolicyForm({
 			</div>
 
 			<label className="block text-sm">
-				<span className="mb-1 block text-muted-foreground">Max age in days (0 = none)</span>
+				<span className="mb-1 block font-medium text-foreground">Max age in days (0 = none)</span>
 				<Input
 					type="number"
 					min={0}
@@ -95,7 +95,7 @@ export function PolicyForm({
 			<div className="grid gap-4 sm:grid-cols-2">
 				{COUNT_FIELDS.map(([key, label]) => (
 					<label key={key} className="text-sm">
-						<span className="mb-1 block text-muted-foreground">{label}</span>
+						<span className="mb-1 block font-medium text-foreground">{label}</span>
 						<Input
 							type="number"
 							min={0}
@@ -122,7 +122,7 @@ export function PolicyForm({
 			</label>
 
 			<div>
-				<span className="mb-1 block text-sm text-muted-foreground">Environments</span>
+				<span className="mb-1 block text-sm font-medium text-foreground">Environments</span>
 				{environments.length === 0 ? (
 					<p className="text-sm text-muted-foreground">No environments defined.</p>
 				) : (

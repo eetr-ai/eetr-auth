@@ -44,7 +44,7 @@ export function ForgotPasswordForm() {
 					value={email}
 					onChange={(e) => setEmail(e.target.value)}
 					className="w-full rounded-card border border-border bg-background px-3 py-2 text-foreground focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-					placeholder="you@example.com"
+					placeholder="e.g. you@example.com"
 				/>
 			</div>
 			{error ? (

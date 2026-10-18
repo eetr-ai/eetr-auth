@@ -97,39 +97,39 @@ export function UserForm({
 			) : null}
 
 			<label className="block text-sm">
-				<span className="mb-1 block text-muted-foreground">Username</span>
+				<span className="mb-1 block font-medium text-foreground">Username</span>
 				<Input
 					type="text"
 					required
 					data-autofocus
 					value={draft.username}
 					onChange={(e) => onChange({ username: e.target.value })}
-					placeholder="username"
+					placeholder="e.g. ada"
 				/>
 			</label>
 
 			<label className="block text-sm">
-				<span className="mb-1 block text-muted-foreground">Display name (optional)</span>
+				<span className="mb-1 block font-medium text-foreground">Display name (optional)</span>
 				<Input
 					type="text"
 					value={draft.name}
 					onChange={(e) => onChange({ name: e.target.value })}
-					placeholder="Ada Lovelace"
+					placeholder="e.g. Ada Lovelace"
 				/>
 			</label>
 
 			<label className="block text-sm">
-				<span className="mb-1 block text-muted-foreground">Email (optional)</span>
+				<span className="mb-1 block font-medium text-foreground">Email (optional)</span>
 				<Input
 					type="email"
 					value={draft.email}
 					onChange={(e) => onChange({ email: e.target.value })}
-					placeholder="ada@example.com"
+					placeholder="e.g. ada@example.com"
 				/>
 			</label>
 
 			<label className="block text-sm">
-				<span className="mb-1 block text-muted-foreground">
+				<span className="mb-1 block font-medium text-foreground">
 					{editingId ? "New password (leave blank to keep)" : "Password"}
 				</span>
 				<Input
@@ -187,7 +187,7 @@ export function UserForm({
 			</label>
 
 			<div>
-				<span className="mb-1 block text-sm text-muted-foreground">Environments</span>
+				<span className="mb-1 block text-sm font-medium text-foreground">Environments</span>
 				{environments.length === 0 ? (
 					<p className="text-sm text-muted-foreground">No environments defined.</p>
 				) : (

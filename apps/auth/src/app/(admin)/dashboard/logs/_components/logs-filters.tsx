@@ -28,7 +28,7 @@ interface LogsFiltersProps {
 
 const selectClass = "rounded-lg border border-border bg-background px-2 py-1.5 text-sm";
 const inputClass = "rounded-lg border border-border bg-background px-2 py-1.5 text-sm";
-const labelClass = "mb-1 block text-xs text-muted-foreground";
+const labelClass = "mb-1 block text-xs font-medium text-foreground";
 
 export function LogsFilters({ filters, environments, onChange, onApply }: LogsFiltersProps) {
 	return (

@@ -67,7 +67,7 @@ export function SiteIdentitySection({
 									data: e.target.value,
 								})
 							}
-							placeholder="Eetr Auth"
+							placeholder="e.g. Eetr Auth"
 						/>
 					</div>
 					<div>
@@ -81,7 +81,7 @@ export function SiteIdentitySection({
 									data: e.target.value,
 								})
 							}
-							placeholder="https://example.com"
+							placeholder="e.g. https://example.com"
 						/>
 					</div>
 					<div className="md:col-span-2">
@@ -95,7 +95,7 @@ export function SiteIdentitySection({
 									data: e.target.value,
 								})
 							}
-							placeholder="https://cdn.example.com"
+							placeholder="e.g. https://cdn.example.com"
 						/>
 						<p className="mt-1 text-xs text-muted-foreground">
 							Used for public URLs to the uploaded site logo. Optional if you only use the default
@@ -130,7 +130,7 @@ export function SiteIdentitySection({
 
 				<div className="flex flex-wrap items-end gap-4">
 					<div>
-						<span className="mb-1 block text-sm text-muted-foreground">Logo</span>
+						<span className="mb-1 block text-sm font-medium text-foreground">Logo</span>
 						<div className="flex items-center gap-3">
 							{previewLogoUrl ? (
 								// eslint-disable-next-line @next/next/no-img-element
