@@ -77,10 +77,10 @@ export default async function OAuthConfirmPage() {
 		])
 	);
 	// The screen is shown on every authorization, even when the user has already consented
-	// to everything being asked for. Skipping it also removed the only place in the flow
-	// that offers "sign in with a different account", which left a signed-in user with no
-	// way to switch — so the skip is disabled for now. `prompt=consent` is therefore a
-	// no-op today; the consent record still drives the incremental copy below.
+	// to everything being asked for: it is the only place in the flow that offers "sign in
+	// with a different account", so skipping it would leave a signed-in user with no way to
+	// switch. What the consent record changes is the copy — a fully covered request drops
+	// the scope list and just asks which account to continue with.
 	const unconsentedScopeNames = client
 		? await services.consentService.getUnconsentedScopeNames(
 				session.user.id,
@@ -95,6 +95,13 @@ export default async function OAuthConfirmPage() {
 		unconsentedScopeNames.length > 0 ? unconsentedScopeNames : effectiveScopeNames;
 	const isIncrementalConsent =
 		unconsentedScopeNames.length > 0 && unconsentedScopeNames.length < effectiveScopeNames.length;
+	// `prompt=consent` asks us to show the full grant again even when nothing is new.
+	const forceConsent = (pendingParams.prompt ?? "").split(/\s+/).includes("consent");
+	const alreadyConsented =
+		client !== null &&
+		!forceConsent &&
+		effectiveScopeNames.length > 0 &&
+		unconsentedScopeNames.length === 0;
 
 	const consentScopes = scopesToShow.map((name) => ({
 		name,
@@ -110,7 +117,13 @@ export default async function OAuthConfirmPage() {
 			<div className="mx-auto mt-16 w-full max-w-xl rounded-card border border-border bg-background p-8">
 				<h1 className="text-2xl font-semibold">Authorize {clientName}</h1>
 				<p className="mt-2 text-sm text-muted-foreground">
-					{isIncrementalConsent ? (
+					{alreadyConsented ? (
+						<>
+							You&apos;ve already authorized{" "}
+							<span className="font-medium text-foreground">{clientName}</span>. Choose which
+							account to continue with.
+						</>
+					) : isIncrementalConsent ? (
 						<>
 							<span className="font-medium text-foreground">{clientName}</span> is asking for
 							additional access to your account.
@@ -123,43 +136,52 @@ export default async function OAuthConfirmPage() {
 					)}
 				</p>
 
-				<div className="mt-6 rounded-card border border-border p-4">
-						<p className="text-sm font-medium">
-						{isIncrementalConsent ? "This will additionally grant access to:" : "This will grant access to:"}
-					</p>
-					{consentScopes.length > 0 ? (
-						<ul className="mt-3 flex flex-col gap-3">
-							{consentScopes.map((scope) => (
-								<li key={scope.name}>
-									{scope.label ? (
-										<>
-											<span className="block text-sm font-medium">{scope.label}</span>
-											{scope.description && (
-												<span className="block text-sm text-muted-foreground">
-													{scope.description}
-												</span>
-											)}
-										</>
-									) : (
-										<span className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 font-mono text-xs text-foreground">
-											{scope.name}
-										</span>
-									)}
-								</li>
-							))}
-						</ul>
-					) : (
-						<p className="mt-1 text-sm text-muted-foreground">
-							No scopes are granted to this application.
-						</p>
-					)}
-					{requestedResource && (
-						<p className="mt-3 text-sm text-muted-foreground">
+				{alreadyConsented ? (
+					requestedResource && (
+						<p className="mt-6 text-sm text-muted-foreground">
 							Resource:{" "}
 							<span className="font-mono text-xs text-foreground">{requestedResource}</span>
 						</p>
-					)}
-				</div>
+					)
+				) : (
+					<div className="mt-6 rounded-card border border-border p-4">
+						<p className="text-sm font-medium">
+							{isIncrementalConsent ? "This will additionally grant access to:" : "This will grant access to:"}
+						</p>
+						{consentScopes.length > 0 ? (
+							<ul className="mt-3 flex flex-col gap-3">
+								{consentScopes.map((scope) => (
+									<li key={scope.name}>
+										{scope.label ? (
+											<>
+												<span className="block text-sm font-medium">{scope.label}</span>
+												{scope.description && (
+													<span className="block text-sm text-muted-foreground">
+														{scope.description}
+													</span>
+												)}
+											</>
+										) : (
+											<span className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 font-mono text-xs text-foreground">
+												{scope.name}
+											</span>
+										)}
+									</li>
+								))}
+							</ul>
+						) : (
+							<p className="mt-1 text-sm text-muted-foreground">
+								No scopes are granted to this application.
+							</p>
+						)}
+						{requestedResource && (
+							<p className="mt-3 text-sm text-muted-foreground">
+								Resource:{" "}
+								<span className="font-mono text-xs text-foreground">{requestedResource}</span>
+							</p>
+						)}
+					</div>
+				)}
 
 				<div className="mt-4 flex items-center gap-4 rounded-card border border-border p-4">
 					{session.user.image ? (
