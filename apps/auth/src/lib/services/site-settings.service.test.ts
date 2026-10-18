@@ -29,6 +29,8 @@ function createClientRepoMock(): ClientRepository {
 		setClientScopes: vi.fn(),
 		updateSecret: vi.fn(),
 		updateName: vi.fn(),
+		updateHome: vi.fn(),
+		listHomeLinks: vi.fn(),
 	};
 }
 
@@ -424,6 +426,9 @@ describe("SiteSettingsService", () => {
 				tokenEndpointAuthMethod: "client_secret_basic",
 				isDynamic: false,
 				isTest: false,
+				homeUrl: null,
+				homeDisplayName: null,
+				showOnHome: false,
 			});
 			const service = createService(createSiteRepoMock(), adminRepo, clientRepo);
 
@@ -444,6 +449,9 @@ describe("SiteSettingsService", () => {
 				tokenEndpointAuthMethod: "client_secret_basic",
 				isDynamic: false,
 				isTest: false,
+				homeUrl: null,
+				homeDisplayName: null,
+				showOnHome: false,
 			});
 			const insert = vi.fn();
 			const service = createService(createSiteRepoMock(), createAdminClientsRepoMock(), clientRepo, {

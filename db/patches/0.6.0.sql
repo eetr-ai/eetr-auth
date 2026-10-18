@@ -42,10 +42,16 @@
 --     environments.name stays the stable identifier -- it is the `environment` JWT claim, the
 --     `environmentName` field on POST /api/token/validate, and the denormalized value in
 --     token_activity_log.environment_name -- so it is deliberately NOT renamed here.
+--   * Optional per-client home link (clients.home_url, clients.home_display_name,
+--     clients.show_on_home). A client with show_on_home = 1 and a home_url is listed on
+--     the landing page a signed-in non-admin sees at "/", so a user who lands on the
+--     auth app (e.g. after a password reset) has somewhere to go. Added after earlier
+--     builds already stamped databases 0.6.0, so those need the three ALTERs applied by
+--     hand (see the bottom of this file).
 --
 -- Idempotency: the new table + indexes + triggers use CREATE ... IF NOT EXISTS, and the seed-copy
 -- backfill is guarded on `IS NULL`, so both are replay-safe. SQLite has no
--- `ADD COLUMN IF NOT EXISTS`, so the six ADD COLUMN statements are the non-idempotent
+-- `ADD COLUMN IF NOT EXISTS`, so the nine ADD COLUMN statements are the non-idempotent
 -- ones; they are applied exactly once by the version gate in run-d1-migrate.mjs (patches
 -- strictly greater than the DB's current version). On a manual re-run against a DB that
 -- already has these columns, remove those lines.
@@ -224,5 +230,11 @@ CREATE INDEX IF NOT EXISTS idx_api_key_scopes_api_key_id ON api_key_scopes(api_k
 --
 -- Non-idempotent ADD COLUMN (applied exactly once by the version gate; see header note).
 ALTER TABLE tokens ADD COLUMN api_key_id TEXT REFERENCES api_keys(id) ON DELETE SET NULL;
+
+-- Home link. NOT NULL is safe on show_on_home for the same reason as is_test: the default
+-- is a constant, so every existing client upgrades to "not shown".
+ALTER TABLE clients ADD COLUMN home_url TEXT;
+ALTER TABLE clients ADD COLUMN home_display_name TEXT;
+ALTER TABLE clients ADD COLUMN show_on_home INTEGER NOT NULL DEFAULT 0;
 
 UPDATE schema_metadata SET value = '0.6.0' WHERE key = 'schema_version';

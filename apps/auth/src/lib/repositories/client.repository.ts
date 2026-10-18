@@ -18,6 +18,16 @@ export interface Client {
 	// form, and it is the only kind of client a test user may authenticate against.
 	// Set at creation and immutable, like environmentId -- hence no setter below.
 	isTest: boolean;
+	// Optional home link shown on the non-admin landing page when showOnHome is set.
+	homeUrl: string | null;
+	homeDisplayName: string | null;
+	showOnHome: boolean;
+}
+
+export interface ClientHomeInput {
+	homeUrl: string | null;
+	homeDisplayName: string | null;
+	showOnHome: boolean;
 }
 
 export interface ClientRow {
@@ -31,6 +41,9 @@ export interface ClientRow {
 	token_endpoint_auth_method: string;
 	is_dynamic: number;
 	is_test: number;
+	home_url?: string | null;
+	home_display_name?: string | null;
+	show_on_home?: number;
 }
 
 export interface ClientWithDetails extends Client {
@@ -51,4 +64,7 @@ export interface ClientRepository {
 	setClientScopes(clientId: string, scopeIds: string[]): Promise<void>;
 	updateSecret(id: string, clientSecret: string): Promise<void>;
 	updateName(id: string, name: string | null): Promise<void>;
+	updateHome(id: string, home: ClientHomeInput): Promise<void>;
+	/** Clients flagged for the home page that have a URL, are not test clients and have not expired at `nowIso`. */
+	listHomeLinks(nowIso: string): Promise<Client[]>;
 }

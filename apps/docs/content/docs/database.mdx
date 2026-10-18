@@ -115,6 +115,10 @@ Both flags are set at creation and immutable, and each carries a `CHECK` that SQ
 `INSERT` and `UPDATE` alike: a test user can never be an admin, and a dynamically registered client
 can never be a test client.
 
+`clients.home_url`, `clients.home_display_name` and `clients.show_on_home` (patch `0.6.0`) are the
+optional [home link](/docs/features/clients#home-link): a client with the flag set and a URL is listed
+on the page a signed-in non-admin sees at `/`.
+
 <Callout type="warn" title="Identifiers vs labels">
   `environments.name` and `scopes.scope_name` are **identifiers**, not display text.
   `environments.name` is emitted as the `environment` JWT claim, is the `environmentName` field on

@@ -27,6 +27,8 @@ function createClientRepoMock(): ClientRepository {
 		setClientScopes: vi.fn(),
 		updateSecret: vi.fn(),
 		updateName: vi.fn(),
+		updateHome: vi.fn(),
+		listHomeLinks: vi.fn(),
 	};
 }
 
@@ -106,6 +108,9 @@ describe("TokenActivityLogService", () => {
 				tokenEndpointAuthMethod: "client_secret_basic",
 				isDynamic: false,
 				isTest: false,
+				homeUrl: null,
+				homeDisplayName: null,
+				showOnHome: false,
 				environmentId: "env-1",
 				createdBy: "u1",
 				expiresAt: null,
@@ -135,6 +140,9 @@ describe("TokenActivityLogService", () => {
 				tokenEndpointAuthMethod: "client_secret_basic",
 				isDynamic: false,
 				isTest: false,
+				homeUrl: null,
+				homeDisplayName: null,
+				showOnHome: false,
 				environmentId: "env-2",
 				createdBy: "u1",
 				expiresAt: null,

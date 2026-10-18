@@ -43,6 +43,9 @@ function createClient(overrides: Partial<Client> = {}): Client {
 		tokenEndpointAuthMethod: "client_secret_basic",
 		isDynamic: false,
 		isTest: false,
+		homeUrl: null,
+		homeDisplayName: null,
+		showOnHome: false,
 		...overrides,
 	};
 }

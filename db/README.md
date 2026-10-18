@@ -4,6 +4,8 @@ As of version `0.1.0`, the auth app uses versioned schema patches. The current r
 
 Patch `0.6.0.sql` also adds `api_keys` and `api_key_scopes` (see [API keys](../apps/docs/content/docs/features/api-keys.mdx)), plus `tokens.api_key_id` — set only on tokens minted by the API-key exchange, so the self-service API-key routes can refuse one and stop a key from issuing itself a successor with a later expiry or wider scopes.
 
+Patch `0.6.0.sql` also adds the optional per-client home link (`clients.home_url`, `home_display_name`, `show_on_home`) listed on the non-admin landing page at `/`.
+
 `schema.sql` seeds the default OIDC scopes `openid`, `profile`, and `email` (idempotent `INSERT OR IGNORE`) so a fresh install can perform OpenID Connect out of the box. Patch `0.4.2.sql` backfills them for existing databases, and `0.6.0.sql` backfills their consent-screen copy (`display_name` / `description`). Seeding only defines the scopes — an admin still grants them to individual clients.
 
 `client_claims` holds static custom JWT claims per client; `value_type` preserves the JSON type so a numeric claim mints as a number.
@@ -58,7 +60,7 @@ For local development, `npm run setup:local` is the fresh-environment bootstrap:
 
 For a brand-new database, the runner uses `schema.sql`. For an existing pre-metadata database, the runner starts with `db/patches/0.1.0.sql`.
 
-Patch files are release-versioned, not change-by-change migration files. During development, schema changes for the next database release accumulate into the next unreleased patch file. When that schema is released, the patch version should match the released schema version.
+Patch files are release-versioned, not change-by-change migration files. During development, schema changes for the next database release accumulate into the next unreleased patch file. The patch version must match the release tag it ships in: `db/patches/0.6.0.sql` ships in `v0.6.0`. When the next release would otherwise be numbered below the schema version already stamped on deployed databases, force the release number up (a breaking-change commit, or a `Release-As:` footer) rather than naming the patch after a version the migrator would skip.
 
 Do not treat a patch file as a second copy of `schema.sql`. The snapshot is allowed to include everything in the current release; the patch should include only what is needed to upgrade from the latest previous release to the new one.
 
