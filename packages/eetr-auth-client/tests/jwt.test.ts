@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 const joseMocks = vi.hoisted(() => ({
   createRemoteJWKSet: vi.fn(),
@@ -51,6 +51,51 @@ describe("validateJwt", () => {
       issuer: undefined,
       clockTolerance: 5,
     });
+  });
+});
+
+describe("validateJwt typ enforcement (real jose)", () => {
+  // Real signing and verification here: the point is that jose rejects the token, not that
+  // we forwarded an option. The remote JWKS is swapped for a local one built from a test key.
+  const ISSUER = "https://auth.example.com";
+  const JWKS_URI = "https://auth.example.com/typ-test/jwks.json";
+  let sign: (header: Record<string, string>) => Promise<string>;
+
+  beforeAll(async () => {
+    const jose = await vi.importActual<typeof import("jose")>("jose");
+    const { privateKey, publicKey } = await jose.generateKeyPair("RS256");
+    const jwk = { ...(await jose.exportJWK(publicKey)), kid: "typ-kid", alg: "RS256" };
+    joseMocks.createRemoteJWKSet.mockReturnValue(jose.createLocalJWKSet({ keys: [jwk] }));
+    joseMocks.jwtVerify.mockImplementation(jose.jwtVerify);
+    sign = (header) =>
+      new jose.SignJWT({ sub: "user-123" })
+        .setProtectedHeader({ alg: "RS256", kid: "typ-kid", ...header })
+        .setIssuer(ISSUER)
+        .setAudience("client-app")
+        .setIssuedAt()
+        .setExpirationTime("5m")
+        .sign(privateKey);
+  });
+
+  afterAll(() => {
+    joseMocks.createRemoteJWKSet.mockReset();
+    joseMocks.jwtVerify.mockReset();
+  });
+
+  const options = { issuer: ISSUER, audience: "client-app", typ: "at+jwt" };
+
+  it("accepts an access token typed at+jwt", async () => {
+    const token = await sign({ typ: "at+jwt" });
+    await expect(validateJwt(token, JWKS_URI, options)).resolves.toMatchObject({ sub: "user-123" });
+  });
+
+  it("rejects an untyped token (how eetr-auth signs ID tokens) when typ is required", async () => {
+    const token = await sign({});
+    await expect(validateJwt(token, JWKS_URI, options)).rejects.toThrow(/typ/);
+    // Without the option the same token verifies, which is the replay gap the option closes.
+    await expect(
+      validateJwt(token, JWKS_URI, { issuer: ISSUER, audience: "client-app" })
+    ).resolves.toMatchObject({ sub: "user-123" });
   });
 });
 

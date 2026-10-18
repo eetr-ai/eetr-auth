@@ -122,6 +122,20 @@ decodeJwtPayload(token)                      // decode WITHOUT verifying — ins
 `validateIdToken` additionally checks the `nonce` you passed to the authorization endpoint, throwing
 `id_token nonce mismatch` on a mismatch.
 
+When verifying an **access token**, pass `typ: "at+jwt"`. eetr-auth puts that header on access
+tokens only ([RFC 9068](/docs/features/tokens#token-type-header-rfc-9068)), so an ID token presented
+as a bearer token is rejected instead of passing the signature/issuer/audience checks:
+
+```ts
+const claims = await validateJwt(accessToken, discovery.jwks_uri, {
+  issuer: ISSUER,
+  audience: "my-client",
+  typ: "at+jwt",
+});
+```
+
+The option is off by default so the client keeps working against servers that predate the header.
+
 ## Dynamic Client Registration
 
 ```ts

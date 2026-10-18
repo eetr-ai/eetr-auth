@@ -5,6 +5,12 @@ export interface ValidateJwtOptions {
   audience?: string | string[];
   issuer?: string;
   clockTolerance?: number;
+  /**
+   * Required `typ` protected-header value. Pass `"at+jwt"` when verifying access tokens:
+   * eetr-auth stamps it on access tokens only (RFC 9068), so this rejects an ID token
+   * presented as a bearer token. Unset by default so servers older than that still verify.
+   */
+  typ?: string;
 }
 
 export interface ValidateIdTokenOptions extends ValidateJwtOptions {
@@ -31,6 +37,7 @@ export async function validateJwt(
     audience: options.audience,
     issuer: options.issuer,
     clockTolerance: options.clockTolerance ?? 5,
+    typ: options.typ,
   });
   return payload as JWTPayload;
 }
