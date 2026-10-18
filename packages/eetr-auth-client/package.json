@@ -24,7 +24,7 @@
     "eetr-auth"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "sideEffects": false,
   "type": "module",
