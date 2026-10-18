@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { exportJWK, exportPKCS8, generateKeyPair, SignJWT } from "jose";
 
 import type { AuthorizationCodeRepository, AuthorizationCodeWithScopeIds } from "@/lib/repositories/authorization-code.repository";
