@@ -9,6 +9,17 @@ permissions:
   contents: read
 
 jobs:
+  schema-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The check diffs db/patches against the last release tag.
+          fetch-depth: 0
+
+      - name: Check schema patch versions
+        run: node scripts/check-schema-version.mjs
+
   lint:
     runs-on: ubuntu-latest
     steps:

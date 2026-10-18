@@ -60,7 +60,9 @@ For local development, `npm run setup:local` is the fresh-environment bootstrap:
 
 For a brand-new database, the runner uses `schema.sql`. For an existing pre-metadata database, the runner starts with `db/patches/0.1.0.sql`.
 
-Patch files are release-versioned, not change-by-change migration files. During development, schema changes for the next database release accumulate into the next unreleased patch file. The patch version must match the release tag it ships in: `db/patches/0.6.0.sql` ships in `v0.6.0`. When the next release would otherwise be numbered below the schema version already stamped on deployed databases, force the release number up (a breaking-change commit, or a `Release-As:` footer) rather than naming the patch after a version the migrator would skip.
+Patch files are release-versioned, not change-by-change migration files. During development, schema changes for the next release accumulate into one unreleased patch file.
+
+**The patch version must match the release tag it ships in.** `db/patches/0.6.0.sql` ships in `v0.6.0`, and only there. The schema version and the app version are the same number. Breaking this rule is how databases ended up stamped `0.6.0` by app builds `v0.5.1`–`v0.5.3`.
 
 Do not treat a patch file as a second copy of `schema.sql`. The snapshot is allowed to include everything in the current release; the patch should include only what is needed to upgrade from the latest previous release to the new one.
 
@@ -70,10 +72,14 @@ Not every app release needs a database patch. If a release does not change the s
 
 When the schema changes in a future release:
 
-1. Update `schema.sql` so it matches the new latest schema.
-2. Add or continue updating the unreleased patch file in `db/patches`, named with the target schema release version, with only the delta from the previous released schema.
-3. Make the patch idempotent enough for the expected upgrade path.
-4. End the patch by updating `schema_metadata.schema_version` to the released version.
+1. **Work out the next release number** before naming anything. Release-please computes it from the commits since the last tag (`.release-please-manifest.json`), and pre-1.0 `feat:` and `fix:` both bump the *patch* (`bump-patch-for-minor-pre-major`): `0.6.0` → `0.6.1`. A breaking change bumps the minor: `0.6.0` → `0.7.0`.
+2. If a patch for an unreleased version already exists, keep adding to it. Otherwise create `db/patches/<next release>.sql` holding only the delta from the previous release.
+3. If you need the release to carry a different number than release-please would pick, force it with a `Release-As: x.y.z` commit footer. Never name the patch after a version that differs from the tag it will ship in.
+4. Update `schema.sql` to match, including its `schema_version`.
+5. Make the patch idempotent enough for the expected upgrade path, and end it by setting `schema_metadata.schema_version` to its own version.
+6. Never edit a patch whose version has already been released. Deployed databases already report that version, so the migrator skips it.
+
+`npm run db:check-version` (`scripts/check-schema-version.mjs`) enforces this. CI runs it on every PR: patch stamps match their file names, `schema.sql` matches the newest patch, and released patches are frozen. The release workflow runs it again with `--release` on the push that merges a release-please PR, and refuses to cut the tag if the newest patch is ahead of that release. Release-please PRs don't trigger CI, so this second run is the only check on them.
 
 ## Create an admin user
 

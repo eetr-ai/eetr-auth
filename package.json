@@ -26,6 +26,7 @@
 		"db:schema:remote": "node scripts/run-d1-migrate.mjs --remote --file=../../db/schema.sql",
 		"db:migrate": "node scripts/run-d1-migrate.mjs --local",
 		"db:migrate:remote": "node scripts/run-d1-migrate.mjs --remote",
+		"db:check-version": "node scripts/check-schema-version.mjs",
 		"db:bootstrap": "npm run db:schema && npm run db:schema:remote",
 		"db:create-admin": "node scripts/create-admin.mjs",
 		"db:create-admin:local": "node scripts/create-admin.mjs --local-only",

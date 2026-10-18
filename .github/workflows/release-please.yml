@@ -10,7 +10,26 @@ permissions:
   pull-requests: write
 
 jobs:
+  # Release-please PRs are opened with the default GITHUB_TOKEN, so CI never runs on them.
+  # Check here instead, on the push that merges one, before the tag is cut: the newest
+  # schema patch must ship in the release whose number it carries.
+  schema-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check schema patch matches the release
+        run: |
+          if git diff --name-only HEAD^ HEAD | grep -qx '.release-please-manifest.json'; then
+            node scripts/check-schema-version.mjs --release
+          else
+            echo "Not a release commit; nothing to check."
+          fi
+
   release-please:
+    needs: schema-version
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
