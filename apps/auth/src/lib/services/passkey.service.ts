@@ -5,14 +5,13 @@ import {
 	verifyAuthenticationResponse,
 	type VerifyRegistrationResponseOpts,
 	type VerifyAuthenticationResponseOpts,
+	type RegistrationResponseJSON,
+	type AuthenticationResponseJSON,
+	type WebAuthnCredential,
+	type PublicKeyCredentialCreationOptionsJSON,
+	type PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/server";
-import type {
-	RegistrationResponseJSON,
-	AuthenticationResponseJSON,
-	AuthenticatorDevice,
-	PublicKeyCredentialCreationOptionsJSON,
-	PublicKeyCredentialRequestOptionsJSON,
-} from "@simplewebauthn/types";
+import { isoBase64URL } from "@simplewebauthn/server/helpers";
 import type { UserRepository } from "@/lib/repositories/admin.repository";
 import type { PasskeyRepository, PasskeyCredentialRow } from "@/lib/repositories/passkey.repository";
 import type { SiteSettingsRepository } from "@/lib/repositories/site-settings.repository";
@@ -45,6 +44,24 @@ export function fallbackRpIdFromRpId(rpId: string): string | null {
 	}
 
 	return labels.slice(-2).join(".");
+}
+
+function parseTransports(transports: string | null): AuthenticatorTransport[] | undefined {
+	return transports ? (JSON.parse(transports) as AuthenticatorTransport[]) : undefined;
+}
+
+/**
+ * Rebuilds the credential simplewebauthn verifies against from a stored row. Rows keep the
+ * credential id and public key as base64url of the raw bytes, which is what v9 wrote too,
+ * so passkeys registered before the v14 upgrade keep verifying.
+ */
+export function credentialFromRow(row: PasskeyCredentialRow): WebAuthnCredential {
+	return {
+		id: row.credentialId,
+		publicKey: isoBase64URL.toBuffer(row.publicKey),
+		counter: row.counter,
+		transports: parseTransports(row.transports),
+	};
 }
 
 /** Safe, display-only view of a passkey for the management UI (no secrets). */
@@ -117,11 +134,8 @@ export class PasskeyService {
 		// Exclude credentials the user already has
 		const existing = await this.repo.findCredentialsByUserId(userId);
 		const excludeCredentials = existing.map((c) => ({
-			id: Buffer.from(c.credentialId, "base64url"),
-			type: "public-key" as const,
-			transports: c.transports
-				? (JSON.parse(c.transports) as AuthenticatorTransport[])
-				: undefined,
+			id: c.credentialId,
+			transports: parseTransports(c.transports),
 		}));
 
 		const options = await generateRegistrationOptions({
@@ -129,7 +143,9 @@ export class PasskeyService {
 			rpID: rpId,
 			userName: user.username,
 			userDisplayName: user.name ?? user.username,
-			userID: user.id,
+			// v9 encoded the string id as UTF-8 for us; v14 wants the bytes, and we keep the
+			// same user handle so new passkeys match the ones already registered.
+			userID: new TextEncoder().encode(user.id),
 			attestationType: "none",
 			excludeCredentials,
 			authenticatorSelection: {
@@ -189,14 +205,14 @@ export class PasskeyService {
 			throw new Error("Passkey registration could not be verified.");
 		}
 
-		const { credentialID, credentialPublicKey, counter, credentialDeviceType, credentialBackedUp } = registrationInfo;
+		const { credential, credentialDeviceType, credentialBackedUp } = registrationInfo;
 
 		const credentialRow: PasskeyCredentialRow = {
 			id: crypto.randomUUID(),
 			userId,
-			credentialId: Buffer.from(credentialID).toString("base64url"),
-			publicKey: Buffer.from(credentialPublicKey).toString("base64url"),
-			counter,
+			credentialId: credential.id,
+			publicKey: isoBase64URL.fromBuffer(credential.publicKey),
+			counter: credential.counter,
 			deviceType: credentialDeviceType,
 			backedUp: credentialBackedUp,
 			transports: response.response.transports ? JSON.stringify(response.response.transports) : null,
@@ -298,22 +314,13 @@ export class PasskeyService {
 		const { rpId, fallbackRpId, origin } = await this.getRpDetails();
 		const expectedRpIds = fallbackRpId ? [rpId, fallbackRpId] : rpId;
 
-		const authenticator: AuthenticatorDevice = {
-			credentialID: Buffer.from(credentialRow.credentialId, "base64url"),
-			credentialPublicKey: Buffer.from(credentialRow.publicKey, "base64url"),
-			counter: credentialRow.counter,
-			transports: credentialRow.transports
-				? (JSON.parse(credentialRow.transports) as AuthenticatorTransport[])
-				: undefined,
-		};
-
 		const opts: VerifyAuthenticationResponseOpts = {
 			response,
 			expectedChallenge: challengeRow.challenge,
 			expectedOrigin: origin,
 			expectedRPID: expectedRpIds,
 			requireUserVerification: false,
-			authenticator,
+			credential: credentialFromRow(credentialRow),
 		};
 
 		const { verified, authenticationInfo } = await verifyAuthenticationResponse(opts);
@@ -380,11 +387,8 @@ export class PasskeyService {
 			// Scope to just this credential so only it can satisfy the challenge.
 			allowCredentials: [
 				{
-					id: Buffer.from(credential.credentialId, "base64url"),
-					type: "public-key" as const,
-					transports: credential.transports
-						? (JSON.parse(credential.transports) as AuthenticatorTransport[])
-						: undefined,
+					id: credential.credentialId,
+					transports: parseTransports(credential.transports),
 				},
 			],
 		});
@@ -432,22 +436,13 @@ export class PasskeyService {
 		const { rpId, fallbackRpId, origin } = await this.getRpDetails();
 		const expectedRpIds = fallbackRpId ? [rpId, fallbackRpId] : rpId;
 
-		const authenticator: AuthenticatorDevice = {
-			credentialID: Buffer.from(credentialRow.credentialId, "base64url"),
-			credentialPublicKey: Buffer.from(credentialRow.publicKey, "base64url"),
-			counter: credentialRow.counter,
-			transports: credentialRow.transports
-				? (JSON.parse(credentialRow.transports) as AuthenticatorTransport[])
-				: undefined,
-		};
-
 		const opts: VerifyAuthenticationResponseOpts = {
 			response,
 			expectedChallenge: challengeRow.challenge,
 			expectedOrigin: origin,
 			expectedRPID: expectedRpIds,
 			requireUserVerification: false,
-			authenticator,
+			credential: credentialFromRow(credentialRow),
 		};
 
 		const { verified, authenticationInfo } = await verifyAuthenticationResponse(opts);

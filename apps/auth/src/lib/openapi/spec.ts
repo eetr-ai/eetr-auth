@@ -1174,7 +1174,7 @@ export function getOpenApiDocument(serverUrl?: string) {
 											challengeId: { type: "string", format: "uuid" },
 											options: {
 												type: "object",
-												description: "PublicKeyCredentialRequestOptionsJSON from @simplewebauthn/types",
+												description: "PublicKeyCredentialRequestOptionsJSON from @simplewebauthn/browser",
 											},
 										},
 									},
@@ -1207,7 +1207,7 @@ export function getOpenApiDocument(serverUrl?: string) {
 										challengeId: { type: "string", format: "uuid" },
 										authenticationResponse: {
 											type: "object",
-											description: "AuthenticationResponseJSON from @simplewebauthn/types",
+											description: "AuthenticationResponseJSON from @simplewebauthn/browser",
 										},
 									},
 								},
@@ -1263,7 +1263,7 @@ export function getOpenApiDocument(serverUrl?: string) {
 											challengeId: { type: "string", format: "uuid" },
 											options: {
 												type: "object",
-												description: "PublicKeyCredentialCreationOptionsJSON from @simplewebauthn/types",
+												description: "PublicKeyCredentialCreationOptionsJSON from @simplewebauthn/browser",
 											},
 										},
 									},
@@ -1303,7 +1303,7 @@ export function getOpenApiDocument(serverUrl?: string) {
 										challengeId: { type: "string", format: "uuid" },
 										registrationResponse: {
 											type: "object",
-											description: "RegistrationResponseJSON from @simplewebauthn/types",
+											description: "RegistrationResponseJSON from @simplewebauthn/browser",
 										},
 									},
 								},
