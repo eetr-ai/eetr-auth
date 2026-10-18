@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { auth, signOut } from "@/auth";
+import { auth } from "@/auth";
 import { buildRequestContext } from "@/lib/context/build-context";
 import { getServices } from "@/lib/services/registry";
 import {
 	decodePendingAuthorizationCookie,
 	getPendingCookieName,
 } from "@/lib/auth/oauth-pending-cookie";
+import ConsentActions from "./consent-actions";
 import PasskeyPrompt from "./passkey-prompt";
 
 export default async function OAuthConfirmPage() {
@@ -182,29 +183,7 @@ export default async function OAuthConfirmPage() {
 
 				<PasskeyPrompt />
 
-				<a
-					href="/api/authorize/complete"
-					className="mt-6 block w-full rounded-full bg-brand px-4 py-2 text-center font-medium text-white hover:bg-brand-hover"
-				>
-					Continue as {displayName}
-				</a>
-
-				<form
-					action={async () => {
-						"use server";
-						await signOut({
-							redirectTo: `/?callbackUrl=${encodeURIComponent("/oauth/confirm")}`,
-						});
-					}}
-					className="mt-3"
-				>
-					<button
-						type="submit"
-						className="w-full rounded-full border border-border px-4 py-2 font-medium hover:bg-surface-hover"
-					>
-						Sign in with a different account
-					</button>
-				</form>
+				<ConsentActions displayName={displayName} />
 			</div>
 		</main>
 	);

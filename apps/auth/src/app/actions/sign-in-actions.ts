@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { AuthError, CredentialsSignin } from "next-auth";
-import { signIn } from "@/auth";
+import { signIn, signOut } from "@/auth";
 
 export async function submitPasskeySignIn(exchangeToken: string, callbackUrl: string) {
 	const redirectTo = callbackUrl?.trim() || "/dashboard";
@@ -67,4 +67,12 @@ export async function submitTestUserSignIn(userId: string, callbackUrl: string) 
 		}
 		throw err;
 	}
+}
+
+/**
+ * "Sign in with a different account" on the consent screen. The pending-authorization
+ * cookie is left alone, so signing back in lands on /oauth/confirm with the same request.
+ */
+export async function switchOAuthAccount() {
+	await signOut({ redirectTo: `/?callbackUrl=${encodeURIComponent("/oauth/confirm")}` });
 }
