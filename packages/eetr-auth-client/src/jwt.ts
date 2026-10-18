@@ -5,6 +5,12 @@ export interface ValidateJwtOptions {
   audience?: string | string[];
   issuer?: string;
   clockTolerance?: number;
+  /**
+   * Required `typ` protected-header value. Pass `"at+jwt"` when verifying access tokens:
+   * eetr-auth stamps it on access tokens only (RFC 9068), so this rejects an ID token
+   * presented as a bearer token. Unset by default so servers older than that still verify.
+   */
+  typ?: string;
 }
 
 export interface ValidateIdTokenOptions extends ValidateJwtOptions {
@@ -21,6 +27,12 @@ function getJwks(jwksUri: string): ReturnType<typeof createRemoteJWKSet> {
   return jwksCache.get(jwksUri)!;
 }
 
+/**
+ * Verify a JWT issued by eetr-auth: checks the RS256 signature against the remote JWKS
+ * (cached per `jwksUri`) plus `exp`, and `iss`/`aud`/`typ` when the matching option is set.
+ * For access tokens, pass `typ: "at+jwt"` so an ID token cannot stand in for one.
+ * Throws the underlying `jose` error when any check fails.
+ */
 export async function validateJwt(
   token: string,
   jwksUri: string,
@@ -31,6 +43,7 @@ export async function validateJwt(
     audience: options.audience,
     issuer: options.issuer,
     clockTolerance: options.clockTolerance ?? 5,
+    typ: options.typ,
   });
   return payload as JWTPayload;
 }

@@ -10,6 +10,18 @@ icon: KeyRound
 - Scoped per OAuth client grant.
 - Activity is logged on every use (`token_activity_log`).
 
+### Token type header (RFC 9068)
+
+JWT access tokens carry `typ: "at+jwt"` in their protected header; ID tokens do not. Both are
+signed with the same key by the same issuer and, when no `resource` is requested, share the same
+`aud` — so the header is the only thing that tells them apart.
+
+<Callout type="warn" title="Resource servers should require it">
+  A verifier that only checks signature, `iss`, `aud`, and `exp` will accept an ID token as a
+  bearer access token. Reject any token whose `typ` is not `at+jwt` (with `jose`, pass
+  `typ: "at+jwt"` to `jwtVerify`).
+</Callout>
+
 ### Resource indicators (RFC 8707)
 
 A `resource` parameter at `/authorize` (and optionally repeated at `/token`) binds the access
