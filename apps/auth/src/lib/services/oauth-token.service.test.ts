@@ -780,6 +780,7 @@ describe("OauthTokenService", () => {
 			const header = decodeJwtPart(result.access_token, 0);
 			const payload = decodeJwtPart(result.access_token, 1);
 			expect(header.kid).toBe("kid-from-env");
+			expect(header.typ).toBe("at+jwt");
 			expect(payload.client_id).toBe("client-app-id");
 			expect(payload.environment).toBe("production");
 			expect(tokenRepo.createAccessToken).toHaveBeenCalledWith(
@@ -997,6 +998,10 @@ describe("OauthTokenService", () => {
 			const payload = decodeJwtPart(result.id_token!, 1);
 			expect(header.alg).toBe("RS256");
 			expect(header.kid).toBe("kid-from-env");
+			// RFC 9068: only the access token is typed `at+jwt`, so a resource server can
+			// tell the two apart even when they share a signing key and audience.
+			expect(header.typ).toBeUndefined();
+			expect(decodeJwtPart(result.access_token, 0).typ).toBe("at+jwt");
 			expect(payload.iss).toBe("https://auth.example.com");
 			expect(payload.sub).toBe("user-123");
 			expect(payload.aud).toBe("client-app-id");

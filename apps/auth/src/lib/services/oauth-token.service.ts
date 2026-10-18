@@ -457,8 +457,12 @@ export class OauthTokenService {
 		// resource server can reject tokens minted for other resources. `client_id` stays a
 		// separate claim (above) for auditing. Falls back to the client_id (legacy behavior).
 		const audience = params.resource ?? params.clientIdentifier;
+		// RFC 9068 §2.1: `typ: at+jwt` is what tells a resource server this is an access
+		// token. Without it an ID token (same key, same issuer, and the same `aud` when no
+		// resource was requested) would pass a verifier that only checks signature/iss/aud/exp.
+		// The ID token header deliberately does NOT carry it.
 		const accessTokenJwt = await new SignJWT(payload)
-			.setProtectedHeader({ alg: "RS256", kid })
+			.setProtectedHeader({ alg: "RS256", kid, typ: "at+jwt" })
 			.setIssuer(params.issuer)
 			.setSubject(params.subject ?? "")
 			.setAudience(audience)
