@@ -27,6 +27,12 @@ function getJwks(jwksUri: string): ReturnType<typeof createRemoteJWKSet> {
   return jwksCache.get(jwksUri)!;
 }
 
+/**
+ * Verify a JWT issued by eetr-auth: checks the RS256 signature against the remote JWKS
+ * (cached per `jwksUri`) plus `exp`, and `iss`/`aud`/`typ` when the matching option is set.
+ * For access tokens, pass `typ: "at+jwt"` so an ID token cannot stand in for one.
+ * Throws the underlying `jose` error when any check fails.
+ */
 export async function validateJwt(
   token: string,
   jwksUri: string,
