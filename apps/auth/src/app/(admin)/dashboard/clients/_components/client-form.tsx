@@ -124,6 +124,49 @@ export function ClientForm({
 			</p>
 
 			<div>
+				<span className="mb-1 block text-sm text-muted-foreground">Home link (optional)</span>
+				<p className="mb-2 text-xs text-muted-foreground">
+					Where this application lives. When shown, it is listed for signed-in users who are
+					not administrators — for example after a password reset.
+				</p>
+				<div className="space-y-2">
+					<Input
+						type="url"
+						aria-label="Home URL"
+						readOnly={readOnly}
+						disabled={readOnly}
+						value={draft.homeUrl}
+						onChange={(e) => {
+							const homeUrl = e.target.value;
+							// Without a URL there is nothing to show, so clearing it unticks the box.
+							onChange(homeUrl.trim() ? { homeUrl } : { homeUrl, showOnHome: false });
+						}}
+						placeholder="https://app.example.com"
+					/>
+					<Input
+						type="text"
+						aria-label="Home display name"
+						readOnly={readOnly}
+						disabled={readOnly}
+						maxLength={80}
+						value={draft.homeDisplayName}
+						onChange={(e) => onChange({ homeDisplayName: e.target.value })}
+						placeholder={draft.name.trim() || "Display name"}
+					/>
+					<label className="flex items-center gap-2 text-sm">
+						<input
+							type="checkbox"
+							checked={draft.showOnHome}
+							disabled={readOnly || !draft.homeUrl.trim()}
+							onChange={(e) => onChange({ showOnHome: e.target.checked })}
+							className="rounded-chip border-border disabled:opacity-50"
+						/>
+						Show on the user home page
+					</label>
+				</div>
+			</div>
+
+			<div>
 				<span className="mb-1 block text-sm text-muted-foreground">Redirect URIs</span>
 				<div className="space-y-2">
 					{/* Keyed by position: an unsaved URI row has no stable id. */}
