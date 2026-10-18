@@ -14,6 +14,9 @@
  *     v0.5.1 is how databases ended up stamped with a version no tag matched;
  *   - every patch added or edited since the previous tag must carry the release's number.
  *
+ * The release-please PR itself also gets the --release checks: its manifest already names
+ * the release being cut, whose tag does not exist until the PR merges.
+ *
  * Usage: node scripts/check-schema-version.mjs [--release]
  */
 import { spawnSync } from "node:child_process";
@@ -66,6 +69,12 @@ if (snapshotVersion !== newestPatch) {
 
 const manifest = JSON.parse(readFileSync(resolve(root, ".release-please-manifest.json"), "utf8"));
 const currentRelease = manifest["."];
+// On the release-please PR the manifest is already bumped but its tag is only created on
+// merge, so there is no v<currentRelease> to diff against. That PR is the release in
+// progress, so we hold it to the same rules the merge push will.
+const releaseTagged =
+	spawnSync("git", ["rev-parse", "--quiet", "--verify", `refs/tags/v${currentRelease}`], { cwd: root }).status === 0;
+const releasing = release || !releaseTagged;
 
 /** Versions of the patch files added or edited since `tag`, or null when git cannot tell. */
 function patchesChangedSince(tag) {
@@ -82,7 +91,7 @@ function patchesChangedSince(tag) {
 	return ret;
 }
 
-if (release) {
+if (releasing) {
 	if (compareVersions(newestPatch, currentRelease) > 0) {
 		errors.push(
 			`Releasing v${currentRelease}, but db/patches/${newestPatch}.sql is newer. The patch must ship in the release that matches its name: ` +
@@ -126,5 +135,5 @@ if (errors.length > 0) {
 	process.exit(1);
 }
 console.log(
-	`Schema version OK: newest patch ${newestPatch}, schema.sql ${snapshotVersion}, ${release ? "releasing" : "last release"} v${currentRelease}.`
+	`Schema version OK: newest patch ${newestPatch}, schema.sql ${snapshotVersion}, ${releasing ? "releasing" : "last release"} v${currentRelease}.`
 );
