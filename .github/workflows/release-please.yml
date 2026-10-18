@@ -18,7 +18,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          # Full history and tags: the check diffs db/patches against the previous release.
+          fetch-depth: 0
 
       - name: Check schema patch matches the release
         run: |

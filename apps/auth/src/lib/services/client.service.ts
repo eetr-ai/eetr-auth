@@ -30,6 +30,8 @@ const HOME_DISPLAY_NAME_MAX_LENGTH = 80;
 
 /** One entry on the non-admin landing page. */
 export interface ClientHomeLink {
+	/** The client's row id: two clients may share a home URL, so it is the stable key. */
+	id: string;
 	label: string;
 	url: string;
 }
@@ -330,6 +332,7 @@ export class ClientService {
 		for (const client of clients) {
 			if (!client.homeUrl) continue;
 			ret.push({
+				id: client.id,
 				label: client.homeDisplayName?.trim() || client.name?.trim() || client.clientId,
 				url: client.homeUrl,
 			});

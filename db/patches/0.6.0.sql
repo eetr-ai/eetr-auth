@@ -237,4 +237,12 @@ ALTER TABLE clients ADD COLUMN home_url TEXT;
 ALTER TABLE clients ADD COLUMN home_display_name TEXT;
 ALTER TABLE clients ADD COLUMN show_on_home INTEGER NOT NULL DEFAULT 0;
 
+-- MANUAL STEP for databases already stamped 0.6.0 by app builds v0.5.1-v0.5.3: the
+-- migrator skips this patch for them, yet the app now reads the three home-link columns on
+-- every client query and fails with "no such column" without them. Before deploying v0.6.0,
+-- check which columns exist:
+--   SELECT name FROM pragma_table_info('clients') WHERE name IN ('home_url', 'home_display_name', 'show_on_home');
+-- then run only the missing ones of the three home-link ALTER TABLE statements above, e.g.
+--   npx wrangler d1 execute <db> --remote --command "ALTER TABLE clients ADD COLUMN home_url TEXT;"
+
 UPDATE schema_metadata SET value = '0.6.0' WHERE key = 'schema_version';

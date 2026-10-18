@@ -144,7 +144,7 @@ export default async function HomePage({
 								<p className="mb-2 text-sm font-medium">Your applications</p>
 								<ul className="divide-y divide-border overflow-hidden rounded-card border border-border">
 									{homeLinks.map((link) => (
-										<li key={link.url}>
+										<li key={link.id}>
 											<a
 												href={link.url}
 												className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-hover"

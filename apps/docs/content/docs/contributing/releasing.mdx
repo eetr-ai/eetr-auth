@@ -46,7 +46,8 @@ version it won't ship in. The full procedure is in
 - **On every PR** (`ci.yml`). Each patch stamps its own version, `schema.sql` matches the newest
   patch, and no patch that has already been released has changed.
 - **On the release merge** (`release-please.yml`, `--release`). The `schema-version` job runs ahead
-  of `release-please` and fails if the newest patch is ahead of the release being cut. In that case
+  of `release-please` and fails if the newest patch is ahead of the release being cut, or if any
+  patch added or edited since the previous tag carries a different number than this release. In that case
   no tag is created until a `Release-As:` footer fixes the number. CI never runs on the release PR
   itself (it's opened with the default `GITHUB_TOKEN`), so this is the only check it gets.
 

@@ -89,14 +89,16 @@ export default async function OAuthConfirmPage() {
 			)
 		: effectiveScopeNames;
 
-	// Ask about what actually changed: on a re-authorization that adds a scope, list only
-	// the new one rather than re-presenting everything the user already agreed to.
-	const scopesToShow =
-		unconsentedScopeNames.length > 0 ? unconsentedScopeNames : effectiveScopeNames;
-	const isIncrementalConsent =
-		unconsentedScopeNames.length > 0 && unconsentedScopeNames.length < effectiveScopeNames.length;
-	// `prompt=consent` asks us to show the full grant again even when nothing is new.
+	// `prompt=consent` asks us to show the full grant again, new scopes or not.
 	const forceConsent = (pendingParams.prompt ?? "").split(/\s+/).includes("consent");
+	// Otherwise ask about what actually changed: on a re-authorization that adds a scope,
+	// list only the new one rather than re-presenting everything the user already agreed to.
+	const scopesToShow =
+		!forceConsent && unconsentedScopeNames.length > 0 ? unconsentedScopeNames : effectiveScopeNames;
+	const isIncrementalConsent =
+		!forceConsent &&
+		unconsentedScopeNames.length > 0 &&
+		unconsentedScopeNames.length < effectiveScopeNames.length;
 	const alreadyConsented =
 		client !== null &&
 		!forceConsent &&

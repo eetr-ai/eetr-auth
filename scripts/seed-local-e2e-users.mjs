@@ -11,7 +11,7 @@
  * Usage: node scripts/seed-local-e2e-users.mjs
  */
 import { randomUUID } from "node:crypto";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import md5 from "md5";
@@ -53,7 +53,10 @@ if (!existsSync(tmpDir)) mkdirSync(tmpDir, { recursive: true });
 const sqlPath = join(tmpDir, `seed-local-e2e-users-${Date.now()}.sql`);
 writeFileSync(sqlPath, sql);
 try {
-	execSync(`node ../../scripts/run-d1-migrate.mjs --local --file=${sqlPath}`, { stdio: "inherit" });
+	// No shell, so a checkout path with spaces still reaches the migrator as one argument.
+	execFileSync(process.execPath, ["../../scripts/run-d1-migrate.mjs", "--local", `--file=${sqlPath}`], {
+		stdio: "inherit",
+	});
 	console.log(`Seeded ${USERS.map((u) => u.username).join(", ")} into the local D1 database.`);
 } finally {
 	unlinkSync(sqlPath);

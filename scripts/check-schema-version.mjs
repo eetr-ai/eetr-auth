@@ -11,7 +11,8 @@
  *
  * With --release (run on the push that merges a release-please PR), additionally:
  *   - the newest patch must not be ahead of the release being cut. Shipping 0.6.0.sql in
- *     v0.5.1 is how databases ended up stamped with a version no tag matched.
+ *     v0.5.1 is how databases ended up stamped with a version no tag matched;
+ *   - every patch added or edited since the previous tag must carry the release's number.
  *
  * Usage: node scripts/check-schema-version.mjs [--release]
  */
@@ -66,6 +67,21 @@ if (snapshotVersion !== newestPatch) {
 const manifest = JSON.parse(readFileSync(resolve(root, ".release-please-manifest.json"), "utf8"));
 const currentRelease = manifest["."];
 
+/** Versions of the patch files added or edited since `tag`, or null when git cannot tell. */
+function patchesChangedSince(tag) {
+	const diff = spawnSync("git", ["diff", "--name-only", tag, "--", "db/patches"], { cwd: root, encoding: "utf8" });
+	if (diff.status !== 0) {
+		errors.push(`Could not diff against tag ${tag} (fetch tags with fetch-depth: 0): ${diff.stderr.trim()}`);
+		return null;
+	}
+	const ret = [];
+	for (const path of diff.stdout.split("\n").filter(Boolean)) {
+		const version = path.match(/(\d+\.\d+\.\d+)\.sql$/)?.[1];
+		if (version) ret.push(version);
+	}
+	return ret;
+}
+
 if (release) {
 	if (compareVersions(newestPatch, currentRelease) > 0) {
 		errors.push(
@@ -73,21 +89,34 @@ if (release) {
 				`add a "Release-As: ${newestPatch}" footer (or a breaking change) so release-please cuts v${newestPatch}.`
 		);
 	}
+	// The manifest already names the release being cut, so the last shipped one is the
+	// highest tag below it. Every patch touched since then ships in this release and must
+	// carry its number -- a 0.6.0.sql riding out in v0.7.0 breaks the rule just the same.
+	const tags = spawnSync("git", ["tag", "--list", "v*"], { cwd: root, encoding: "utf8" });
+	const previousRelease = (tags.stdout ?? "")
+		.split("\n")
+		.map((tag) => tag.trim().replace(/^v/, ""))
+		.filter((version) => /^\d+\.\d+\.\d+$/.test(version) && compareVersions(version, currentRelease) < 0)
+		.sort(compareVersions)
+		.at(-1);
+	if (!previousRelease) {
+		errors.push(`Could not find a release tag below v${currentRelease} (fetch tags with fetch-depth: 0).`);
+	} else {
+		for (const version of patchesChangedSince(`v${previousRelease}`) ?? []) {
+			if (version !== currentRelease) {
+				errors.push(
+					`db/patches/${version}.sql changed since v${previousRelease} but this release is v${currentRelease}. ` +
+						`Rename the patch to ${currentRelease}.sql, or add a "Release-As: ${version}" footer.`
+				);
+			}
+		}
+	}
 } else {
 	// On a normal PR the manifest names the last release, so any patch at or below it is
 	// already on deployed databases and must stay frozen.
-	const diff = spawnSync("git", ["diff", "--name-only", `v${currentRelease}`, "--", "db/patches"], {
-		cwd: root,
-		encoding: "utf8",
-	});
-	if (diff.status !== 0) {
-		errors.push(`Could not diff against tag v${currentRelease} (fetch tags with fetch-depth: 0): ${diff.stderr.trim()}`);
-	} else {
-		for (const path of diff.stdout.split("\n").filter(Boolean)) {
-			const version = path.match(/(\d+\.\d+\.\d+)\.sql$/)?.[1];
-			if (version && compareVersions(version, currentRelease) <= 0) {
-				errors.push(`${path} shipped in v${version} and must not change; add the next release's patch instead.`);
-			}
+	for (const version of patchesChangedSince(`v${currentRelease}`) ?? []) {
+		if (compareVersions(version, currentRelease) <= 0) {
+			errors.push(`db/patches/${version}.sql shipped in v${version} and must not change; add the next release's patch instead.`);
 		}
 	}
 }

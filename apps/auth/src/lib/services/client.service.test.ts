@@ -423,17 +423,17 @@ describe("ClientService", () => {
 		it("labels each link with the display name, then the client name, then the client id", async () => {
 			const repo = createClientRepoMock();
 			repo.listHomeLinks.mockResolvedValue([
-				makeClient({ homeUrl: "https://a.example", homeDisplayName: "Alpha", showOnHome: true }),
-				makeClient({ homeUrl: "https://b.example", name: "Bravo", showOnHome: true }),
-				makeClient({ homeUrl: "https://c.example", name: null, clientId: "pfx_c", showOnHome: true }),
+				makeClient({ id: "a", homeUrl: "https://a.example", homeDisplayName: "Alpha", showOnHome: true }),
+				makeClient({ id: "b", homeUrl: "https://b.example", name: "Bravo", showOnHome: true }),
+				makeClient({ id: "c", homeUrl: "https://c.example", name: null, clientId: "pfx_c", showOnHome: true }),
 			]);
 			const service = createService(repo);
 
 			const now = new Date("2026-10-17T00:00:00.000Z");
 			await expect(service.listHomeLinks(now)).resolves.toEqual([
-				{ label: "Alpha", url: "https://a.example" },
-				{ label: "Bravo", url: "https://b.example" },
-				{ label: "pfx_c", url: "https://c.example" },
+				{ id: "a", label: "Alpha", url: "https://a.example" },
+				{ id: "b", label: "Bravo", url: "https://b.example" },
+				{ id: "c", label: "pfx_c", url: "https://c.example" },
 			]);
 			expect(repo.listHomeLinks).toHaveBeenCalledWith("2026-10-17T00:00:00.000Z");
 		});
